@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
+  "packageManager": "bun@1.4.2",
   "scripts": {
     "dev": "bun src/cli.ts",
     "build": "bun scripts/build.ts",
