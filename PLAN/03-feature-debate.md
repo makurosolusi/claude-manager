@@ -79,7 +79,8 @@ Format: **Pro** vs **Kontra** → **Rekomendasi**. Item bertanda 🟡 = keputusa
 ### D14. Teknologi dashboard
 - **Pro React:** komponen nyaman.
 - **Kontra:** dependency, bundle lebih besar, overkill untuk 5 halaman tabel + grafik.
-- **Rekomendasi:** HTML import + TypeScript vanilla, grafik pakai SVG inline. Naik ke React hanya bila UI tumbuh signifikan.
+- **Rekomendasi awal:** HTML import + TypeScript vanilla.
+- **Keputusan user:** **React + Tailwind + shadcn/ui**, tetap di-bundle lewat HTML import ke dalam binary.
 
 ### D15. 🟡 Port
 - User mengusulkan 5000, tapi di macOS port itu dipakai ControlCenter/AirPlay (terverifikasi di mesin ini).
