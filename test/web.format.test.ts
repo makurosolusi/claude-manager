@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { cacheHitRate, fmtDelta, fmtDuration, fmtModel, fmtPct, fmtProject, fmtRelative } from "../src/web/lib/format.ts";
+import { fmtClock } from "../src/web/lib/detail.format.ts";
+import { cacheHitRate, fmtDelta, fmtDeltaPct, fmtTime, fmtTokens, fmtUsdAxis, fmtDuration, fmtModel, fmtPct, fmtProject, fmtRelative } from "../src/web/lib/format.ts";
 import { modelFamily, normalizeModel, tierOf, type Tiers } from "../src/web/lib/model.tier.ts";
 import { DEFAULT_RANGE, parseRange } from "../src/web/lib/range.ts";
 import { contextLevel } from "../src/web/lib/context.level.ts";
@@ -98,4 +99,35 @@ test("syncState: connecting, ok, stalled, failed", () => {
   expect(syncState(meta, NOW)).toBe("ok");
   expect(syncState({ ...meta, synced_at: ago(16 * S) }, NOW)).toBe("stalled");
   expect(syncState({ ...meta, error: "disk full" }, NOW)).toBe("failed");
+});
+
+test("fmtTokens: integers below 1K, one decimal from 1K so columns align", () => {
+  expect(fmtTokens(999)).toBe("999");
+  expect(fmtTokens(1000)).toBe("1.0K");
+  expect(fmtTokens(1_300_000_000)).toBe("1.3B");
+  expect(fmtTokens(2_000_000_000)).toBe("2.0B");
+  expect(fmtTokens(1_000_000)).toBe("1.0M");
+});
+
+test("fmtUsdAxis: no cents from $1, compact from $1K", () => {
+  expect(fmtUsdAxis(0)).toBe("$0");
+  expect(fmtUsdAxis(800)).toBe("$800");
+  expect(fmtUsdAxis(0.5)).toBe("$0.50");
+  expect(fmtUsdAxis(1200)).toBe("$1.2K");
+});
+
+test("fmtDeltaPct and fmtPct floor", () => {
+  expect(fmtDeltaPct(24.4)).toBe("24%");
+  expect(fmtDeltaPct(-3.46)).toBe("3.5%");
+  expect(fmtPct(0.0004)).toBe("<0.1%");
+  expect(fmtPct(0)).toBe("0.0%");
+});
+
+test("fmtTime drops the current year; fmtClock is 12h", () => {
+  const now = new Date(2026, 10, 27, 12).getTime();
+  const iso = new Date(2026, 10, 27, 23, 5, 59).toISOString();
+  expect(fmtTime(iso, now)).toMatch(/^Nov 27, 11:05\sPM$/);
+  expect(fmtTime(new Date(2025, 10, 27, 23, 5).toISOString(), now)).toMatch(/^Nov 27, 2025, 11:05\sPM$/);
+  expect(fmtClock(iso)).toMatch(/^11:05:59\sPM$/);
+  expect(fmtClock(null)).toBe("—");
 });

@@ -1,10 +1,13 @@
 import { normalizeModel } from "./model.tier.ts";
 
-const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+const compact = new Intl.NumberFormat("en-US", { notation: "compact", minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const usdWhole = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+const usdCompact = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 });
 const integer = new Intl.NumberFormat("en-US");
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const usdSmall = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumSignificantDigits: 2 });
-const dateTime = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" });
+
+const timeShort = new Intl.DateTimeFormat("en-US", { timeStyle: "short" });
 const monthDay = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 const monthDayYear = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
 const pct = new Intl.NumberFormat("en-US", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -18,8 +21,11 @@ const JUST_NOW_MS = 45 * SEC;
 /** Up to this age a timestamp is shown in days ("3d ago"); older ones get a date. */
 const RELATIVE_DAYS_MAX = 7;
 
-/** Token counts in compact form: 1234567 → "1.2M". */
-export const fmtTokens = (n: number) => compact.format(n);
+/** Counts from this size up use the compact form. */
+const COMPACT_MIN = 1000;
+
+/** Token counts: integers below 1K, otherwise compact with one decimal ("2.0B", "1.3B") so a column never jitters. */
+export const fmtTokens = (n: number) => (Math.abs(n) < COMPACT_MIN ? integer.format(n) : compact.format(n));
 
 /** Plain integer with thousands separators. */
 export const fmtInt = (n: number) => integer.format(n);
@@ -27,11 +33,18 @@ export const fmtInt = (n: number) => integer.format(n);
 /** USD amount; sub-cent values keep 2 significant digits instead of rounding to $0.00. */
 export const fmtUsd = (n: number) => (n > 0 && n < 0.01 ? usdSmall.format(n) : usd.format(n));
 
-/** Local date-time for an ISO timestamp, "—" when missing or invalid. */
-export function fmtTime(iso: string | null | undefined): string {
+/** Chart-axis USD: whole dollars from $1 ("$800"), compact from $1K ("$1.2K"), sub-dollar values keep cents. */
+export function fmtUsdAxis(n: number): string {
+  if (n >= COMPACT_MIN) return usdCompact.format(n);
+  return n >= 1 || n === 0 ? usdWhole.format(n) : usd.format(n);
+}
+
+/** Local 12h date-time for an ISO timestamp ("Nov 27, 11:05 PM"; year only when not the current one), "—" when missing or invalid. */
+export function fmtTime(iso: string | null | undefined, now: number = Date.now()): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : dateTime.format(d);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${d.getFullYear() === new Date(now).getFullYear() ? monthDay.format(d) : monthDayYear.format(d)}, ${timeShort.format(d)}`;
 }
 
 /** Age of an ISO timestamp relative to `now`: "just now", "12m ago", "5h ago", "3d ago", "Nov 3", "Nov 3, 2025". */
@@ -67,8 +80,15 @@ export function fmtProject(cwd: string | null | undefined): string {
 /** Short model name without vendor prefix or date: "claude-opus-4-7-20260101" → "opus-4-7". */
 export const fmtModel = (id: string | null | undefined) => (id ? normalizeModel(id).replace(/^claude-/, "") : "—");
 
-/** A 0..1 ratio as a percentage with one decimal: 0.912 → "91.2%". */
-export const fmtPct = (ratio: number) => pct.format(ratio);
+/** Positive shares below this read "<0.1%" instead of a false "0.0%". */
+const PCT_FLOOR = 0.001;
+
+/** A 0..1 ratio as a percentage with one decimal: 0.912 → "91.2%"; tiny non-zero ratios → "<0.1%". */
+export const fmtPct = (ratio: number) => (ratio > 0 && ratio < PCT_FLOOR ? "<0.1%" : pct.format(ratio));
+
+/** Signed percent change for display: 0 decimals from 10% up ("24%"), 1 below ("3.4%"). */
+export const fmtDeltaPct = (v: number) => `${Math.abs(v) >= DELTA_WHOLE_PCT ? Math.abs(v).toFixed(0) : Math.abs(v).toFixed(1)}%`;
+const DELTA_WHOLE_PCT = 10;
 
 /** Percent change from `prev` to `cur`; null when there is no usable baseline (missing or zero). */
 export function fmtDelta(cur: number, prev: number | null | undefined): number | null {

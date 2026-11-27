@@ -39,13 +39,28 @@ test("costByTier: shares sum to 100%", () => {
 test("overviewDeltas: % for counts, pt for cache hit, null without baseline", () => {
   expect(overviewDeltas(tot({ requests: 5 }), null)).toBeNull();
   const cur = tot({ cost_usd: 15, requests: 90, sessions: 4, input: 10, cache_read: 80, cache_write: 10 }); // hit 80%
-  const prev = tot({ cost_usd: 10, requests: 100, sessions: 0, input: 30, cache_read: 60, cache_write: 10 }); // hit 60%
+  const prev = tot({ cost_usd: 10, requests: 100, sessions: 10, input: 30, cache_read: 60, cache_write: 10 }); // hit 60%
   const d = overviewDeltas(cur, prev)!;
-  expect(d.cost).toBeCloseTo(50);
-  expect(d.requests).toBeCloseTo(-10);
-  expect(d.sessions).toBeNull();
-  expect(d.cacheHit).toBeCloseTo(20);
-  expect(overviewDeltas(cur, tot({ requests: 3 }))!.cacheHit).toBeNull();
+  expect(d.cost.value).toBeCloseTo(50);
+  expect(d.requests.value).toBeCloseTo(-10);
+  expect(d.sessions.value).toBeCloseTo(-60);
+  expect(d.cacheHit.value).toBeCloseTo(20);
+  expect(overviewDeltas(cur, tot({ requests: 3 }))!.cacheHit.value).toBeNull();
+});
+
+test("overviewDeltas: tiny baseline or >500% falls back to the previous value", () => {
+  const small = overviewDeltas(tot({ cost_usd: 500, requests: 900, sessions: 40 }), tot({ cost_usd: 0.23, requests: 7, sessions: 2 }))!;
+  expect(small.cost).toEqual({ value: null, prevLabel: "$0.23", trend: "up" });
+  expect(small.requests).toEqual({ value: null, prevLabel: "7", trend: "up" });
+  expect(small.sessions.prevLabel).toBe("2");
+  // baseline above the minimum but change beyond DELTA_MAX_PCT
+  const big = overviewDeltas(tot({ cost_usd: 100, requests: 1000 }), tot({ cost_usd: 8.23, requests: 100 }))!;
+  expect(big.cost).toEqual({ value: null, prevLabel: "$8.23", trend: "up" });
+  expect(big.requests).toEqual({ value: null, prevLabel: "100", trend: "up" });
+  // exactly 500% is still a percentage
+  expect(overviewDeltas(tot({ requests: 600 }), tot({ requests: 100 }))!.requests.value).toBeCloseTo(500);
+  // empty previous period
+  expect(overviewDeltas(tot({ cost_usd: 5, requests: 5, sessions: 1 }), tot({}))!.cost).toEqual({ value: null, isNew: true });
 });
 
 test("pivotCostByDay: stacks by family, sums match the day total, unknown models go to other", () => {
@@ -85,5 +100,5 @@ test("pivotCostByDay: per-day family sums equal raw totals for every day", () =>
 
 test("FAMILY_LABEL names every family", () => {
   expect(Object.keys(FAMILY_LABEL).sort()).toEqual(Object.keys(FAMILY_COLOR).sort());
-  expect(FAMILY_LABEL).toEqual({ opus: "Opus", sonnet: "Sonnet", haiku: "Haiku", other: "Other" });
+  expect(FAMILY_LABEL).toEqual({ opus: "Opus", sonnet: "Sonnet", haiku: "Haiku", fable: "Fable", other: "Other" });
 });

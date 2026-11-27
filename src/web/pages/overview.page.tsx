@@ -7,13 +7,16 @@ import { cacheLevel } from "@/lib/status.level.ts";
 import type { Overview, Page, ProjectRow, SessionRow, Totals } from "../../server/dashboard.types.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { PageHeader } from "@/components/page.header.tsx";
+import { Panel } from "@/components/panel.tsx";
 import { KpiCard, type KpiDelta } from "@/components/kpi.card.tsx";
 import { DataTable, type Column } from "@/components/data.table.tsx";
 import { CostCell } from "@/components/cost.cell.tsx";
 import { SessionCell } from "@/components/session.cell.tsx";
 import { RelativeTime } from "@/components/relative.time.tsx";
 import { CostChart, CostLegend, pivotCostByDay } from "@/components/cost.chart.tsx";
+import { ShareBar } from "@/components/share.bar.tsx";
 import { TierTable } from "@/components/tier.table.tsx";
+import { cn } from "@/lib/cn.ts";
 import { useApi } from "@/lib/api.client.ts";
 import { cacheHitRate, fmtDelta, fmtInt, fmtPct, fmtProject, fmtUsd } from "@/lib/format.ts";
 import { hashHref } from "@/lib/hash.route.ts";
@@ -25,29 +28,32 @@ import { costByTier } from "@/lib/tier.cost.ts";
 export const TOP_N = 5;
 const PERIOD_TEXT: Record<Range, string> = { "24h": "Last 24 hours", "7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days", all: "All time" };
 
-type Kpis = Record<"cost" | "requests" | "sessions" | "cacheHit", number | null>;
-/** Change vs the previous period per KPI: % for cost/requests/sessions, percentage points for cache hit; null without a baseline. */
+/** One KPI's change: % (or pt) when meaningful, otherwise the previous value, or "new" when the previous period was empty. */
+export interface DeltaResult { value: number | null; prevLabel?: string; trend?: "up" | "down"; isNew?: boolean }
+type Kpis = Record<"cost" | "requests" | "sessions" | "cacheHit", DeltaResult>;
+
+/** Below this previous-period value a % is noise, so the absolute previous value is shown instead. */
+export const DELTA_MIN_BASELINE = { cost: 1, requests: 50, sessions: 5 } as const;
+/** A change beyond this percentage is shown as the previous value instead. */
+export const DELTA_MAX_PCT = 500;
+
+function countDelta(cur: number, prev: number, min: number, label: (n: number) => string): DeltaResult {
+  if (prev === 0) return { value: null, isNew: cur > 0 };
+  const pct = fmtDelta(cur, prev);
+  if (prev < min || pct === null || Math.abs(pct) > DELTA_MAX_PCT) return { value: null, prevLabel: label(prev), trend: cur >= prev ? "up" : "down" };
+  return { value: pct };
+}
+
+/** Change vs the previous period per KPI: % for cost/requests/sessions (previous value when the base is tiny), percentage points for cache hit; null without a baseline. */
 export function overviewDeltas(cur: Totals, prev: Totals | null): Kpis | null {
   if (!prev) return null;
   const hasPrompt = prev.input + prev.cache_read + prev.cache_write > 0;
   return {
-    cost: fmtDelta(cur.cost_usd, prev.cost_usd),
-    requests: fmtDelta(cur.requests, prev.requests),
-    sessions: fmtDelta(cur.sessions, prev.sessions),
-    cacheHit: hasPrompt ? (cacheHitRate(cur) - cacheHitRate(prev)) * 100 : null,
+    cost: countDelta(cur.cost_usd, prev.cost_usd, DELTA_MIN_BASELINE.cost, fmtUsd),
+    requests: countDelta(cur.requests, prev.requests, DELTA_MIN_BASELINE.requests, fmtInt),
+    sessions: countDelta(cur.sessions, prev.sessions, DELTA_MIN_BASELINE.sessions, fmtInt),
+    cacheHit: { value: hasPrompt ? (cacheHitRate(cur) - cacheHitRate(prev)) * 100 : null },
   };
-}
-
-function Panel({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="flex min-w-0 flex-col gap-3 rounded-lg border bg-card p-4">
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <h2 className="text-[13px] font-medium text-muted-foreground">{title}</h2>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
 }
 
 const ViewAll = ({ href }: { href: string }) => (
@@ -61,9 +67,10 @@ export function OverviewPage({ since, range, dataVersion, tiers }: PageProps) {
   const now = useNow(SECOND_TICK_MS);
   const tick = dataVersion + retry;
   const onRetry = () => setRetry((n) => n + 1);
-  const ov = useApi<Overview>("/api/overview", { since }, tick);
-  const projects = useApi<Page<ProjectRow>>("/api/projects", { since, pageSize: TOP_N }, tick);
-  const sessions = useApi<Page<SessionRow>>("/api/sessions", { since, sort: "cost", dir: "desc", pageSize: TOP_N }, tick);
+  const ov = useApi<Overview>("/api/overview", { since, range }, tick);
+  const projects = useApi<Page<ProjectRow>>("/api/projects", { since, range, pageSize: TOP_N }, tick);
+  const sessions = useApi<Page<SessionRow>>("/api/sessions", { since, range, sort: "cost", dir: "desc", pageSize: TOP_N }, tick);
+  const stale = ov.stale || projects.stale || sessions.stale;
   const rangeParam = range === DEFAULT_RANGE ? undefined : range;
   const header = <PageHeader icon={NAV_ICON.overview} title="Overview" description={range === "all" ? PERIOD_TEXT.all : `${PERIOD_TEXT[range]} · all projects`} />;
 
@@ -82,33 +89,22 @@ export function OverviewPage({ since, range, dataVersion, tiers }: PageProps) {
   }
   const d = ov.data;
   if (d && d.total.requests === 0) {
-    return (
-      <>
-        {header}
-        <p className="rounded-lg border bg-card p-12 text-center text-[13px] text-muted-foreground">No usage in this range. Try a wider range.</p>
-      </>
-    );
+    return <>{header}<p className="rounded-lg border bg-card p-12 text-center text-[13px] text-muted-foreground">No usage in this range. Try a wider range.</p></>;
   }
 
   const deltas = d ? overviewDeltas(d.total, d.prev) : null;
-  const delta = (value: number | null | undefined, unit: KpiDelta["unit"]): KpiDelta | undefined =>
-    deltas && value !== undefined ? { value, unit, periodLabel: range } : undefined;
+  const delta = (r: DeltaResult | undefined, unit: KpiDelta["unit"]): KpiDelta | undefined => (r ? { ...r, unit, periodLabel: range } : undefined);
   const kpi = (value: ReactNode) => (d ? value : <Skeleton className="h-7 w-24" />);
   const today = new Date().toISOString().slice(0, 10);
   const startDay = range === "all" ? (d?.byDayModel.reduce((m, r) => (r.day < m ? r.day : m), today) ?? today) : since.slice(0, 10);
   const chart = d ? pivotCostByDay(d.byDayModel, startDay, today) : undefined;
   const totalCost = d?.total.cost_usd ?? 0;
-
   const projectCols: Column<ProjectRow>[] = [
     { id: "project", header: "Project", cell: (r) => <span className="font-mono text-xs" title={r.project}>{fmtProject(r.project)}</span> },
     { id: "cost", header: "Cost (est.)", align: "right", width: "w-24", cell: (r) => <CostCell usd={r.cost_usd} unpriced={r.unpriced} /> },
     {
-      id: "share", header: <span className="sr-only">Share</span>, width: "w-20",
-      cell: (r) => (
-        <span aria-hidden className="block h-1.5 w-16 overflow-hidden rounded-full bg-muted" title={totalCost ? fmtPct(r.cost_usd / totalCost) : undefined}>
-          <span className="block h-full rounded-full bg-foreground/50" style={{ width: `${totalCost ? (r.cost_usd / totalCost) * 100 : 0}%` }} />
-        </span>
-      ),
+      id: "share", header: <span className="sr-only">Share</span>, width: "w-28",
+      cell: (r) => <ShareBar share={totalCost ? r.cost_usd / totalCost : 0} />,
     },
   ];
   const sessionCols: Column<SessionRow>[] = [
@@ -126,6 +122,7 @@ export function OverviewPage({ since, range, dataVersion, tiers }: PageProps) {
   return (
     <>
       {header}
+      <div aria-busy={stale || undefined} className={cn("flex flex-col gap-6 transition-opacity", stale && "opacity-60")}>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={KPI_ICON.cost} label="Est. cost" value={kpi(fmtUsd(totalCost))} delta={delta(deltas?.cost, "pct")} hint={d?.total.unpriced ? `${fmtInt(d.total.unpriced)} requests unpriced` : undefined} />
         <KpiCard icon={KPI_ICON.requests} label="Requests" value={kpi(fmtInt(d?.total.requests ?? 0))} delta={delta(deltas?.requests, "pct")} />
@@ -146,6 +143,7 @@ export function OverviewPage({ since, range, dataVersion, tiers }: PageProps) {
       <Panel title="Cost by tier">
         <TierTable rows={d ? costByTier(d.byModel, tiers) : undefined} tiers={tiers} loading={ov.loading} />
       </Panel>
+      </div>
     </>
   );
 }

@@ -1,15 +1,13 @@
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
-import type { DayModelRow } from "../../server/dashboard.types.ts";
+import { FAMILIES, type DayModelRow } from "../../server/dashboard.types.ts";
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart.tsx";
-import { fmtModel, fmtUsd } from "@/lib/format.ts";
+import { fmtModel, fmtUsd, fmtUsdAxis } from "@/lib/format.ts";
 import { FAMILY_ICON } from "@/lib/icon.map.ts";
 import { FAMILY_COLOR, FAMILY_LABEL, modelFamily, type ModelFamily } from "@/lib/model.tier.ts";
 
 const DAY_MS = 86_400_000;
 const X_TICK_GAP_PX = 40;
-/** Stack order, bottom to top; a family only becomes a series when it has cost in range. */
-const FAMILY_ORDER: readonly ModelFamily[] = ["opus", "sonnet", "haiku", "other"];
-
+/** Series follow FAMILIES order, bottom to top; a family only becomes a series when it has cost in range. */
 /** A drawn series: one model family (key = family), its fill colour. */
 export interface Series { key: ModelFamily; color: string }
 /** One day bucket: `day` (YYYY-MM-DD, UTC) plus cost per family key. */
@@ -23,7 +21,7 @@ export type DayModels = Record<string, Partial<Record<ModelFamily, Record<string
  */
 export function pivotCostByDay(rows: DayModelRow[], startDay: string, endDay: string): { series: Series[]; points: DayPoint[]; models: DayModels } {
   const present = new Set(rows.map((r) => modelFamily(r.model)));
-  const series = FAMILY_ORDER.filter((f) => present.has(f)).map((f): Series => ({ key: f, color: FAMILY_COLOR[f] }));
+  const series = FAMILIES.filter((f) => present.has(f)).map((f): Series => ({ key: f, color: FAMILY_COLOR[f] }));
   const blank = () => Object.fromEntries(series.map((s) => [s.key, 0]));
   const points = new Map<string, DayPoint>();
   for (let t = Date.parse(startDay); t <= Date.parse(endDay); t += DAY_MS) {
@@ -100,18 +98,22 @@ function DayTooltip({ active, label, payload, models }: TipProps & { models: Day
   );
 }
 
+/** 2px surface gap between stacked segments. */
+const BAR_GAP_PX = 2;
+const BAR_TOP_RADIUS: [number, number, number, number] = [4, 4, 0, 0];
+
 /** Stacked daily cost bars, one series per model family; no animation. */
 export function CostChart({ series, points, models }: { series: Series[]; points: DayPoint[]; models: DayModels }) {
   const config = Object.fromEntries(series.map((s) => [s.key, { label: FAMILY_LABEL[s.key], color: s.color }])) satisfies ChartConfig;
   return (
     <ChartContainer config={config} className="aspect-auto h-56 w-full">
       <BarChart data={points} margin={{ left: 0, right: 0, top: 4 }}>
-        <CartesianGrid vertical={false} />
+        <CartesianGrid vertical={false} stroke="var(--border)" />
         <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={8} minTickGap={X_TICK_GAP_PX} tickFormatter={fmtDay} />
-        <YAxis tickLine={false} axisLine={false} width={56} tickFormatter={(v: number) => fmtUsd(v)} />
+        <YAxis tickLine={false} axisLine={false} width={56} tickFormatter={fmtUsdAxis} />
         <Tooltip cursor={{ fill: "var(--surface-hover)" }} content={<DayTooltip models={models} />} isAnimationActive={false} />
         {series.map((s, i) => (
-          <Bar key={s.key} dataKey={s.key} stackId="cost" fill={s.color} stroke="var(--card)" strokeWidth={1} radius={i === series.length - 1 ? [2, 2, 0, 0] : 0} isAnimationActive={false} />
+          <Bar key={s.key} dataKey={s.key} stackId="cost" fill={s.color} stroke="var(--card)" strokeWidth={BAR_GAP_PX} radius={i === series.length - 1 ? BAR_TOP_RADIUS : 0} isAnimationActive={false} />
         ))}
       </BarChart>
     </ChartContainer>
