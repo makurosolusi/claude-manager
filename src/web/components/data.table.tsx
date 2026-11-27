@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
-import { TableBody, colClass } from "@/components/data.table.body.tsx";
+import { TableBody, colClass, primaryIndex } from "@/components/data.table.body.tsx";
 import type { GroupSpec } from "@/components/group.rows.tsx";
 import { cn } from "@/lib/cn.ts";
 
@@ -14,16 +14,18 @@ export interface Column<T> {
   cell: (row: T) => ReactNode;
   align?: "left" | "right";
   sortKey?: string; // present = header becomes a sort button
-  width?: string; // Tailwind width class, e.g. "w-24"; leave the first column flexible
+  width?: string; // Tailwind width class, e.g. "w-24"; leave the primary column flexible
+  /** Fills the leftover width, truncates, and carries the row link / group label; default = the first column. */
+  primary?: boolean;
   hideBelow?: "sm" | "md" | "lg";
-  hideable?: boolean; // default true; the first column is never hideable
+  hideable?: boolean; // default true; the primary column is never hideable
   total?: (rows: T[]) => ReactNode; // present on any column = a footer row with totals
 }
 export interface DataTableProps<T> {
   rows: T[] | undefined;
   columns: Column<T>[];
   rowKey: (row: T) => string;
-  /** Row click target; the first cell is also wrapped in `<a href>` (keyboard Enter, middle-click). */
+  /** Row click target; the primary cell is also wrapped in `<a href>` (keyboard Enter, middle-click). */
   rowHref?: (row: T) => string;
   sort?: Sort;
   onSort?: (s: Sort) => void;
@@ -70,9 +72,11 @@ function HeaderCell<T>({ c, sort, onSort }: { c: Column<T>; sort?: Sort; onSort?
   );
 }
 
-/** Columns that are shown: the first and non-hideable columns always stay; the rest follow `hidden`. */
-export const visibleColumns = <T,>(columns: Column<T>[], hidden: readonly string[] = []): Column<T>[] =>
-  columns.filter((c, i) => i === 0 || c.hideable === false || !hidden.includes(c.id));
+/** Columns that are shown: the primary and non-hideable columns always stay; the rest follow `hidden`. */
+export const visibleColumns = <T,>(columns: Column<T>[], hidden: readonly string[] = []): Column<T>[] => {
+  const p = primaryIndex(columns);
+  return columns.filter((c, i) => i === p || c.hideable === false || !hidden.includes(c.id));
+};
 
 /** Full-width sortable table with loading skeleton, error + retry, empty, grouped and totals states (header always shown). */
 export function DataTable<T>(p: DataTableProps<T>) {

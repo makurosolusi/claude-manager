@@ -23,10 +23,10 @@ const SORTS = { name: (r: AggRow) => r.key, requests: (r: AggRow) => r.requests,
 export function ShareBar({ share }: { share: number }) {
   return (
     <span className="inline-flex items-center justify-end gap-2">
-      <span aria-hidden className="h-1.5 w-10 sm:w-12 overflow-hidden rounded-full bg-foreground/10">
+      <span aria-hidden className="h-1.5 w-8 overflow-hidden rounded-full bg-foreground/10">
         <span className="block h-full rounded-full bg-foreground/50" style={{ width: `${share * 100}%` }} />
       </span>
-      <span className="w-10 tabular-nums">{fmtPct(share)}</span>
+      <span className="w-9 tabular-nums">{fmtPct(share)}</span>
     </span>
   );
 }
@@ -38,7 +38,7 @@ export function usageColumns<T extends Usage>(share: (r: T) => number, only?: st
     { id: "tokens", header: "Tokens", cell: (r) => <TokenCell usage={r} />, align: "right", sortKey: "tokens", width: "w-20", hideBelow: "sm" },
     { id: "cache", header: "Cache hit", cell: (r) => (r.requests ? fmtPct(cacheHitRate(r)) : "—"), align: "right", width: "w-20", hideBelow: "lg" },
     { id: "cost", header: "Cost (est.)", cell: (r) => <CostCell usd={r.cost_usd} unpriced={r.unpriced} heat="aggregate" />, align: "right", sortKey: "cost", width: "w-24" },
-    { id: "share", header: "Share", cell: (r) => <ShareBar share={share(r)} />, align: "right", sortKey: "share", width: "w-32", hideBelow: "md" },
+    { id: "share", header: "Share", cell: (r) => <ShareBar share={share(r)} />, align: "right", sortKey: "share", width: "w-24", hideBelow: "md" },
   ];
   return only ? all.filter((c) => only.includes(c.id)) : all;
 }

@@ -13,6 +13,9 @@ const ROW_H = { compact: "h-9", comfortable: "h-11" } as const;
 /** Alignment, width and responsive-hide classes shared by header and body cells. */
 export const colClass = <T,>(c: Column<T>) => cn(c.align === "right" && "text-right tabular-nums", c.width, c.hideBelow && HIDE[c.hideBelow]);
 
+/** Index of the column that fills the leftover width and carries the row link: the first with `primary`, else the first column. */
+export const primaryIndex = <T,>(columns: Column<T>[]): number => Math.max(0, columns.findIndex((c) => c.primary));
+
 function StateRow({ span, children, alert, tall }: { span: number; children: ReactNode; alert?: boolean; tall?: boolean }) {
   return (
     <tr>
@@ -34,13 +37,14 @@ export function TableBody<T>(p: DataTableProps<T> & { columns: Column<T>[] }) {
   const { rows, columns, rowKey, rowHref, density = "compact" } = p;
   const rowH = ROW_H[density];
   const span = columns.length;
+  const pi = primaryIndex(columns);
   const renderRow = (r: T) => {
     const href = rowHref?.(r);
     return (
       <tr key={rowKey(r)} onClick={href ? (e) => go(e, href) : undefined} className={cn("border-b hover:bg-surface-hover", rowH, href && "cursor-pointer")}>
         {columns.map((c, i) => (
-          <td key={c.id} className={cn("px-3 text-[13px]", colClass(c), i === 0 && "max-w-0")}>
-            {i === 0 && href ? (
+          <td key={c.id} className={cn("px-3 text-[13px]", colClass(c), i === pi && "w-full max-w-0")}>
+            {i === pi && href ? (
               <a href={href} className="block min-w-0 truncate rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring">
                 {c.cell(r)}
               </a>
@@ -67,7 +71,7 @@ export function TableBody<T>(p: DataTableProps<T> & { columns: Column<T>[] }) {
     );
   }
   if (p.groups) {
-    return p.groups.map((g) => <GroupRows key={g.key} spec={g} columns={columns} rowH={rowH} renderRow={renderRow} cellClass={colClass} />);
+    return p.groups.map((g) => <GroupRows key={g.key} spec={g} columns={columns} primary={pi} rowH={rowH} renderRow={renderRow} cellClass={colClass} />);
   }
   if (!rows) {
     return (

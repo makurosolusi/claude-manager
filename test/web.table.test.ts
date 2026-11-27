@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { pageWindow } from "../src/web/components/table.pagination.tsx";
 import { nextSort, visibleColumns, type Column } from "../src/web/components/data.table.tsx";
+import { primaryIndex } from "../src/web/components/data.table.body.tsx";
 import { hashHref, parseHash, withParams } from "../src/web/lib/hash.route.ts";
 import { DEFAULT_PAGE_SIZE, parseTableQuery, patchTable, tableParams, type TableSpec, type TableState } from "../src/web/lib/table.query.ts";
 
@@ -74,4 +75,17 @@ test("visibleColumns keeps the first and non-hideable columns", () => {
 test("nextSort starts descending and toggles", () => {
   expect(nextSort(undefined, "cost")).toEqual({ key: "cost", dir: "desc" });
   expect(nextSort({ key: "cost", dir: "desc" }, "cost")).toEqual({ key: "cost", dir: "asc" });
+});
+
+test("primaryIndex defaults to the first column and honours `primary`", () => {
+  const col = (id: string, primary?: boolean): Column<number> => ({ id, header: id, cell: () => id, primary });
+  expect(primaryIndex([col("a"), col("b")])).toBe(0);
+  expect(primaryIndex([col("status"), col("session", true), col("m")])).toBe(1);
+  expect(primaryIndex([])).toBe(0);
+});
+
+test("visibleColumns keeps the primary column even when hidden lists it", () => {
+  const col = (id: string, primary?: boolean): Column<number> => ({ id, header: id, cell: () => id, primary });
+  const cols = [col("status"), col("session", true), col("m")];
+  expect(visibleColumns(cols, ["status", "session", "m"]).map((c) => c.id)).toEqual(["session"]);
 });

@@ -34,11 +34,11 @@ function ContextCell({ s }: { s: LiveSession }) {
 /** Live sessions table columns; `now` drives the status badge. */
 export function liveColumns(now: number): Column<LiveSession>[] {
   return [
-    { id: "session", header: "Session", cell: (s) => <SessionCell id={s.id} title={s.title} projectCwd={s.project_cwd} lastTs={s.last_ts} now={now} /> },
+    { id: "session", header: "Session", primary: true, cell: (s) => <SessionCell id={s.id} title={s.title} projectCwd={s.project_cwd} lastTs={s.last_ts} now={now} /> },
     { id: "status", header: "Status", cell: (s) => <SessionStatusBadge lastTs={s.last_ts} now={now} />, width: "w-24", hideBelow: "sm" },
     { id: "model", header: "Model", cell: (s) => <ModelBadge model={s.model} />, width: "w-40", hideBelow: "md" },
-    { id: "context", header: "Context used", cell: (s) => <ContextCell s={s} />, align: "right", sortKey: "context", width: "sm:w-80" },
-    { id: "cost", header: "Cost (est.)", cell: (s) => <CostCell usd={s.cost_usd} heat="session" />, align: "right", sortKey: "cost", width: "w-24" },
+    { id: "context", header: <><span className="max-sm:hidden">Context used</span><span className="sm:hidden">Used</span></>, cell: (s) => <ContextCell s={s} />, align: "right", sortKey: "context", width: "sm:w-80" },
+    { id: "cost", header: <><span className="max-sm:hidden">Cost (est.)</span><span className="sm:hidden">Cost</span></>, cell: (s) => <CostCell usd={s.cost_usd} heat="session" />, align: "right", sortKey: "cost", width: "w-20 sm:w-24" },
     { id: "last", header: "Last active", cell: (s) => <RelativeTime iso={s.last_ts} />, align: "right", sortKey: "last", width: "w-24", hideBelow: "sm" },
   ];
 }

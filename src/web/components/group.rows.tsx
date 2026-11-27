@@ -21,21 +21,23 @@ export interface GroupSpec<T> {
 interface GroupRowsProps<T> {
   spec: GroupSpec<T>;
   columns: Column<T>[];
+  /** Index of the primary column, which holds the toggle button. */
+  primary: number;
   rowH: string;
   renderRow: (r: T) => ReactNode;
   cellClass: (c: Column<T>) => string;
 }
 
 /** A `<tbody>` holding a group header row (button with aria-expanded) followed by its rows when open. */
-export function GroupRows<T>({ spec: g, columns, rowH, renderRow, cellClass }: GroupRowsProps<T>) {
+export function GroupRows<T>({ spec: g, columns, primary, rowH, renderRow, cellClass }: GroupRowsProps<T>) {
   const id = `${useId()}-${g.key.replace(/\W/g, "_")}`;
   const Chevron = g.open ? ChevronDown : ChevronRight;
   return (
     <tbody id={id}>
       <tr className="h-9 border-b bg-muted/40">
         {columns.map((c, i) => (
-          <td key={c.id} className={cn("px-3 text-[13px]", cellClass(c), i === 0 && "max-w-0")}>
-            {i === 0 ? (
+          <td key={c.id} className={cn("px-3 text-[13px]", cellClass(c), i === primary && "w-full max-w-0")}>
+            {i === primary ? (
               <button
                 type="button"
                 aria-expanded={g.open}
