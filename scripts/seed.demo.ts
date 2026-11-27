@@ -13,6 +13,7 @@ const PREV_SESSIONS = 8;
 const MIN = 60_000;
 const DAY = 24 * 60 * MIN;
 const WINDOW_200K = 200_000;
+const CODER_REQUESTED = "claude-sonnet-5-5";
 
 const root = process.argv[2];
 if (!root) {
@@ -67,9 +68,10 @@ const toolBlock = () => {
   const t = pick(TOOLS);
   return [{ type: "tool_use", id: `toolu_${hex(20)}`, name: t.name, input: t.input }];
 };
-const assistant = (model: string, u: Record<string, number>, content: unknown[] = []) => {
+/** `requested` = the model the client asked for; differs from `model` when a gateway reroutes the request. */
+const assistant = (model: string, u: Record<string, number>, content: unknown[] = [], requested = model) => {
   const id = `msg_${hex(20)}`;
-  return { type: "assistant", requestId: `req_${hex(16)}`, message: { id, model, usage: u, content, stop_reason: content.length ? "tool_use" : endReason() } };
+  return { type: "assistant", requestedModel: requested, requestId: `req_${hex(16)}`, message: { id, model, usage: u, content, stop_reason: content.length ? "tool_use" : endReason() } };
 };
 const prompt = (text: string) => ({ type: "user", promptSource: "typed", message: { role: "user", content: text } });
 
@@ -88,7 +90,9 @@ function subagent(s: Spec, ts: number, branch: string, role: string, toolUseId: 
     const model = pick(ROLE_MODELS[role] ?? ROLE_MODELS["general-purpose"]!); // a role is served by a mix of models
     const nest = role === "coder" && depth === 1 && i === steps - 1 && rand() < 0.5;
     const tu = `toolu_${hex(20)}`;
-    emit(path, { ...base(s, t, branch), ...sc, ...assistant(model, usage(ctx, i === 0), nest ? [{ type: "tool_use", id: tu, name: "Agent", input: { subagent_type: "reviewer" } }] : toolBlock()) });
+    // Demo gateway: coder asks for sonnet but opus answers part of the time (shows the "rerouted" badge).
+    const requested = role === "coder" && model.includes("opus") ? CODER_REQUESTED : model;
+    emit(path, { ...base(s, t, branch), ...sc, ...assistant(model, usage(ctx, i === 0), nest ? [{ type: "tool_use", id: tu, name: "Agent", input: { subagent_type: "reviewer" } }] : toolBlock(), requested) });
     if (nest) t += subagent(s, t + 1000, branch, "reviewer", tu, 2);
     ctx += heavy ? int(1_000, 3_000) : int(2_000, 9_000);
   }
