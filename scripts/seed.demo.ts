@@ -1,5 +1,7 @@
 // Writes synthetic, deterministic Claude Code transcripts for dashboard demos and UI audits. Never reads real logs.
 // Usage: bun scripts/seed.demo.ts <claude-config-dir>   (e.g. $T/.claude, then run the dashboard with CLAUDE_CONFIG_DIR=$T/.claude)
+// For the custom role `ui-ux` to show as "custom" (not external), register it first, with the same env as the dashboard:
+//   HOME=$T CLAUDE_CONFIG_DIR=$T/.claude CLAUDE_MANAGER_HOME=$T/.cm bun src/cli.ts roles add ui-ux --tier work --description "UI/UX work"
 // Shape follows src/ingest/ingest.parser.ts and the fixtures in test/dashboard.test.ts.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -36,7 +38,7 @@ const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)]!;
 const hex = (n: number) => Array.from({ length: n }, () => Math.floor(rand() * 16).toString(16)).join("");
 const uuid = () => `${hex(8)}-${hex(4)}-4${hex(3)}-a${hex(3)}-${hex(12)}`;
 
-interface Spec { sid: string; project: (typeof PROJECTS)[number]; start: number; model: ModelKey; mid: string; turns: number; titled: boolean; title?: string; manager: boolean; ctxStart: number; ctxGrowth: number }
+interface Spec { sid: string; project: (typeof PROJECTS)[number]; start: number; model: ModelKey; mid: string; turns: number; titled: boolean; title?: string; manager: boolean; agent?: string; ctxStart: number; ctxGrowth: number }
 
 let seq = 0;
 const lines = new Map<string, string[]>();
@@ -106,7 +108,8 @@ function session(s: Spec): number {
   const branch = pick(s.project.branch);
   let t = s.start;
   let ctx = s.ctxStart;
-  if (s.manager) emit(path, { type: "agent-setting", agentSetting: "manager", sessionId: s.sid });
+  const mainAgent = s.agent ?? (s.manager ? "manager" : null);
+  if (mainAgent) emit(path, { type: "agent-setting", agentSetting: mainAgent, sessionId: s.sid });
   for (let turn = 0; turn < s.turns; turn++) {
     emit(path, { ...base(s, t, branch), ...prompt(pick(PROMPTS)) });
     const calls = int(1, 4);
@@ -140,6 +143,8 @@ for (let i = 0; i < SESSIONS; i++) specs.push(spec(now - DAYS * DAY + Math.floor
 for (let i = 0; i < PREV_SESSIONS; i++) specs.push(spec(now - 2 * DAYS * DAY + Math.floor(rand() * (DAYS - 1) * DAY)));
 Object.assign(specs[0]!, { titled: true, title: LONG_TITLE });
 for (const s of specs.slice(1, 6)) s.titled = false; // a few untitled sessions
+// Non-preset main agents: custom `ui-ux` and external `Plan` / `code-simplifier`, so their role style is visible in the demo.
+specs.slice(6, 12).forEach((s, i) => (s.agent = i < 3 ? "ui-ux" : i < 5 ? "Plan" : "code-simplifier"));
 for (const s of specs) {
   // Keep 200k-window models under their window so the context estimate stays at 200k (see context.window.ts).
   if (s.model !== "opus") s.ctxGrowth = Math.min(s.ctxGrowth, Math.floor((WINDOW_200K * 0.8 - s.ctxStart) / (s.turns * 4)));
