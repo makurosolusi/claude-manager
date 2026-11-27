@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pkg from "../package.json" with { type: "json" };
+import { buildBinary } from "../scripts/build.ts";
 
 let dir: string;
 let bin: string;
@@ -10,13 +11,8 @@ let bin: string;
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "cm-bin-"));
   bin = join(dir, "claude-manager");
-  const build = Bun.spawnSync([
-    "bun", "build", "src/cli.ts", "--compile",
-    "--no-compile-autoload-dotenv", "--no-compile-autoload-bunfig",
-    "--outfile", bin,
-  ]);
-  expect(build.exitCode).toBe(0);
-});
+  await buildBinary(bin); // same path as `bun run build`, so the Tailwind plugin is included
+}, 60_000);
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 

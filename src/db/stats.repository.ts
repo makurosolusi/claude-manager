@@ -23,14 +23,15 @@ export interface UsageRow {
 }
 
 // Role of a request: the subagent's type, else the session's main agent (`claude --agent X`), else plain main.
-const KEY: Record<GroupBy, string> = {
+export const KEY: Record<GroupBy, string> = {
   model: "r.model",
   role: "CASE WHEN r.agent_id IS NOT NULL THEN COALESCE(a.agent_type, 'subagent') ELSE COALESCE(s.main_agent, 'main') END",
   project: "COALESCE(s.project_cwd, '(unknown)')",
   day: "substr(r.ts, 1, 10)",
 };
 
-const WHERE = "r.ts >= $since AND ($project IS NULL OR instr(s.project_cwd, $project) > 0)";
+/** Request filter for StatsFilter; expects `r` = requests, `s` = sessions. */
+export const WHERE = "r.ts >= $since AND ($project IS NULL OR instr(s.project_cwd, $project) > 0)";
 
 /** Token and cost totals grouped by one dimension, most expensive first (days: newest first). */
 export function usageBy(db: Database, by: GroupBy, f: StatsFilter, limit: number): UsageRow[] {
