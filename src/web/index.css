@@ -1,9 +1,25 @@
-/* shadcn/ui (new-york-v4) theme tokens, adapted: dark mode follows prefers-color-scheme instead of a .dark class. */
+/* Design tokens (PLAN/04 §2). shadcn names kept so components/ui/* keep working.
+   Theme: light on :root, dark when the OS prefers it, overridden by [data-theme] that
+   index.html sets before paint from the user's stored choice (theme.toggle.tsx).
+   All contrast ratios (WCAG AA) are listed in the M5 report; text tokens ≥ 4.5:1 and
+   non-text UI (input border, bars, chart series) ≥ 3:1 against background and card. */
 @import "tailwindcss";
 
-@custom-variant dark (@media (prefers-color-scheme: dark));
+/* `dark:` = OS dark unless the user picked light, or an explicit dark choice. */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+  &:where(:root[data-theme="dark"] *) {
+    @slot;
+  }
+}
 
 @theme inline {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -22,69 +38,127 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-surface-hover: var(--surface-hover);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px); /* badge, dot chip: 4px */
+  --radius-md: calc(var(--radius) - 2px); /* controls: 6px */
+  --radius-lg: var(--radius); /* panels: 8px */
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  color-scheme: light;
+  --radius: 0.5rem;
+  --background: oklch(0.99 0 0);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.17 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
+  --popover-foreground: oklch(0.17 0 0);
+  --surface-hover: oklch(0.965 0 0);
+  --border: oklch(0 0 0 / 9%);
+  --input: oklch(0 0 0 / 46%); /* 3.45:1 on background — control boundary must pass 3:1 */
+  --foreground: oklch(0.17 0 0);
+  --muted-foreground: oklch(0.45 0 0);
+  --fg-subtle: oklch(0.52 0 0);
+  --muted: oklch(0.965 0 0);
+  --accent: oklch(0.965 0 0);
+  --accent-foreground: oklch(0.17 0 0);
+  --secondary: oklch(0.965 0 0);
+  --secondary-foreground: oklch(0.17 0 0);
+  --primary: oklch(0.17 0 0);
+  --primary-foreground: oklch(0.99 0 0);
+  --brand: oklch(0.53 0.19 255);
+  --ring: var(--brand);
+  --ok: oklch(0.52 0.14 155);
+  --warn: oklch(0.55 0.13 70);
+  --destructive: oklch(0.55 0.21 27);
+  --chart-1: var(--brand);
+  --chart-2: oklch(0.6 0.11 205); /* spec 0.66 gave 2.89:1; darkened to 3.62:1 */
+  --chart-3: oklch(0.46 0 0);
+  --chart-4: oklch(0.56 0 0);
+  --chart-5: oklch(0.64 0 0);
 }
 
+/* Dark palette. Written twice (OS preference / explicit choice) because CSS cannot
+   share one rule body between a media query and a plain selector; keep both in sync. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
     --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.488 0.243 264.376);
-    --chart-2: oklch(0.696 0.17 162.48);
+    --card: oklch(0.175 0 0);
+    --card-foreground: oklch(0.97 0 0);
+    --popover: oklch(0.175 0 0);
+    --popover-foreground: oklch(0.97 0 0);
+    --surface-hover: oklch(0.21 0 0);
+    --border: oklch(1 0 0 / 9%);
+    --input: oklch(1 0 0 / 38%);
+    --foreground: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.72 0 0);
+    --fg-subtle: oklch(0.62 0 0);
+    --muted: oklch(0.21 0 0);
+    --accent: oklch(0.21 0 0);
+    --accent-foreground: oklch(0.97 0 0);
+    --secondary: oklch(0.21 0 0);
+    --secondary-foreground: oklch(0.97 0 0);
+    --primary: oklch(0.97 0 0);
+    --primary-foreground: oklch(0.17 0 0);
+    --brand: oklch(0.7 0.15 245);
+    --ok: oklch(0.76 0.15 155);
+    --warn: oklch(0.82 0.16 85);
+    --destructive: oklch(0.7 0.19 25);
+    --chart-2: oklch(0.8 0.1 200);
+    --chart-3: oklch(0.72 0 0);
+    --chart-4: oklch(0.6 0 0);
+    --chart-5: oklch(0.5 0 0);
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: oklch(0.145 0 0);
+  --card: oklch(0.175 0 0);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.175 0 0);
+  --popover-foreground: oklch(0.97 0 0);
+  --surface-hover: oklch(0.21 0 0);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 38%);
+  --foreground: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.72 0 0);
+  --fg-subtle: oklch(0.62 0 0);
+  --muted: oklch(0.21 0 0);
+  --accent: oklch(0.21 0 0);
+  --accent-foreground: oklch(0.97 0 0);
+  --secondary: oklch(0.21 0 0);
+  --secondary-foreground: oklch(0.97 0 0);
+  --primary: oklch(0.97 0 0);
+  --primary-foreground: oklch(0.17 0 0);
+  --brand: oklch(0.7 0.15 245);
+  --ok: oklch(0.76 0.15 155);
+  --warn: oklch(0.82 0.16 85);
+  --destructive: oklch(0.7 0.19 25);
+  --chart-2: oklch(0.8 0.1 200);
+  --chart-3: oklch(0.72 0 0);
+  --chart-4: oklch(0.6 0 0);
+  --chart-5: oklch(0.5 0 0);
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background font-sans text-[13px] text-foreground antialiased;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2;
   }
 }

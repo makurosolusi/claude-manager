@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
     <title>claude-manager</title>
+    <!-- Applies a stored theme choice before first paint (no flash). Key and values must match components/theme.toggle.tsx. -->
+    <script>
+      try {
+        var t = localStorage.getItem("cm-theme");
+        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+      } catch (e) {
+        // Storage blocked (private mode, sandbox): keep following the OS theme.
+      }
+    </script>
     <link rel="stylesheet" href="./index.css" />
   </head>
   <body>
