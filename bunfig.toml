@@ -1,0 +1,8 @@
+# Don't auto-install peer deps: bun-plugin-tailwind peers on `bun`, which would put the npm `bun` executable in
+# node_modules/.bin and make `bun run build` compile with that runtime instead of the developer's Bun.
+[install]
+peer = false
+
+# Dev mode (`bun --hot`): Tailwind for HTML imports served by Bun.serve. Compiled builds pass the plugin in scripts/build.ts.
+[serve.static]
+plugins = ["bun-plugin-tailwind"]

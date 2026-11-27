@@ -1,4 +1,4 @@
-import { $ } from "bun";
+import tailwind from "bun-plugin-tailwind";
 
 const TARGETS = [
   "bun-darwin-arm64",
@@ -6,16 +6,41 @@ const TARGETS = [
   "bun-linux-x64",
   "bun-linux-arm64",
   "bun-windows-x64",
-];
+] as const;
+type Target = (typeof TARGETS)[number];
 
-const arg = Bun.argv[2];
-const targets = arg === "all" ? TARGETS : arg ? [arg] : [undefined];
+/** Compiles the CLI (with the Tailwind-styled dashboard UI) into one executable. */
+export async function buildBinary(outfile: string, target?: Target): Promise<void> {
+  const result = await Bun.build({
+    entrypoints: ["src/cli.ts"],
+    // The JS API (not the CLI) is needed so bun-plugin-tailwind runs on the dashboard's HTML import.
+    plugins: [tailwind],
+    minify: true,
+    // Bundles React's production build into the dashboard instead of the dev build.
+    define: { "process.env.NODE_ENV": JSON.stringify("production") },
+    compile: {
+      outfile,
+      ...(target ? { target } : {}),
+      // Without these the binary would load .env/bunfig.toml from the user's cwd (RND/03 §1).
+      autoloadDotenv: false,
+      autoloadBunfig: false,
+    },
+  });
+  if (!result.success) {
+    throw new AggregateError(result.logs, `build failed for ${outfile} (${target ?? "host"})`);
+  }
+}
 
-for (const target of targets) {
-  const suffix = target ? `-${target.replace(/^bun-/, "")}` : "";
-  const outfile = `dist/claude-manager${suffix}${target?.includes("windows") ? ".exe" : ""}`;
-  const targetFlag = target ? [`--target=${target}`] : [];
-  // Without these flags the binary would load .env/bunfig.toml from the user's cwd (RND/03 §1).
-  await $`bun build src/cli.ts --compile --minify --no-compile-autoload-dotenv --no-compile-autoload-bunfig ${targetFlag} --outfile ${outfile}`.quiet();
-  console.log(`built ${outfile}`);
+if (import.meta.main) {
+  const arg = Bun.argv[2];
+  if (arg && arg !== "all" && !TARGETS.includes(arg as Target)) {
+    throw new Error(`unknown target "${arg}"; expected one of: all, ${TARGETS.join(", ")}`);
+  }
+  const targets: (Target | undefined)[] = arg === "all" ? [...TARGETS] : [arg as Target | undefined];
+  for (const target of targets) {
+    const suffix = target ? `-${target.replace(/^bun-/, "")}` : "";
+    const outfile = `dist/claude-manager${suffix}${target?.includes("windows") ? ".exe" : ""}`;
+    await buildBinary(outfile, target);
+    console.log(`built ${outfile}`);
+  }
 }
