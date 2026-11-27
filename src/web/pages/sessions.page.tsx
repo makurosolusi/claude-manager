@@ -9,7 +9,9 @@ import { TablePagination } from "@/components/table.pagination.tsx";
 import { TableToolbar } from "@/components/table.toolbar.tsx";
 import { useApi, useApiMany } from "@/lib/api.client.ts";
 import { fmtProject } from "@/lib/format.ts";
-import { CUSTOM_ROLE_ICON, FAMILY_ICON, NAV_ICON, ROLE_ICON, STATUS_ICON, UI_ICON } from "@/lib/icon.map.ts";
+import { FAMILY_ICON, NAV_ICON, STATUS_ICON, UI_ICON } from "@/lib/icon.map.ts";
+import type { RoleMeta } from "@/lib/color.tokens.ts";
+import { roleIcon } from "@/lib/role.icon.ts";
 import { FAMILY_LABEL, type ModelFamily } from "@/lib/model.tier.ts";
 import { useNow } from "@/lib/now.ts";
 import type { Range } from "@/lib/range.ts";
@@ -28,14 +30,14 @@ const FACET_LABEL = { project: "Project", family: "Model", role: "Role", status:
 const FACET_ICON = { project: UI_ICON.project, family: UI_ICON.model, role: NAV_ICON.roles, status: STATUS_ICON.live };
 const FIXED_FACETS: Record<string, readonly string[]> = { family: FAMILIES, status: ["live", "idle", "ended"] };
 
-function facetOptions(id: (typeof SESSION_FACET_IDS)[number], counts: { value: string; count: number }[] = []): FacetOption[] {
+function facetOptions(id: (typeof SESSION_FACET_IDS)[number], counts: { value: string; count: number }[] = [], roles?: readonly RoleMeta[]): FacetOption[] {
   const byValue = new Map(counts.map((c) => [c.value, c.count]));
   const values = FIXED_FACETS[id] ?? counts.map((c) => c.value);
   return values.map((value) => ({
     value,
     count: byValue.get(value) ?? 0,
     label: id === "project" ? fmtProject(value) : id === "family" ? FAMILY_LABEL[value as ModelFamily] ?? value : id === "status" ? value.charAt(0).toUpperCase() + value.slice(1) : value,
-    icon: id === "family" ? FAMILY_ICON[value as ModelFamily] : id === "status" ? STATUS_ICON[value as keyof typeof STATUS_ICON] : id === "role" ? (Object.hasOwn(ROLE_ICON, value) ? ROLE_ICON[value] : CUSTOM_ROLE_ICON) : undefined,
+    icon: id === "family" ? FAMILY_ICON[value as ModelFamily] : id === "status" ? STATUS_ICON[value as keyof typeof STATUS_ICON] : id === "role" ? roleIcon(value, roles) : undefined,
     tone: id === "status" ? STATUS_TONE[value as keyof typeof STATUS_TONE] : undefined,
   }));
 }
@@ -61,7 +63,7 @@ export function SessionsPage({ since, range, dataVersion, params, roles }: PageP
 
   const columns = useMemo(() => sessionColumns(now, roles, (r) => `#${SESSIONS_PATH}/${encodeURIComponent(r.id)}`), [now, roles]);
   const facets: FacetDef[] = SESSION_FACET_IDS.map((id) => ({
-    id, label: FACET_LABEL[id], icon: FACET_ICON[id], options: facetOptions(id, list.data?.facets?.[id]), selected: state.filters[id] ?? [],
+    id, label: FACET_LABEL[id], icon: FACET_ICON[id], options: facetOptions(id, list.data?.facets?.[id], roles), selected: state.filters[id] ?? [],
     onChange: (next) => go({ filters: { ...state.filters, [id]: next } }),
   }));
   const reset = () => go({ q: "", group: NO_GROUP, filters: {} });
