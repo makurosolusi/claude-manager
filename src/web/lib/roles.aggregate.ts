@@ -1,10 +1,13 @@
 import type { RoleRow, Usage } from "../../server/dashboard.types.ts";
-import { NEUTRAL_ROLES, type RoleMeta } from "./color.tokens.ts";
+import type { RoleMeta } from "./color.tokens.ts";
 import { TIER_ORDER, tierOf, type Tier, type TierKey, type Tiers } from "./model.tier.ts";
+import { cacheHitRate, fmtPct } from "./format.ts";
 import { groupBy } from "./table.client.ts";
 
-/** Where a role comes from: shipped preset, user-defined, or the built-in main/subagent. */
-export type RoleKind = "preset" | "custom" | "built-in";
+/** Where a role comes from: shipped preset, made with `roles add`, or external (Claude Code built-in, plugin or ~/.claude/agents). */
+export type RoleKind = "preset" | "custom" | "external";
+/** Kinds in display order. */
+export const ROLE_KINDS: readonly RoleKind[] = ["preset", "custom", "external"];
 /** A role × model row with the tier its model was billed under. */
 export interface TieredRow extends RoleRow { tier: TierKey }
 /** Usage summed over one key (a model, a role or a tier), its tier, and its share of the overall cost (0..1). */
@@ -23,11 +26,19 @@ export function sumUsage(rows: readonly Usage[]): Usage {
 export const withTier = (rows: readonly RoleRow[], tiers?: Partial<Tiers>): TieredRow[] =>
   rows.map((r) => ({ ...r, tier: tierOf(r.model, tiers) }));
 
-/** Kind of a role: main/subagent are built-in; the roster says preset vs custom; unknown names count as custom. */
+/** Kind of a role, from the `meta.roles` roster only (never the name): anything not in the roster is external. */
 export function roleKind(role: string, roles?: readonly RoleMeta[]): RoleKind {
-  if (NEUTRAL_ROLES.includes(role)) return "built-in";
-  return roles?.find((r) => r.name === role)?.source ?? "custom";
+  return roles?.find((r) => r.name === role)?.source ?? "external";
 }
+
+/** Cache-hit subtotal of grouped rows, token-weighted (sums the parts before dividing); "—" with no requests. */
+export function cacheHitLabel(u: Usage): string {
+  return u.requests ? fmtPct(cacheHitRate(u)) : "—";
+}
+
+/** Group keys ordered by TIER_ORDER (unknown keys last). */
+export const byTierOrder = <T extends { key: string }>(gs: T[]): T[] =>
+  [...gs].sort((a, b) => TIER_ORDER.indexOf(a.key as TierKey) - TIER_ORDER.indexOf(b.key as TierKey));
 
 /** The role's configured tier when it differs from the tier this row was billed under; undefined when equal or unknown. */
 export function configuredTierMismatch(role: string, rowTier: TierKey, roles?: readonly RoleMeta[]): Tier | undefined {
