@@ -1,43 +1,60 @@
 import { expect, test } from "bun:test";
 import { parseHash } from "../src/web/lib/hash.route.ts";
-import { SEARCH_MAX_CHARS, parseSessionsQuery, sessionsCountLabel, sessionsHref, type SessionsState } from "../src/web/lib/sessions.query.ts";
+import { SESSIONS_SPEC, sessionsApiPath, sessionsCountLabel, sessionsHref } from "../src/web/lib/sessions.query.ts";
+import { parseTableQuery, type TableState } from "../src/web/lib/table.query.ts";
 
-const parse = (qs: string) => parseSessionsQuery(new URLSearchParams(qs));
-const defaults: SessionsState = { q: "", sort: "last", dir: "desc", project: "", page: 1 };
+const parse = (qs: string) => parseTableQuery(new URLSearchParams(qs), SESSIONS_SPEC);
+const SINCE = "2026-01-01T00:00:00.000Z";
+const base = parse("");
 
 test("empty params parse to defaults", () => {
-  expect(parse("")).toEqual(defaults);
+  expect(base).toMatchObject({ q: "", sort: "last", dir: "desc", page: 1, size: 50, group: "none" });
+  expect(base.filters).toEqual({ project: [], family: [], role: [], status: [] });
 });
 
-test("valid params are read; q is trimmed", () => {
-  expect(parse("q=%20cors%20&sort=cost&dir=asc&project=/w/acme/web&page=3")).toEqual({ q: "cors", sort: "cost", dir: "asc", project: "/w/acme/web", page: 3 });
-});
-
-test("invalid sort, dir and page fall back to defaults", () => {
-  expect(parse("sort=bogus&dir=up&page=0")).toEqual(defaults);
-  expect(parse("page=2.5").page).toBe(1);
-  expect(parse("page=abc").page).toBe(1);
-});
-
-test("q is clipped to the server limit", () => {
-  expect(parse(`q=${"a".repeat(SEARCH_MAX_CHARS + 50)}`).q).toHaveLength(SEARCH_MAX_CHARS);
+test("unknown facet values and groups are dropped", () => {
+  const s = parse("family=opus&family=gpt&status=live&group=role&sort=bogus");
+  expect(s.filters.family).toEqual(["opus"]);
+  expect(s.filters.status).toEqual(["live"]);
+  expect(s.group).toBe("none");
+  expect(s.sort).toBe("last");
 });
 
 test("defaults and the default range are dropped from the href", () => {
-  expect(sessionsHref({ ...defaults, sort: "last", dir: "desc" }, "30d")).toBe("#/sessions");
+  expect(sessionsHref(base, "30d")).toBe("#/sessions");
 });
 
-test("non-default range and state are kept and round-trip", () => {
-  const state = { q: "api", sort: "cost", dir: "asc", project: "acme/web", page: 2 } as const;
-  const href = sessionsHref(state, "7d");
-  const { path, params } = parseHash(href);
+test("state and range round-trip through the href with repeated facet keys", () => {
+  const state: TableState = { ...base, q: "api", sort: "cost", dir: "asc", page: 2, size: 25, group: "project", filters: { ...base.filters, family: ["opus", "haiku"], project: ["/w/acme/web"] } };
+  const { path, params } = parseHash(sessionsHref(state, "7d"));
   expect(path).toBe("/sessions");
   expect(params.get("range")).toBe("7d");
-  expect(parseSessionsQuery(params)).toEqual(state);
+  expect(params.getAll("family")).toEqual(["opus", "haiku"]);
+  expect(parseTableQuery(params, SESSIONS_SPEC)).toEqual(state);
 });
 
-test("blank search is not written", () => {
-  expect(sessionsHref({ ...defaults, sort: "tokens", dir: "desc", q: "   " }, "all")).toBe("#/sessions?range=all&sort=tokens");
+test("list path carries filters, sort, paging and facets=1", () => {
+  const s = { ...base, q: "x", filters: { ...base.filters, family: ["opus", "haiku"] } };
+  const qs = new URL(sessionsApiPath(SINCE, s, { facets: true }), "http://x").searchParams;
+  expect(qs.getAll("family")).toEqual(["opus", "haiku"]);
+  expect([qs.get("q"), qs.get("sort"), qs.get("page"), qs.get("pageSize"), qs.get("facets")]).toEqual(["x", "last", "1", "50", "1"]);
+});
+
+test("groups path has by + filters but no paging or sort", () => {
+  const s = { ...base, group: "family", filters: { ...base.filters, status: ["live"] } };
+  const u = new URL(sessionsApiPath(SINCE, s, { groups: true }), "http://x");
+  expect(u.pathname).toBe("/api/sessions/groups");
+  expect(u.searchParams.get("by")).toBe("family");
+  expect(u.searchParams.getAll("status")).toEqual(["live"]);
+  expect(u.searchParams.has("page") || u.searchParams.has("sort")).toBe(false);
+});
+
+test("expanding a group narrows its dimension to that key, page 1, 10 rows", () => {
+  const s = { ...base, page: 4, group: "project", filters: { ...base.filters, project: ["/a", "/b"], family: ["opus"] } };
+  const qs = new URL(sessionsApiPath(SINCE, s, { only: { by: "project", key: "/b" }, size: 10 }), "http://x").searchParams;
+  expect(qs.getAll("project")).toEqual(["/b"]);
+  expect(qs.getAll("family")).toEqual(["opus"]);
+  expect([qs.get("page"), qs.get("pageSize")]).toEqual(["1", "10"]);
 });
 
 test("count label hides a stale total on error", () => {

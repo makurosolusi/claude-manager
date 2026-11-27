@@ -6,8 +6,11 @@ export const PAGE_SIZES = [25, 50, 100] as const;
 export const DEFAULT_PAGE_SIZE = 50;
 /** Group value meaning "not grouped". */
 export const NO_GROUP = "none";
+/** Rows fetched when a group is expanded (the footer links to the full list). */
+export const GROUP_PREVIEW_ROWS = 10;
 /** Max values accepted per facet and max length of each (mirrors the server limits). */
 export const FACET_MAX_VALUES = 20;
+/** Max length of one facet value. */
 export const FACET_VALUE_MAX_CHARS = 512;
 /** Server rejects longer `q`; clip before it gets there. */
 export const TABLE_SEARCH_MAX_CHARS = 200;
