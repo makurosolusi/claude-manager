@@ -1,13 +1,27 @@
 // Static tables for scripts/seed.demo.ts. All fake: /work/... paths, invented titles, no real data.
 
-export const MODEL = { opus: "claude-opus-4-7", sonnet: "claude-sonnet-4-5", haiku: "claude-haiku-4-5" } as const;
+/** Main-session model pool per tier (200k-window tiers stay on 4.x ids so the live context-level cases hold). */
+export const MODEL = {
+  opus: ["claude-opus-4-7", "claude-opus-5", "claude-fable-5-2"],
+  sonnet: ["claude-sonnet-4-5"],
+  haiku: ["claude-haiku-4-5"],
+} as const;
 export type ModelKey = keyof typeof MODEL;
 
-/** Role → tier model, as in src/roles/roles.presets.ts (think=opus, work=sonnet, basic=haiku); ui-ux is custom, general-purpose is a Claude built-in. */
-export const ROLE_MODEL: Record<string, ModelKey> = {
-  manager: "opus", architect: "opus", researcher: "haiku", coder: "sonnet", reviewer: "sonnet", writer: "haiku",
-  "ui-ux": "sonnet", "general-purpose": "sonnet",
+const OPUS = ["claude-opus-5-5", "claude-opus-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-fable-5-2"];
+const SONNET = ["claude-sonnet-5-5", "claude-sonnet-5", "claude-sonnet-4-6", "claude-sonnet-4-5"];
+const HAIKU = ["claude-haiku-5-5", "claude-haiku-4-5"];
+/** Subagent role -> models that serve it (4-8 each for the big roles). Presets, custom ui-ux, then Claude Code built-ins. */
+export const ROLE_MODELS: Record<string, readonly string[]> = {
+  manager: OPUS, architect: [...OPUS.slice(0, 4), "claude-sonnet-5-5"], researcher: [...HAIKU, "claude-sonnet-5", "claude-haiku-5-5"],
+  coder: [...SONNET, "claude-opus-5-5", "claude-opus-4-8"], reviewer: [...SONNET.slice(0, 3), "claude-opus-5"], writer: [...HAIKU, "claude-sonnet-5-5"],
+  "ui-ux": [...SONNET.slice(0, 3), "claude-fable-5-2"],
+  "general-purpose": [...SONNET, "claude-opus-5", "claude-haiku-5-5"], Explore: [...HAIKU, "claude-haiku-4-5", "claude-sonnet-5"],
+  Plan: [...OPUS.slice(0, 3), "claude-sonnet-5-5"], fork: [...OPUS.slice(0, 2), ...SONNET.slice(0, 2), "claude-fable-5-2"],
+  "web-fetch": HAIKU, claude: [...SONNET.slice(0, 2), "claude-opus-5"], "statusline-setup": ["claude-haiku-5-5", "claude-haiku-4-5"],
 };
+/** Roles whose subagents sometimes run long on a ~1M context, so totals reach billions of tokens. */
+export const HEAVY_ROLES = ["coder", "architect", "manager", "general-purpose", "fork"];
 
 // Two projects share the basename "web" on purpose: the UI must not rely on basename alone.
 export const PROJECTS = [

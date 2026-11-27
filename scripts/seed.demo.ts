@@ -3,7 +3,7 @@
 // Shape follows src/ingest/ingest.parser.ts and the fixtures in test/dashboard.test.ts.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { LONG_TITLE, MODEL, type ModelKey, PROJECTS, PROMPTS, ROLE_MODEL, TITLES, TOOLS } from "./seed.demo.data.ts";
+import { HEAVY_ROLES, LONG_TITLE, MODEL, type ModelKey, PROJECTS, PROMPTS, ROLE_MODELS, TITLES, TOOLS } from "./seed.demo.data.ts";
 
 const SEED = 0x5eed;
 const DAYS = 30;
@@ -35,7 +35,7 @@ const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)]!;
 const hex = (n: number) => Array.from({ length: n }, () => Math.floor(rand() * 16).toString(16)).join("");
 const uuid = () => `${hex(8)}-${hex(4)}-4${hex(3)}-a${hex(3)}-${hex(12)}`;
 
-interface Spec { sid: string; project: (typeof PROJECTS)[number]; start: number; model: ModelKey; turns: number; titled: boolean; title?: string; manager: boolean; ctxStart: number; ctxGrowth: number }
+interface Spec { sid: string; project: (typeof PROJECTS)[number]; start: number; model: ModelKey; mid: string; turns: number; titled: boolean; title?: string; manager: boolean; ctxStart: number; ctxGrowth: number }
 
 let seq = 0;
 const lines = new Map<string, string[]>();
@@ -77,19 +77,20 @@ const prompt = (text: string) => ({ type: "user", promptSource: "typed", message
 function subagent(s: Spec, ts: number, branch: string, role: string, toolUseId: string, depth: number): number {
   const agentId = hex(17);
   const path = fileFor(s.project.cwd, s.sid, agentId);
-  const model = MODEL[ROLE_MODEL[role] ?? "sonnet"];
+  const heavy = HEAVY_ROLES.includes(role) && rand() < 0.6;
   const sc = { isSidechain: true, agentId };
   emit(path, { ...base(s, ts, branch), ...sc, ...prompt(`${role}: ${pick(PROMPTS)}`) });
-  const steps = int(2, 7);
+  const steps = heavy ? int(220, 420) : int(2, 7);
   let t = ts;
-  let ctx = int(12_000, 30_000);
+  let ctx = heavy ? int(700_000, 900_000) : int(12_000, 30_000);
   for (let i = 0; i < steps; i++) {
-    t += int(8, 60) * 1000;
+    t += heavy ? int(1, 3) * 1000 : int(8, 60) * 1000;
+    const model = pick(ROLE_MODELS[role] ?? ROLE_MODELS["general-purpose"]!); // a role is served by a mix of models
     const nest = role === "coder" && depth === 1 && i === steps - 1 && rand() < 0.5;
     const tu = `toolu_${hex(20)}`;
     emit(path, { ...base(s, t, branch), ...sc, ...assistant(model, usage(ctx, i === 0), nest ? [{ type: "tool_use", id: tu, name: "Agent", input: { subagent_type: "reviewer" } }] : toolBlock()) });
     if (nest) t += subagent(s, t + 1000, branch, "reviewer", tu, 2);
-    ctx += int(2_000, 9_000);
+    ctx += heavy ? int(1_000, 3_000) : int(2_000, 9_000);
   }
   metas.set(path.replace(/\.jsonl$/, ".meta.json"), { agentType: role, description: `${role} task for ${s.project.cwd.split("/").pop()}`, toolUseId, spawnDepth: depth });
   return t - ts;
@@ -107,10 +108,10 @@ function session(s: Spec): number {
     const calls = int(1, 4);
     for (let c = 0; c < calls; c++) {
       t += int(5, 90) * 1000;
-      const spawnRole = s.manager && c === 0 && rand() < 0.6 ? pick(Object.keys(ROLE_MODEL)) : null;
+      const spawnRole = s.manager && c === 0 && rand() < 0.6 ? pick(Object.keys(ROLE_MODELS)) : null;
       const tu = `toolu_${hex(20)}`;
       const content = spawnRole ? [{ type: "tool_use", id: tu, name: "Agent", input: { subagent_type: spawnRole } }] : toolBlock();
-      emit(path, { ...base(s, t, branch), ...assistant(MODEL[s.model], usage(ctx, turn === 0 && c === 0), content) });
+      emit(path, { ...base(s, t, branch), ...assistant(s.mid, usage(ctx, turn === 0 && c === 0), content) });
       if (spawnRole) t += subagent(s, t + 1000, branch, spawnRole, tu, 1);
       ctx += s.ctxGrowth;
     }
@@ -125,7 +126,7 @@ const now = Date.now();
 function spec(start: number, over: Partial<Spec> = {}): Spec {
   const model: ModelKey = rand() < 0.45 ? "opus" : rand() < 0.75 ? "sonnet" : "haiku";
   return {
-    sid: uuid(), project: pick(weighted), start, model, turns: int(2, 9), titled: rand() < 0.85, manager: rand() < 0.35,
+    sid: uuid(), project: pick(weighted), start, model, mid: pick(MODEL[model]), turns: int(2, 9), titled: rand() < 0.85, manager: rand() < 0.35,
     ctxStart: int(14_000, 28_000), ctxGrowth: int(1_500, 6_000), ...over,
   };
 }
@@ -146,13 +147,14 @@ for (const s of specs) {
 const LIVE_STEP_MIN = 10;
 function live(over: Partial<Spec>, lastAgoMin: number, finalContext: number, titled = true) {
   const s = spec(0, over);
+  s.mid = pick(MODEL[s.model]);
   const path = fileFor(s.project.cwd, s.sid);
   const branch = s.project.branch[0]!;
   const fractions = [0.55, 0.7, 0.82, 1];
   fractions.forEach((f, i) => {
     const reply = now - (lastAgoMin + (fractions.length - 1 - i) * LIVE_STEP_MIN) * MIN; // last reply = lastAgoMin ago
     emit(path, { ...base(s, reply - 30_000, branch), ...prompt(pick(PROMPTS)) });
-    emit(path, { ...base(s, reply, branch), ...assistant(MODEL[s.model], usage(Math.round(finalContext * f), i === 0), toolBlock()) });
+    emit(path, { ...base(s, reply, branch), ...assistant(s.mid, usage(Math.round(finalContext * f), i === 0), toolBlock()) });
   });
   if (titled) emit(path, { type: "ai-title", sessionId: s.sid, aiTitle: pick(TITLES) });
 }
