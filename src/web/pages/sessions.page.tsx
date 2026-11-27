@@ -14,7 +14,7 @@ import { FAMILY_LABEL, type ModelFamily } from "@/lib/model.tier.ts";
 import { useNow } from "@/lib/now.ts";
 import type { Range } from "@/lib/range.ts";
 import { STATUS_TONE } from "@/lib/status.level.ts";
-import { SESSIONS_PATH, SESSIONS_SPEC, SESSION_FACET_IDS, sessionsApiPath, sessionsCountLabel, sessionsHref, type GroupRef } from "@/lib/sessions.query.ts";
+import { SESSIONS_PATH, SESSIONS_SPEC, SESSION_FACET_IDS, sessionsApi, sessionsApiPath, sessionsCountLabel, sessionsHref, type GroupRef } from "@/lib/sessions.query.ts";
 import { useViewPrefs } from "@/lib/use.view.prefs.ts";
 import { GROUP_PREVIEW_ROWS, NO_GROUP, parseTableQuery, patchTable, type TableState } from "@/lib/table.query.ts";
 import { sessionColumns } from "./sessions.columns.tsx";
@@ -52,10 +52,11 @@ export function SessionsPage({ since, range, dataVersion, params, roles }: PageP
   useEffect(() => setOpen([]), [state.group]);
 
   // Grouped: the list call only supplies facets + total, so ask for one row.
-  const list = useApi<SessionsResponse>(sessionsApiPath(since, state, { facets: true, size: grouped ? 1 : undefined, range }), {}, dataVersion + retry);
-  const groupsPath = grouped ? sessionsApiPath(since, state, { groups: true, range }) : undefined;
+  const listReq = sessionsApi(since, state, { facets: true, size: grouped ? 1 : undefined, range });
+  const list = useApi<SessionsResponse>(listReq.path, listReq.query, dataVersion + retry);
+  const groupsReq = grouped ? sessionsApi(since, state, { groups: true, range }) : undefined;
   const openRefs: GroupRef[] = open.map((key) => ({ by: state.group, key }));
-  const groupsApi = useApi<SessionGroups>(groupsPath ?? null, {}, dataVersion + retry);
+  const groupsApi = useApi<SessionGroups>(groupsReq?.path ?? null, groupsReq?.query, dataVersion + retry);
   const results = useApiMany<Page<SessionRow>>(openRefs.map((only) => sessionsApiPath(since, state, { only, size: GROUP_PREVIEW_ROWS, range })), dataVersion + retry);
 
   const columns = useMemo(() => sessionColumns(now, roles, (r) => `#${SESSIONS_PATH}/${encodeURIComponent(r.id)}`), [now, roles]);

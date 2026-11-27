@@ -1,6 +1,6 @@
 import { FAMILIES, SESSION_GROUPS, SESSION_SORTS, SESSION_STATUSES } from "../../server/dashboard.types.ts";
 import { withQuery, type Query } from "@/lib/api.client.ts";
-import { fmtInt } from "@/lib/format.ts";
+import { plural } from "@/lib/format.ts";
 import { hashHref } from "@/lib/hash.route.ts";
 import { DEFAULT_RANGE, type Range } from "@/lib/range.ts";
 import { NO_GROUP, tableParams, type TableSpec, type TableState } from "@/lib/table.query.ts";
@@ -22,13 +22,19 @@ export const SESSIONS_SPEC: TableSpec = {
 /** One group to expand: its dimension (`by`) and value (`key`). */
 export interface GroupRef { by: string; key: string }
 
-/** `/api/sessions[/groups]` URL for the table state; `only` narrows the list to one group's rows. */
-export function sessionsApiPath(since: string, s: TableState, o: { groups?: boolean; facets?: boolean; size?: number; only?: GroupRef; range?: Range } = {}): string {
+/** Endpoint path and query of `/api/sessions[/groups]` for the table state; `only` narrows the list to one group's rows. Pass both to `useApi` so a changed query on the same endpoint keeps the old data (dimmed) instead of a skeleton. */
+export function sessionsApi(since: string, s: TableState, o: { groups?: boolean; facets?: boolean; size?: number; only?: GroupRef; range?: Range } = {}): { path: string; query: Query } {
   // `range` is ignored by the server; it makes a range change a new resource for useApi while a sliding `since` stays a refresh.
   const q: Query = { since, range: o.range, q: s.q || undefined };
   for (const id of SESSION_FACET_IDS) q[id] = o.only?.by === id ? [o.only.key] : (s.filters[id] ?? []);
-  if (o.groups) return withQuery("/api/sessions/groups", { ...q, by: s.group });
-  return withQuery("/api/sessions", { ...q, sort: s.sort, dir: s.dir, page: o.only ? 1 : s.page, pageSize: o.size ?? s.size, facets: o.facets ? 1 : undefined });
+  if (o.groups) return { path: "/api/sessions/groups", query: { ...q, by: s.group } };
+  return { path: "/api/sessions", query: { ...q, sort: s.sort, dir: s.dir, page: o.only ? 1 : s.page, pageSize: o.size ?? s.size, facets: o.facets ? 1 : undefined } };
+}
+
+/** Same as `sessionsApi` as one URL string (the key of `useApiMany` results). */
+export function sessionsApiPath(since: string, s: TableState, o: Parameters<typeof sessionsApi>[2] = {}): string {
+  const { path, query } = sessionsApi(since, s, o);
+  return withQuery(path, query);
 }
 
 /** Hash link for table state + range; defaults are left out so URLs stay short. */
@@ -40,5 +46,5 @@ export function sessionsHref(s: TableState, range: Range): string {
 export function sessionsCountLabel(total: number | undefined, failed: boolean): string {
   if (failed) return "—";
   if (total === undefined) return "Loading…";
-  return `${fmtInt(total)} ${total === 1 ? "session" : "sessions"}`;
+  return plural(total, "session");
 }
