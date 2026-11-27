@@ -3,6 +3,7 @@
 Smart model roles and local usage analytics for Claude Code.
 
 [![Release](https://img.shields.io/github/v/release/makurosolusi/claude-manager)](https://github.com/makurosolusi/claude-manager/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)](#requirements)
 
 ![claude-manager dashboard, Overview page in dark theme](README_ASSETS/overview-dark.png)
@@ -86,7 +87,7 @@ claude-manager doctor    # checks the claude CLI, installs and settings.json
 2. Run `claude-manager doctor`. Fix any `FAIL` line before you continue.
 3. Preview, then install the roles: `claude-manager install --dry-run`, then `claude-manager install`.
 4. Start a swarm session: `claude --agent manager`.
-5. Open the dashboard: `claude-manager dashboard`, then go to http://127.0.0.1:5757. It syncs on start and picks up new transcript data every 5 seconds.
+5. Open the dashboard: `claude-manager dashboard`, then go to http://127.0.0.1:5757. It syncs on start and picks up new transcript data while it runs.
 
 ## Usage
 
@@ -142,24 +143,39 @@ claude-manager help stats             # show the options for one command
 
 Start it with `claude-manager dashboard`. It is read-only and serves a single page app with these views:
 
-- **Overview** (`#/`): four KPI cards (estimated cost, requests, sessions, cache hit rate), each with its change against the previous window of the same length when there is one (not for `all`). It also shows daily cost stacked by model, top projects, top sessions, and cost by tier.
-- **Sessions** (`#/sessions`): a sortable table with model, agents, requests, tokens, cost and last active. Sort by last active, cost, requests, tokens or agents. The search box matches title, id or project; press `/` to focus it. A project filter shows as a removable chip.
-- **Projects** (`#/projects`): usage per project, paginated. A row opens Sessions filtered to that project.
-- **Roles** (`#/roles`): usage per role and model, paginated.
-- **Live** (`#/live`): sessions active in the last 15 minutes, with estimated context left. Refreshes every 5 seconds.
-- **Session detail** (`#/sessions/<id>`): one session, its subagents, and its prompt timeline. With `storePromptText` set to `false`, no prompt text is stored.
+- **Overview** (`#/`): four KPI cards (estimated cost, requests, sessions, cache hit rate), each with its change against the previous window of the same length when there is one (not for `all`). It also shows daily cost stacked by model family, top projects, top sessions, and cost by tier.
+- **Sessions** (`#/sessions`): every session with status, model, role, agents, requests, tokens, cache hit rate, cost and last active. Facet filters cover project, model, role and status.
+- **Projects** (`#/projects`): usage per project. A row opens Sessions filtered to that project.
+- **Roles** (`#/roles`): usage per role and model, grouped by tier by default, with a total per tier. By model and By role tables sit below.
+- **Live** (`#/live`): sessions active in the last 15 minutes, with a context bar and estimated context left (OK, warning or critical). It refreshes when new data is synced.
+- **Session detail** (`#/sessions/<id>`): one session with cost, requests, tokens and context. A searchable request table (agent, model, tools, stop reason, context, tokens, cost) has Agent, Model, Stop and Tool filters. Side panels list the models, tools and agents used, and a prompt timeline follows. With `storePromptText` set to `false`, no prompt text is stored.
+
+Colours carry meaning. Opus is blue, sonnet is orange and haiku is teal. Each role has its own colour and icon. Status, cache hit rate, context level and stop reason have colours too, and the cost column carries a heat marker.
+
+The tables share one toolkit:
+
+- **Search** over titles, ids and projects (Sessions and Live), roles and models (Roles), or models, agents, tools and stop reasons (session requests). Press `/` to focus the search box.
+- **Facet filters** list their values with counts.
+- **Group by** shows a subtotal per group. Sessions group by project, model family or status.
+- **View** menu: show or hide columns and choose compact or comfortable row density. These two settings are stored in your browser, not in the URL.
+- **Pagination** with 25, 50 or 100 rows per page.
+- **Sorting** by clicking a column header.
 
 The range picker sets the time window for each page: `24h`, `7d`, `30d` (default), `90d` or `all`. The picker is disabled on Live and session detail, which do not filter by time.
 
-Page state lives in the URL hash, so a reload or a shared link keeps the same view. On Sessions, `q` (search), `sort`, `dir`, `project` and `page` are in the URL alongside `range`. Default values are left out of the URL.
-
-Overview and Sessions have the redesigned layout.
+Page state lives in the URL hash, so a reload or a shared link keeps the same view: range, search, filters, group, sort, page and page size. Default values are left out of the URL.
 
 | Overview, dark | Overview, light |
 |---|---|
 | ![Overview page in dark theme](README_ASSETS/overview-dark.png) | ![Overview page in light theme](README_ASSETS/overview-light.png) |
-| Sessions, dark | Sessions, mobile |
-| ![Sessions page in dark theme](README_ASSETS/sessions-dark.png) | ![Sessions page on a phone-sized screen](README_ASSETS/sessions-mobile.png) |
+| **Sessions, dark** | **Sessions with the Role filter open** |
+| ![Sessions page in dark theme](README_ASSETS/sessions-dark.png) | ![Sessions page with the Role facet open](README_ASSETS/sessions-filter.png) |
+| **Roles, grouped by tier** | **Live** |
+| ![Roles page grouped by tier](README_ASSETS/roles.png) | ![Live page showing context use per session](README_ASSETS/live.png) |
+| **Session detail** | **Sessions, mobile** |
+| ![Session detail page in dark theme](README_ASSETS/session-detail.png) | ![Sessions page on a phone-sized screen](README_ASSETS/sessions-mobile.png) |
+
+The screenshots use generated demo data.
 
 ## Usage analytics and privacy
 
@@ -244,3 +260,7 @@ claude-manager uninstall --purge-data       # also delete ~/.claude-manager (onl
 ```
 
 `uninstall` removes the role files and settings keys that `install` wrote, and it leaves your own agents alone. It does not delete the binary. Remove it with `rm ~/.local/bin/claude-manager`, or from the directory you installed it to.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

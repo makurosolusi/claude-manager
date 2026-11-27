@@ -12,19 +12,25 @@ export function parseHash(hash: string): Route {
   return { path: path || "/", params: new URLSearchParams(qs) };
 }
 
+/** Param values: a string, or a string[] written as repeated keys (`family=a&family=b`). */
+export type ParamValue = string | string[] | undefined;
+
+const setParam = (params: URLSearchParams, k: string, v: ParamValue) => {
+  params.delete(k);
+  for (const x of Array.isArray(v) ? v : [v]) if (x) params.append(k, x);
+};
+
 /** Builds a hash link, dropping empty params. */
-export function hashHref(path: string, params: Record<string, string | undefined> = {}): string {
-  const qs = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => !!e[1]));
+export function hashHref(path: string, params: Record<string, ParamValue> = {}): string {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) setParam(qs, k, v);
   return `#${path}${qs.size ? `?${qs}` : ""}`;
 }
 
 /** Href for `route` with `patch` applied; other params are kept, and empty/undefined patch values remove the key. */
-export function withParams(route: Route, patch: Record<string, string | undefined>): string {
+export function withParams(route: Route, patch: Record<string, ParamValue>): string {
   const params = new URLSearchParams(route.params);
-  for (const [k, v] of Object.entries(patch)) {
-    if (v) params.set(k, v);
-    else params.delete(k);
-  }
+  for (const [k, v] of Object.entries(patch)) setParam(params, k, v);
   return `#${route.path}${params.size ? `?${params}` : ""}`;
 }
 

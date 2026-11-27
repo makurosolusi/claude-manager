@@ -1,9 +1,10 @@
-import { useMemo } from "react";
-import { COST_NOTE } from "@/components/cost.label.tsx";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { COST_NOTE } from "@/components/cost.cell.tsx";
 import { RangePicker } from "@/components/range.picker.tsx";
 import { SyncIndicator } from "@/components/sync.indicator.tsx";
 import { ThemeToggle } from "@/components/theme.toggle.tsx";
 import { cn } from "@/lib/cn.ts";
+import { NAV_ICON } from "@/lib/icon.map.ts";
 import { hashHref, useHashRoute, withParams } from "@/lib/hash.route.ts";
 import { SECOND_TICK_MS, useNow } from "@/lib/now.ts";
 import { DEFAULT_RANGE, parseRange, sinceFor, type Range } from "@/lib/range.ts";
@@ -22,15 +23,32 @@ const CONTAINER = "mx-auto w-full max-w-[1280px] px-4 sm:px-6";
 const LOCAL_NOTE = "Local only · 127.0.0.1";
 
 const NAV = [
-  { path: "/", label: "Overview", match: (p: string) => p === "/" },
-  { path: "/projects", label: "Projects", match: (p: string) => p.startsWith("/projects") },
-  { path: "/sessions", label: "Sessions", match: (p: string) => p.startsWith("/sessions") },
-  { path: "/roles", label: "Roles", match: (p: string) => p.startsWith("/roles") },
-  { path: "/live", label: "Live", match: (p: string) => p.startsWith("/live") },
+  { path: "/", label: "Overview", icon: NAV_ICON.overview, match: (p: string) => p === "/" },
+  { path: "/projects", label: "Projects", icon: NAV_ICON.projects, match: (p: string) => p.startsWith("/projects") },
+  { path: "/sessions", label: "Sessions", icon: NAV_ICON.sessions, match: (p: string) => p.startsWith("/sessions") },
+  { path: "/roles", label: "Roles", icon: NAV_ICON.roles, match: (p: string) => p.startsWith("/roles") },
+  { path: "/live", label: "Live", icon: NAV_ICON.live, match: (p: string) => p.startsWith("/live") },
 ];
 
 /** URL value for a range; the default is omitted so clean URLs stay clean. */
 const rangeParam = (r: Range) => (r === DEFAULT_RANGE ? undefined : r);
+
+/** True while a nav strip still has content scrolled out of view to its right; drives the mobile fade hint. */
+function useMoreRight() {
+  const ref = useRef<HTMLElement>(null);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setMore(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => { el.removeEventListener("scroll", update); ro.disconnect(); };
+  }, []);
+  return { ref, more };
+}
 
 /** Sync status with its own 1s clock, so "Synced Ns ago" ticks between polls without re-rendering the whole shell. */
 function HeaderSync({ meta }: { meta: SyncMeta | undefined }) {
@@ -40,34 +58,36 @@ function HeaderSync({ meta }: { meta: SyncMeta | undefined }) {
 /** Dashboard shell: sticky header (nav, sync status, URL-backed range, theme), page switch, footer. */
 export function App() {
   const route = useHashRoute();
+  const nav = useMoreRight();
   const { path, params } = route;
   const { meta, error, dataVersion } = useSyncMeta();
   const range = parseRange(params.get("range"));
   // dataVersion moves the window forward when new data lands, so "last 24h" stays current.
   const since = useMemo(() => sinceFor(range), [range, dataVersion]);
+  const { tiers, roles } = meta ?? {};
   const sessionId = path.match(/^\/sessions\/(.+)$/)?.[1];
   const timeless = !!sessionId || path.startsWith("/live");
 
   let page;
-  if (sessionId) page = <SessionDetailPage id={decodeURIComponent(sessionId)} />;
-  else if (path === "/projects") page = <ProjectsPage since={since} />;
-  else if (path === "/sessions") page = <SessionsPage since={since} range={range} dataVersion={dataVersion} params={params} />;
-  else if (path === "/roles") page = <RolesPage since={since} />;
-  else if (path === "/live") page = <LivePage />;
-  else if (path === "/") page = <OverviewPage since={since} range={range} dataVersion={dataVersion} tiers={meta?.tiers} />;
+  if (sessionId) page = <SessionDetailPage id={decodeURIComponent(sessionId)} since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
+  else if (path === "/projects") page = <ProjectsPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
+  else if (path === "/sessions") page = <SessionsPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
+  else if (path === "/roles") page = <RolesPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
+  else if (path === "/live") page = <LivePage range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
+  else if (path === "/") page = <OverviewPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
   else page = <p className="text-sm text-muted-foreground">Page not found.</p>;
 
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
-        {/* <640: row 1 = logo · sync · theme, row 2 = nav (full width, scrolls without a scrollbar), row 3 = range.
-            Sharing row 2 with the range picker squeezed the nav until links clipped behind it. ≥640: one h-12 row. */}
-        <div className={cn(CONTAINER, "flex flex-wrap items-center gap-x-4 gap-y-2 py-2 sm:h-12 sm:flex-nowrap sm:py-0")}>
+        {/* <640 (~105px tall): row 1 = logo · sync dot · theme, row 2 = nav (scrolls; right-edge fade while more links are out of view) + native range select.
+            ≥640: one h-12 row. */}
+        <div className={cn(CONTAINER, "flex flex-wrap items-center gap-x-4 gap-y-1 py-1 sm:h-12 sm:flex-nowrap sm:py-0")}>
           <a href={hashHref("/", { range: rangeParam(range) })} className="order-1 flex shrink-0 items-center gap-2 rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring">
             <span aria-hidden className="size-2.5 rounded-[2px] bg-brand" />
             <span className="font-mono text-[13px] font-semibold">claude-manager</span>
           </a>
-          <nav aria-label="Main" className="order-5 -mx-1 flex min-w-0 basis-full gap-0.5 overflow-x-auto px-1 [scrollbar-width:none] sm:order-2 sm:basis-auto sm:flex-1 [&::-webkit-scrollbar]:hidden">
+          <nav ref={nav.ref} aria-label="Main" className={cn("order-5 -mx-1 flex min-w-0 flex-1 basis-0 gap-0.5 overflow-x-auto px-1 [scrollbar-width:none] sm:order-2 [&::-webkit-scrollbar]:hidden", nav.more && "max-sm:[mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)]")}>
             {NAV.map((n) => {
               const active = n.match(path);
               return (
@@ -76,10 +96,11 @@ export function App() {
                   href={hashHref(n.path, { range: rangeParam(range) })}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "rounded-md px-2.5 py-1 text-[13px] whitespace-nowrap outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
+                    "inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-[13px] whitespace-nowrap outline-hidden sm:min-h-0 sm:px-2.5 sm:py-1 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
                     active ? "bg-surface-hover text-foreground" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
+                  <n.icon aria-hidden className="hidden size-3.5 min-[360px]:block" />
                   {n.label}
                 </a>
               );

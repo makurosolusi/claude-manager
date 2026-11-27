@@ -1,11 +1,12 @@
 import type { AgentNode } from "../../server/dashboard.types.ts";
 
+/** One row of the flattened agent tree with its nesting depth. */
 export interface TreeRow {
   agent: AgentNode;
   depth: number;
 }
 
-/** Flattens agents into depth-first display order; agents whose parent is unknown become roots. */
+/** Flattens agents into depth-first display order (siblings by cost desc, ties keep input order); agents whose parent is unknown become roots. */
 export function flattenAgentTree(agents: AgentNode[]): TreeRow[] {
   const ids = new Set(agents.map((a) => a.id));
   const children = new Map<string | null, AgentNode[]>();
@@ -16,7 +17,7 @@ export function flattenAgentTree(agents: AgentNode[]): TreeRow[] {
   const out: TreeRow[] = [];
   const seen = new Set<string>();
   const walk = (parent: string | null, depth: number) => {
-    for (const agent of children.get(parent) ?? []) {
+    for (const agent of [...(children.get(parent) ?? [])].sort((a, b) => b.cost_usd - a.cost_usd)) {
       seen.add(agent.id);
       out.push({ agent, depth });
       walk(agent.id, depth + 1);

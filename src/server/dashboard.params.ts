@@ -1,29 +1,19 @@
 import { CliError } from "../cli.error.ts";
 import { parseSince } from "../commands/stats.command.ts";
 import type { PageQuery } from "../db/dashboard.repository.ts";
+import type { SessionFilter } from "../db/sessions.repository.ts";
 import type { StatsFilter } from "../db/stats.repository.ts";
-import { SESSION_SORTS, type SessionQuery, type SessionSort } from "./dashboard.types.ts";
+import { FAMILIES, SESSION_GROUPS, SESSION_SORTS, SESSION_STATUSES, type SessionGroupBy, type SessionQuery, type SessionSort } from "./dashboard.types.ts";
+import { bad, enumParam, HTTP, HttpError, listParam } from "./filter.params.ts";
 
 const DEFAULT_SINCE = "30d";
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
-const MAX_QUERY_CHARS = 200;
+/** Max length of a `q` search param. */
+export const MAX_QUERY_CHARS = 200;
 const SORT_DIRS = ["asc", "desc"] as const;
 
-/** HTTP statuses the dashboard API answers with on client errors. */
-export const HTTP = { badRequest: 400, forbidden: 403, notFound: 404, notAllowed: 405 } as const;
-
-/** Client error mapped straight to an HTTP status. */
-export class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
-const bad = (message: string) => new HttpError(HTTP.badRequest, message);
+export { bad, HTTP, HttpError };
 
 function intParam(url: URL, name: string, fallback: number, max = Number.MAX_SAFE_INTEGER): number {
   const raw = url.searchParams.get(name);
@@ -39,10 +29,10 @@ export const pageQuery = (url: URL): PageQuery => ({
   pageSize: intParam(url, "pageSize", DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE),
 });
 
-/** `since` / `project` query params as a StatsFilter. */
+/** `since` plus repeatable exact `project` query params as a StatsFilter. */
 export function filter(url: URL): StatsFilter {
   try {
-    return { since: parseSince(url.searchParams.get("since") ?? DEFAULT_SINCE), project: url.searchParams.get("project") || undefined };
+    return { since: parseSince(url.searchParams.get("since") ?? DEFAULT_SINCE), projects: listParam(url, "project") };
   } catch (err) {
     if (err instanceof CliError) throw bad(err.message.replace("--since", "since"));
     throw err;
@@ -61,3 +51,17 @@ export function sessionQuery(url: URL): SessionQuery {
   if (q && q.length > MAX_QUERY_CHARS) throw bad(`invalid q: use at most ${MAX_QUERY_CHARS} characters`);
   return { sort, dir, q: q || undefined };
 }
+
+/** Sessions filter: `filter()` plus repeatable `family` / `role` / `status`. */
+export const sessionFilter = (url: URL): SessionFilter => ({
+  ...filter(url),
+  families: listParam(url, "family", FAMILIES),
+  roles: listParam(url, "role"),
+  statuses: listParam(url, "status", SESSION_STATUSES),
+});
+
+/** `by` param of /api/sessions/groups; required. */
+export const sessionGroupBy = (url: URL): SessionGroupBy => enumParam(url, "by", SESSION_GROUPS);
+
+/** True for `facets=1`. */
+export const wantsFacets = (url: URL) => url.searchParams.get("facets") === "1";

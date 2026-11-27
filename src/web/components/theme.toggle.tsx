@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn.ts";
 /** localStorage key; the pre-paint script in index.html reads the same key. */
 export const THEME_STORAGE_KEY = "cm-theme";
 
+/** Theme preference: follow the OS or force light/dark. */
 export type ThemeChoice = "system" | "light" | "dark";
 
 const OPTIONS = [
@@ -54,7 +55,7 @@ export function ThemeToggle() {
             setChoice(value);
           }}
           className={cn(
-            "inline-flex size-6 items-center justify-center rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
+            "inline-flex size-11 items-center sm:size-6 justify-center rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
             choice === value ? "bg-surface-hover text-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >

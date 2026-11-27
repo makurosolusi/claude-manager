@@ -1,43 +1,35 @@
 import type { Database } from "bun:sqlite";
-import type { AgentNode, Page, ProjectRow, RoleRow, SessionQuery, SessionRow, SessionSort, TimelineItem } from "../server/dashboard.types.ts";
-import { filterParams, KEY, WHERE, type StatsFilter } from "./stats.repository.ts";
+import type { AgentNode, Page, ProjectRow, RoleRow, SessionRow, TimelineItem } from "../server/dashboard.types.ts";
+import { filterParams, KEY, WHERE, type Params, type StatsFilter } from "./stats.repository.ts";
 
 /** Page window: 1-based page number and its size. */
 export type PageQuery = { page: number; pageSize: number };
 
-type Params = Record<string, string | number | null>;
-
-// COALESCE/IS NOT NULL keep totals at 0 for LEFT-joined rows with no requests.
-const USAGE = `COUNT(r.message_id) AS requests, COALESCE(SUM(r.input), 0) AS input,
+/** Aggregate columns shared by every usage query; tolerate LEFT-joined rows with no requests. */
+export const USAGE = `COUNT(r.message_id) AS requests, COALESCE(SUM(r.input), 0) AS input,
   COALESCE(SUM(r.cache_5m + r.cache_1h), 0) AS cache_write, COALESCE(SUM(r.cache_read), 0) AS cache_read,
   COALESCE(SUM(r.output), 0) AS output, COALESCE(SUM(r.cost_usd), 0) AS cost_usd,
   COALESCE(SUM(r.message_id IS NOT NULL AND r.cost_usd IS NULL), 0) AS unpriced`;
 
 const CONTEXT = "r.input + r.cache_read + r.cache_5m + r.cache_1h";
 const FROM_REQUESTS = "FROM requests r LEFT JOIN agents a ON a.id = r.agent_id LEFT JOIN sessions s ON s.id = r.session_id";
-// ponytail: q is a full scan of sessions; move to FTS if it grows past ~100k sessions.
-const SESSION_WHERE = `s.last_ts >= $since AND ($project IS NULL OR instr(s.project_cwd, $project) > 0)
-  AND ($q IS NULL OR instr(lower(coalesce(s.title, '') || ' ' || s.id || ' ' || coalesce(s.project_cwd, '')), lower($q)) > 0)`;
-const SESSION_GROUPED = `SELECT s.id, s.title, s.project_cwd, s.git_branch, s.main_agent, s.first_ts, s.last_ts,
+/** Session rows with whole-session totals; append a WHERE and `GROUP BY s.id`. */
+export const SESSION_GROUPED = `SELECT s.id, s.title, s.project_cwd, s.git_branch, s.main_agent, s.first_ts, s.last_ts,
   (SELECT COUNT(*) FROM agents ag WHERE ag.session_id = s.id) AS agents, COUNT(DISTINCT r.model) AS models, ${USAGE}
   FROM sessions s LEFT JOIN requests r ON r.session_id = s.id`;
 // Most main-agent requests wins; sessions with no main requests fall back to the most requests overall.
-const MAIN_MODEL = `(SELECT m.model FROM requests m WHERE m.session_id = pg.id GROUP BY m.model
-  ORDER BY SUM(m.agent_id IS NULL) DESC, COUNT(*) DESC, m.model LIMIT 1) AS model`;
+export const primaryModel = (idCol: string) => `(SELECT m.model FROM requests m WHERE m.session_id = ${idCol} GROUP BY m.model
+  ORDER BY SUM(m.agent_id IS NULL) DESC, COUNT(*) DESC, m.model LIMIT 1)`;
+const MAIN_MODEL = `${primaryModel("pg.id")} AS model`;
 /** Adds `model` to an already-limited session row set, so the correlated subquery runs at most once per returned row. */
-const withModel = (limited: string, order: string) => `SELECT pg.*, ${MAIN_MODEL} FROM (${limited}) pg ORDER BY ${order}`;
+export const withModel = (limited: string, order: string) => `SELECT pg.*, ${MAIN_MODEL} FROM (${limited}) pg ORDER BY ${order}`;
 
-const SORT_SQL: Record<SessionSort, string> = {
-  last: "last_ts",
-  cost: "cost_usd",
-  requests: "requests",
-  tokens: "input + output + cache_read + cache_write",
-  agents: "agents",
-};
-const pageParams = (p: PageQuery): Params => ({ limit: p.pageSize, offset: (p.page - 1) * p.pageSize });
+/** `$limit` / `$offset` bindings for a page. */
+export const pageParams = (p: PageQuery): Params => ({ limit: p.pageSize, offset: (p.page - 1) * p.pageSize });
 const splitModels = (m: string | null) => (m ? m.split(",") : []);
 
-function paged<T>(db: Database, p: PageQuery, itemsSql: string, countSql: string, params: Params): Page<T> {
+/** Runs an items query and its count query as one Page. */
+export function paged<T>(db: Database, p: PageQuery, itemsSql: string, countSql: string, params: Params): Page<T> {
   const items = db.query<T, Params>(itemsSql).all({ ...params, ...pageParams(p) });
   const total = db.query<{ n: number }, Params>(countSql).get(params)!.n;
   return { items, page: p.page, pageSize: p.pageSize, total };
@@ -52,18 +44,6 @@ export function projectsPage(db: Database, f: StatsFilter, p: PageQuery): Page<P
       ${FROM_REQUESTS} WHERE ${WHERE} GROUP BY project ORDER BY cost_usd DESC, requests DESC LIMIT $limit OFFSET $offset`,
     `SELECT COUNT(DISTINCT ${KEY.project}) AS n ${FROM_REQUESTS} WHERE ${WHERE}`,
     filterParams(f),
-  );
-}
-
-/** Sessions active since the filter's start matching `q`, sorted by `q.sort` (id breaks ties), with whole-session totals. */
-export function sessionsPage(db: Database, f: StatsFilter, p: PageQuery, q: SessionQuery = { sort: "last", dir: "desc" }): Page<SessionRow> {
-  const order = `${SORT_SQL[q.sort]} ${q.dir}, id`;
-  return paged<SessionRow>(
-    db,
-    p,
-    withModel(`SELECT * FROM (${SESSION_GROUPED} WHERE ${SESSION_WHERE} GROUP BY s.id) ORDER BY ${order} LIMIT $limit OFFSET $offset`, order),
-    `SELECT COUNT(*) AS n FROM sessions s WHERE ${SESSION_WHERE}`,
-    { ...filterParams(f), q: q.q ?? null },
   );
 }
 

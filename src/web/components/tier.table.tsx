@@ -1,7 +1,10 @@
 import { DataTable, type Column } from "@/components/data.table.tsx";
 import { CostCell } from "@/components/cost.cell.tsx";
 import { cacheHitRate, fmtInt, fmtModel, fmtPct, fmtUsd } from "@/lib/format.ts";
-import { FAMILY_COLOR, modelFamily, type Tiers } from "@/lib/model.tier.ts";
+import { ModelDot } from "@/components/model.badge.tsx";
+import { TierBadge } from "@/components/tier.badge.tsx";
+import { FAMILY_CLASSES } from "@/lib/color.tokens.ts";
+import { tierFamily, type Tiers } from "@/lib/model.tier.ts";
 import type { TierModelRow, TierRow } from "@/lib/tier.cost.ts";
 import { cn } from "@/lib/cn.ts";
 
@@ -13,7 +16,7 @@ function TierLabel({ row, tiers }: { row: TierRow; tiers: Tiers | undefined }) {
   const configured = row.tier !== "other" ? tiers?.[row.tier] : undefined;
   return (
     <span className="flex min-w-0 items-baseline gap-2">
-      <span className="font-medium text-foreground">{row.tier}</span>
+      <TierBadge tier={row.tier} tiers={tiers} />
       {configured && <span className="truncate font-mono text-xs text-fg-subtle">{fmtModel(configured)}</span>}
     </span>
   );
@@ -22,17 +25,17 @@ function TierLabel({ row, tiers }: { row: TierRow; tiers: Tiers | undefined }) {
 function ModelLabel({ model }: { model: string }) {
   return (
     <span className="flex min-w-0 items-center gap-2 pl-4">
-      <span aria-hidden className="size-2 shrink-0 rounded-[2px]" style={{ background: FAMILY_COLOR[modelFamily(model)] }} />
+      <ModelDot model={model} />
       <span className="truncate font-mono text-xs text-fg-subtle" title={model}>{fmtModel(model)}</span>
     </span>
   );
 }
 
-function ShareBar({ share, dim }: { share: number; dim?: boolean }) {
+function ShareBar({ share, dim, fill }: { share: number; dim?: boolean; fill: string }) {
   return (
     <span className="inline-flex items-center justify-end gap-2">
       <span aria-hidden className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
-        <span className={cn("block h-full rounded-full", dim ? "bg-brand/40" : "bg-brand/70")} style={{ width: `${share * 100}%` }} />
+        <span className={cn("block h-full rounded-full", fill, dim && "opacity-50")} style={{ width: `${share * 100}%` }} />
       </span>
       <span className={cn("w-12 tabular-nums", dim && "text-fg-subtle")}>{fmtPct(share)}</span>
     </span>
@@ -44,7 +47,7 @@ const sub = (r: Row) => r.kind === "model" && "text-xs text-fg-subtle";
 function columns(tiers: Tiers | undefined): Column<Row>[] {
   return [
     { id: "tier", header: "Tier", cell: (r) => (r.kind === "tier" ? <TierLabel row={r.tier} tiers={tiers} /> : <ModelLabel model={r.model.model} />) },
-    { id: "share", header: "Share", align: "right", width: "w-36", hideBelow: "sm", cell: (r) => <ShareBar share={sums(r).share} dim={r.kind === "model"} /> },
+    { id: "share", header: "Share", align: "right", width: "w-36", hideBelow: "sm", cell: (r) => <ShareBar share={sums(r).share} dim={r.kind === "model"} fill={FAMILY_CLASSES[tierFamily(r.tier.tier, tiers)].dot} /> },
     { id: "cost", header: "Cost (est.)", align: "right", width: "w-28", cell: (r) => <span className={cn(sub(r))}><CostCell usd={sums(r).cost_usd} unpriced={sums(r).unpriced} /></span> },
     { id: "requests", header: "Requests", align: "right", width: "w-24", hideBelow: "sm", cell: (r) => <span className={cn(sub(r))}>{fmtInt(sums(r).requests)}</span> },
     { id: "cache", header: "Cache hit", align: "right", width: "w-24", hideBelow: "md", cell: (r) => <span className={cn(sub(r))}>{sums(r).requests ? fmtPct(cacheHitRate(sums(r))) : "—"}</span> },

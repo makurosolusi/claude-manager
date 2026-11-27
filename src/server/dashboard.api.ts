@@ -1,10 +1,14 @@
 import type { Database } from "bun:sqlite";
 import { DEFAULT_TIER_MODELS } from "../config/config.store.ts";
 import * as repo from "../db/dashboard.repository.ts";
+import { sessionFacets, sessionGroups, sessionsPage } from "../db/sessions.repository.ts";
 import { costByDayModel, totals, usageBy, type StatsFilter } from "../db/stats.repository.ts";
 import { contextWindow } from "./context.window.ts";
-import { filter, HTTP, HttpError, pageQuery, sessionQuery } from "./dashboard.params.ts";
-import type { ApiError, DashboardMeta, LiveSession, Overview, SessionDetail } from "./dashboard.types.ts";
+import { filter, HTTP, HttpError, pageQuery, sessionFilter, sessionGroupBy, sessionQuery, wantsFacets } from "./dashboard.params.ts";
+import type { ApiError, DashboardMeta, LiveSession, Overview, SessionGroups, SessionsResponse } from "./dashboard.types.ts";
+import { FAVICON_PATHS, faviconResponse } from "./favicon.ts";
+import { routeSessionDetail } from "./session.detail.api.ts";
+import { PRESET_ROLES } from "../roles/roles.presets.ts";
 
 /** Port the dashboard listens on unless config or --port says otherwise. */
 export const DEFAULT_DASHBOARD_PORT = 5757;
@@ -23,7 +27,7 @@ const ALLOWED_HOSTS = ["127.0.0.1", "localhost"];
 /** Supplies /api/meta; without one the endpoint reports "never synced" and the default tier models. */
 export type MetaProvider = () => DashboardMeta;
 
-const NO_META: MetaProvider = () => ({ synced_at: null, changed_at: null, error: null, interval_ms: SYNC_INTERVAL_MS, tiers: DEFAULT_TIER_MODELS });
+const NO_META: MetaProvider = () => ({ synced_at: null, changed_at: null, error: null, interval_ms: SYNC_INTERVAL_MS, tiers: DEFAULT_TIER_MODELS, roles: PRESET_ROLES.map((r) => ({ name: r.name, tier: r.tier, source: r.source })) });
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const fail = (status: number, error: string) => json({ error } satisfies ApiError, status);
@@ -49,12 +53,6 @@ export function overview(db: Database, f: StatsFilter, now = Date.now()): Overvi
   };
 }
 
-function sessionDetail(db: Database, id: string): SessionDetail {
-  const session = repo.sessionById(db, id);
-  if (!session) throw new HttpError(HTTP.notFound, "session not found");
-  return { session, agents: repo.sessionAgents(db, id) };
-}
-
 function timeline(db: Database, id: string, url: URL) {
   const p = pageQuery(url);
   if (!repo.sessionById(db, id)) throw new HttpError(HTTP.notFound, "session not found");
@@ -69,22 +67,37 @@ function live(db: Database, now = Date.now()): LiveSession[] {
   });
 }
 
+function sessions(db: Database, url: URL, now = Date.now()): SessionsResponse {
+  const f = sessionFilter(url);
+  const q = sessionQuery(url);
+  const page = sessionsPage(db, f, pageQuery(url), q, now);
+  return wantsFacets(url) ? { ...page, facets: sessionFacets(db, f, q.q, now) } : page;
+}
+
+function groups(db: Database, url: URL, now = Date.now()): SessionGroups {
+  return sessionGroups(db, sessionGroupBy(url), sessionFilter(url), sessionQuery(url).q, now);
+}
+
 function route(db: Database, url: URL, meta: MetaProvider): unknown {
   const path = url.pathname.replace(/\/+$/, "");
   if (path === "/api/overview") return overview(db, filter(url));
   if (path === "/api/projects") return repo.projectsPage(db, filter(url), pageQuery(url));
-  if (path === "/api/sessions") return repo.sessionsPage(db, filter(url), pageQuery(url), sessionQuery(url));
+  if (path === "/api/sessions") return sessions(db, url);
+  if (path === "/api/sessions/groups") return groups(db, url); // before /api/sessions/:id, which would read "groups" as an id
   if (path === "/api/roles") return repo.rolesPage(db, filter(url), pageQuery(url));
   if (path === "/api/live") return live(db);
   if (path === "/api/meta") return meta();
-  const m = /^\/api\/sessions\/([^/]+)(\/timeline)?$/.exec(path);
-  if (m) return m[2] ? timeline(db, m[1]!, url) : sessionDetail(db, m[1]!);
+  const detail = routeSessionDetail(db, path, url);
+  if (detail) return detail;
+  const m = /^\/api\/sessions\/([^/]+)\/timeline$/.exec(path); // /:id itself is served by routeSessionDetail
+  if (m) return timeline(db, m[1]!, url);
   throw new HttpError(HTTP.notFound, `unknown endpoint ${path}`);
 }
 
 /** Serves the read-only dashboard JSON API; undefined for non-/api paths. */
 export function handleApi(req: Request, db: Database, port = DEFAULT_DASHBOARD_PORT, meta: MetaProvider = NO_META): Response | undefined {
   const url = new URL(req.url);
+  if (FAVICON_PATHS.includes(url.pathname)) return faviconResponse();
   if (url.pathname !== "/api" && !url.pathname.startsWith("/api/")) return undefined;
   // DNS rebinding guard: a foreign page resolving its own name to 127.0.0.1 still sends its own Host.
   // Bun.serve builds req.url from Host, so url.host is the fallback when the header is absent.
@@ -92,7 +105,8 @@ export function handleApi(req: Request, db: Database, port = DEFAULT_DASHBOARD_P
   if (!ALLOWED_HOSTS.some((h) => host === `${h}:${port}`)) return fail(HTTP.forbidden, "forbidden host");
   if (req.method !== "GET") return fail(HTTP.notAllowed, "method not allowed");
   try {
-    return json(route(db, url, meta));
+    const body = route(db, url, meta);
+    return body instanceof Response ? body : json(body);
   } catch (err) {
     if (err instanceof HttpError) return fail(err.status, err.message);
     throw err;

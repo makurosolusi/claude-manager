@@ -1,41 +1,38 @@
-import { SESSION_SORTS, type SessionSort } from "../../server/dashboard.types.ts";
-import type { SortDir } from "@/components/data.table.tsx";
+import { FAMILIES, SESSION_GROUPS, SESSION_SORTS, SESSION_STATUSES } from "../../server/dashboard.types.ts";
+import { withQuery, type Query } from "@/lib/api.client.ts";
 import { fmtInt } from "@/lib/format.ts";
 import { hashHref } from "@/lib/hash.route.ts";
 import { DEFAULT_RANGE, type Range } from "@/lib/range.ts";
+import { NO_GROUP, tableParams, type TableSpec, type TableState } from "@/lib/table.query.ts";
 
 /** Sessions route path; the detail page lives at `${SESSIONS_PATH}/<id>`. */
 export const SESSIONS_PATH = "/sessions";
-/** Default order: most recently active first. */
-export const DEFAULT_SESSION_SORT: SessionSort = "last";
-/** Default sort direction. */
-export const DEFAULT_SESSION_DIR: SortDir = "desc";
-/** Server rejects longer `q` with 400 (see dashboard.params.ts); clip before it gets there. */
-export const SEARCH_MAX_CHARS = 200;
+/** Facet ids; each doubles as the URL key and the API filter param. */
+export const SESSION_FACET_IDS = ["project", "family", "role", "status"] as const;
 
-/** Sessions list state as kept in the URL hash. */
-export interface SessionsState {
-  q: string;
-  sort: SessionSort;
-  dir: SortDir;
-  project: string;
-  page: number;
+/** URL contract of the sessions table. */
+export const SESSIONS_SPEC: TableSpec = {
+  sorts: SESSION_SORTS,
+  defaultSort: "last",
+  defaultDir: "desc",
+  groups: [NO_GROUP, ...SESSION_GROUPS],
+  facets: { project: "free", family: FAMILIES, role: "free", status: SESSION_STATUSES },
+};
+
+/** One group to expand: its dimension (`by`) and value (`key`). */
+export interface GroupRef { by: string; key: string }
+
+/** `/api/sessions[/groups]` URL for the table state; `only` narrows the list to one group's rows. */
+export function sessionsApiPath(since: string, s: TableState, o: { groups?: boolean; facets?: boolean; size?: number; only?: GroupRef } = {}): string {
+  const q: Query = { since, q: s.q || undefined };
+  for (const id of SESSION_FACET_IDS) q[id] = o.only?.by === id ? [o.only.key] : (s.filters[id] ?? []);
+  if (o.groups) return withQuery("/api/sessions/groups", { ...q, by: s.group });
+  return withQuery("/api/sessions", { ...q, sort: s.sort, dir: s.dir, page: o.only ? 1 : s.page, pageSize: o.size ?? s.size, facets: o.facets ? 1 : undefined });
 }
 
-const isSort = (v: string | null): v is SessionSort => v !== null && (SESSION_SORTS as readonly string[]).includes(v);
-
-/** Reads list state from hash params; unknown or missing values fall back to defaults. */
-export function parseSessionsQuery(params: URLSearchParams): SessionsState {
-  const sort = params.get("sort");
-  const dir = params.get("dir");
-  const page = Number(params.get("page"));
-  return {
-    q: (params.get("q") ?? "").trim().slice(0, SEARCH_MAX_CHARS),
-    sort: isSort(sort) ? sort : DEFAULT_SESSION_SORT,
-    dir: dir === "asc" || dir === "desc" ? dir : DEFAULT_SESSION_DIR,
-    project: params.get("project") ?? "",
-    page: Number.isInteger(page) && page > 1 ? page : 1,
-  };
+/** Hash link for table state + range; defaults are left out so URLs stay short. */
+export function sessionsHref(s: TableState, range: Range): string {
+  return hashHref(SESSIONS_PATH, { range: range === DEFAULT_RANGE ? undefined : range, ...tableParams(s, SESSIONS_SPEC) });
 }
 
 /** Subtitle count: "—" on error so a stale total from the last good fetch is never shown. */
@@ -43,16 +40,4 @@ export function sessionsCountLabel(total: number | undefined, failed: boolean): 
   if (failed) return "—";
   if (total === undefined) return "Loading…";
   return `${fmtInt(total)} ${total === 1 ? "session" : "sessions"}`;
-}
-
-/** Hash link for list state + range; default values are left out so URLs stay short. */
-export function sessionsHref(s: SessionsState, range: Range): string {
-  return hashHref(SESSIONS_PATH, {
-    range: range === DEFAULT_RANGE ? undefined : range,
-    q: s.q.trim().slice(0, SEARCH_MAX_CHARS) || undefined,
-    sort: s.sort === DEFAULT_SESSION_SORT ? undefined : s.sort,
-    dir: s.dir === DEFAULT_SESSION_DIR ? undefined : s.dir,
-    project: s.project || undefined,
-    page: s.page > 1 ? String(s.page) : undefined,
-  });
 }

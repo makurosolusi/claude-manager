@@ -3,7 +3,7 @@ import type { DayModelRow, Totals, UsageRow } from "../src/server/dashboard.type
 import { costByTier } from "../src/web/lib/tier.cost.ts";
 import { pivotCostByDay } from "../src/web/components/cost.chart.tsx";
 import { overviewDeltas } from "../src/web/pages/overview.page.tsx";
-import { FAMILY_COLOR, type Tiers } from "../src/web/lib/model.tier.ts";
+import { FAMILY_COLOR, FAMILY_LABEL, type Tiers } from "../src/web/lib/model.tier.ts";
 
 // test-only fixtures
 const row = (key: string, cost_usd: number, requests = 10): UsageRow => ({ key, cost_usd, requests, input: 100, output: 50, cache_read: 300, cache_write: 100, unpriced: 0 });
@@ -48,23 +48,42 @@ test("overviewDeltas: % for counts, pt for cache hit, null without baseline", ()
   expect(overviewDeltas(cur, tot({ requests: 3 }))!.cacheHit).toBeNull();
 });
 
-test("pivotCostByDay: fills gaps, unique colors, folds the rest into Other", () => {
+test("pivotCostByDay: stacks by family, sums match the day total, unknown models go to other", () => {
   const rows: DayModelRow[] = [
     { day: "2026-11-01", model: "claude-opus-4-7", cost_usd: 5, requests: 1 },
     { day: "2026-11-03", model: "claude-opus-4-5", cost_usd: 4, requests: 1 },
+    { day: "2026-11-03", model: "claude-opus-4-7", cost_usd: 2, requests: 1 },
     { day: "2026-11-03", model: "claude-sonnet-4-5", cost_usd: 3, requests: 1 },
-    { day: "2026-11-03", model: "claude-opus-4-1", cost_usd: 1, requests: 1 }, // third opus: no free color → Other
+    { day: "2026-11-03", model: "mystery-model", cost_usd: 1, requests: 1 },
   ];
-  const { series, points } = pivotCostByDay(rows, "2026-10-31", "2026-11-03");
+  const { series, points, models } = pivotCostByDay(rows, "2026-10-31", "2026-11-03");
   expect(points.map((p) => p.day)).toEqual(["2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"]);
-  expect(series.map((s) => [s.model, s.color])).toEqual([
-    ["claude-opus-4-7", FAMILY_COLOR.opus],
-    ["claude-opus-4-5", FAMILY_COLOR.other],
-    ["claude-sonnet-4-5", FAMILY_COLOR.sonnet],
-    [null, "var(--chart-5)"],
+  expect(series.map((s) => [s.key, s.color])).toEqual([
+    ["opus", FAMILY_COLOR.opus],
+    ["sonnet", FAMILY_COLOR.sonnet],
+    ["other", FAMILY_COLOR.other],
   ]);
-  expect(new Set(series.map((s) => s.color)).size).toBe(series.length);
   const last = points[3]!;
-  expect(series.map((s) => last[s.key])).toEqual([0, 4, 3, 1]);
-  expect(points[2]![series[0]!.key]).toBe(0);
+  expect(series.map((s) => last[s.key])).toEqual([6, 3, 1]);
+  expect(series.reduce((sum, s) => sum + (last[s.key] as number), 0)).toBe(10);
+  expect(points[2]!.opus).toBe(0);
+  expect(models["2026-11-03"]!.opus).toEqual({ "claude-opus-4-5": 4, "claude-opus-4-7": 2 });
+  expect(models["2026-11-03"]!.other).toEqual({ "mystery-model": 1 });
+});
+
+test("pivotCostByDay: per-day family sums equal raw totals for every day", () => {
+  const rows: DayModelRow[] = [
+    { day: "2026-11-01", model: "claude-haiku-4-5", cost_usd: 0.25, requests: 1 },
+    { day: "2026-11-01", model: "claude-sonnet-4-5", cost_usd: 0.5, requests: 1 },
+    { day: "2026-11-02", model: "gpt-x", cost_usd: 1.5, requests: 1 },
+  ];
+  const { series, points } = pivotCostByDay(rows, "2026-11-01", "2026-11-02");
+  const totals = points.map((p) => series.reduce((s, x) => s + (p[x.key] as number), 0));
+  expect(totals).toEqual([0.75, 1.5]);
+  expect(series.map((s) => s.key)).toEqual(["sonnet", "haiku", "other"]);
+});
+
+test("FAMILY_LABEL names every family", () => {
+  expect(Object.keys(FAMILY_LABEL).sort()).toEqual(Object.keys(FAMILY_COLOR).sort());
+  expect(FAMILY_LABEL).toEqual({ opus: "Opus", sonnet: "Sonnet", haiku: "Haiku", other: "Other" });
 });

@@ -82,5 +82,3 @@ export function cacheHitRate(u: { input: number; cache_read: number; cache_write
   return prompt > 0 ? u.cache_read / prompt : 0;
 }
 
-/** Last path segment of a project cwd, for compact display. */
-export const shortPath = (p: string | null) => (p ? (p.split(/[\\/]/).filter(Boolean).pop() ?? p) : "—");

@@ -14,6 +14,14 @@
         // Storage blocked (private mode, sandbox): keep following the OS theme.
       }
     </script>
+    <!-- Favicon link is injected at runtime: Bun's HTML bundler tries to resolve a root-absolute href as a file and fails; the server serves /favicon.svg (src/server/favicon.ts). -->
+    <script>
+      var icon = document.createElement("link");
+      icon.rel = "icon";
+      icon.type = "image/svg+xml";
+      icon.href = "/favicon.svg";
+      document.head.appendChild(icon);
+    </script>
     <link rel="stylesheet" href="./index.css" />
   </head>
   <body>

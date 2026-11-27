@@ -1,144 +1,100 @@
-import { useEffect, useRef, useState } from "react";
-import type { Page, SessionRow, SessionSort } from "../../server/dashboard.types.ts";
-import { CostCell } from "@/components/cost.cell.tsx";
-import { DataTable, type Column } from "@/components/data.table.tsx";
+import { useEffect, useMemo, useState } from "react";
+import type { PageProps } from "@/lib/page.props.ts";
+import type { Page, SessionGroups, SessionRow, SessionsResponse } from "../../server/dashboard.types.ts";
+import { DataTable } from "@/components/data.table.tsx";
+import type { FacetDef, FacetOption } from "@/components/facet.filter.tsx";
 import { PageHeader } from "@/components/page.header.tsx";
-import { ProjectChip } from "@/components/project.chip.tsx";
-import { RelativeTime } from "@/components/relative.time.tsx";
-import { SessionCell } from "@/components/session.cell.tsx";
-import { TokenCell } from "@/components/token.cell.tsx";
-import { Button } from "@/components/ui/button.tsx";
-import { Input } from "@/components/ui/input.tsx";
-import { PAGE_SIZE, useApi } from "@/lib/api.client.ts";
-import { fmtInt, fmtModel } from "@/lib/format.ts";
-import { FAMILY_COLOR, modelFamily } from "@/lib/model.tier.ts";
+import { TablePagination } from "@/components/table.pagination.tsx";
+import { TableToolbar } from "@/components/table.toolbar.tsx";
+import { useApi, useApiMany } from "@/lib/api.client.ts";
+import { fmtProject } from "@/lib/format.ts";
+import { CUSTOM_ROLE_ICON, FAMILY_ICON, NAV_ICON, ROLE_ICON, STATUS_ICON, UI_ICON } from "@/lib/icon.map.ts";
+import { FAMILY_LABEL, type ModelFamily } from "@/lib/model.tier.ts";
+import { useNow } from "@/lib/now.ts";
 import type { Range } from "@/lib/range.ts";
-import { SEARCH_MAX_CHARS, SESSIONS_PATH, parseSessionsQuery, sessionsCountLabel, sessionsHref, type SessionsState } from "@/lib/sessions.query.ts";
+import { STATUS_TONE } from "@/lib/status.level.ts";
+import { SESSIONS_PATH, SESSIONS_SPEC, SESSION_FACET_IDS, sessionsApiPath, sessionsCountLabel, sessionsHref, type GroupRef } from "@/lib/sessions.query.ts";
+import { useViewPrefs } from "@/lib/use.view.prefs.ts";
+import { GROUP_PREVIEW_ROWS, NO_GROUP, parseTableQuery, patchTable, type TableState } from "@/lib/table.query.ts";
+import { sessionColumns } from "./sessions.columns.tsx";
+import { groupSpecs } from "./sessions.groups.tsx";
 
-/** Typing pause before the search is written to the URL (and fetched). */
-const SEARCH_DEBOUNCE_MS = 250;
+const TABLE_ID = "sessions";
 const RANGE_LABEL: Record<Range, string> = { "24h": "Last 24 hours", "7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days", all: "All time" };
+const GROUP_OPTIONS = [{ value: NO_GROUP, label: "No grouping" }, { value: "project", label: "Project" }, { value: "family", label: "Model family" }, { value: "status", label: "Status" }];
+const FACET_LABEL = { project: "Project", family: "Model", role: "Role", status: "Status" } as const;
+const FACET_ICON = { project: UI_ICON.project, family: FAMILY_ICON.opus, role: UI_ICON.filter, status: STATUS_ICON.live };
+const FIXED_FACETS: Record<string, readonly string[]> = { family: ["opus", "sonnet", "haiku", "other"], status: ["live", "idle", "ended"] };
 
-function ModelCell({ row }: { row: SessionRow }) {
-  if (!row.model) return <span className="text-fg-subtle">—</span>;
-  return (
-    <span className="flex min-w-0 items-center gap-2 font-mono text-xs" title={row.models > 1 ? `${row.models} models used` : row.model}>
-      <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: FAMILY_COLOR[modelFamily(row.model)] }} />
-      <span className="truncate">{fmtModel(row.model)}</span>
-      {row.models > 1 && <span className="text-fg-subtle tabular-nums">+{row.models - 1}</span>}
-    </span>
-  );
+function facetOptions(id: (typeof SESSION_FACET_IDS)[number], counts: { value: string; count: number }[] = []): FacetOption[] {
+  const byValue = new Map(counts.map((c) => [c.value, c.count]));
+  const values = FIXED_FACETS[id] ?? counts.map((c) => c.value);
+  return values.map((value) => ({
+    value,
+    count: byValue.get(value) ?? 0,
+    label: id === "project" ? fmtProject(value) : id === "family" ? FAMILY_LABEL[value as ModelFamily] ?? value : id === "status" ? value.charAt(0).toUpperCase() + value.slice(1) : value,
+    icon: id === "family" ? FAMILY_ICON[value as ModelFamily] : id === "status" ? STATUS_ICON[value as keyof typeof STATUS_ICON] : id === "role" ? (Object.hasOwn(ROLE_ICON, value) ? ROLE_ICON[value] : CUSTOM_ROLE_ICON) : undefined,
+    tone: id === "status" ? STATUS_TONE[value as keyof typeof STATUS_TONE] : undefined,
+  }));
 }
 
-const columns: Column<SessionRow>[] = [
-  { id: "session", header: "Session", cell: (r) => <SessionCell id={r.id} title={r.title} projectCwd={r.project_cwd} /> },
-  { id: "model", header: "Model", cell: (r) => <ModelCell row={r} />, width: "w-36", hideBelow: "md" },
-  { id: "agents", header: "Agents", cell: (r) => (r.agents ? fmtInt(r.agents) : <span className="text-fg-subtle">—</span>), align: "right", sortKey: "agents", width: "w-16", hideBelow: "md" },
-  { id: "requests", header: "Requests", cell: (r) => fmtInt(r.requests), align: "right", sortKey: "requests", width: "w-20", hideBelow: "sm" },
-  { id: "tokens", header: "Tokens", cell: (r) => <TokenCell usage={r} />, align: "right", sortKey: "tokens", width: "w-20", hideBelow: "sm" },
-  { id: "cost", header: "Cost (est.)", cell: (r) => <CostCell usd={r.cost_usd} unpriced={r.unpriced} />, align: "right", sortKey: "cost", width: "w-24" },
-  { id: "last", header: "Last active", cell: (r) => <RelativeTime iso={r.last_ts} />, align: "right", sortKey: "last", width: "w-24" },
-];
-
-/** Sortable, searchable sessions list; all list state lives in the URL hash. */
-export function SessionsPage({ since, range, dataVersion, params }: { since: string; range: Range; dataVersion: number; params: URLSearchParams }) {
-  const state = parseSessionsQuery(params);
-  const go = (patch: Partial<SessionsState>) => (location.hash = sessionsHref({ ...state, page: 1, ...patch }, range));
-  const [draft, setDraft] = useState(state.q);
+/** Sessions table: server-side filters, facets, sorting, paging and aggregate-first grouping; all state lives in the URL hash. */
+export function SessionsPage({ since, range, dataVersion, params, roles }: PageProps) {
+  const state = parseTableQuery(params, SESSIONS_SPEC);
+  const grouped = state.group !== NO_GROUP;
+  const go = (patch: Partial<TableState>) => (location.hash = sessionsHref(patchTable(state, patch), range));
+  const now = useNow();
   const [retry, setRetry] = useState(0);
-  const input = useRef<HTMLInputElement>(null);
-  const goLatest = useRef(go);
-  goLatest.current = go; // the debounce timer must not write back a sort/page that changed while it waited
+  const [open, setOpen] = useState<string[]>([]);
+  const { hidden, density, toggleCol, setDensity } = useViewPrefs(TABLE_ID);
+  useEffect(() => setOpen([]), [state.group]);
 
-  // URL changed elsewhere (back button, Clear search): follow it unless it only differs by whitespace.
-  useEffect(() => setDraft((d) => (d.trim() === state.q ? d : state.q)), [state.q]);
-  useEffect(() => {
-    if (draft.trim() === state.q) return;
-    const t = setTimeout(() => goLatest.current({ q: draft }), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(t);
-  }, [draft]);
-  // A new range shrinks the result set; jump back to page 1.
-  const prevRange = useRef(range);
-  useEffect(() => {
-    if (prevRange.current !== range && state.page > 1) go({});
-    prevRange.current = range;
-  }, [range]);
-  // "/" focuses the search, unless the user is already typing somewhere.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "/" || (e.target as Element).closest("input,textarea,select,[contenteditable]")) return;
-      e.preventDefault();
-      input.current?.focus();
-    };
-    addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
-  }, []);
+  // Grouped: the list call only supplies facets + total, so ask for one row.
+  const list = useApi<SessionsResponse>(sessionsApiPath(since, state, { facets: true, size: grouped ? 1 : undefined }), {}, dataVersion + retry);
+  const groupsPath = grouped ? sessionsApiPath(since, state, { groups: true }) : undefined;
+  const openRefs: GroupRef[] = open.map((key) => ({ by: state.group, key }));
+  const groupsApi = useApi<SessionGroups>(groupsPath ?? null, {}, dataVersion + retry);
+  const results = useApiMany<Page<SessionRow>>(openRefs.map((only) => sessionsApiPath(since, state, { only, size: GROUP_PREVIEW_ROWS })), dataVersion + retry);
 
-  const { data, error, loading } = useApi<Page<SessionRow>>(
-    "/api/sessions",
-    { since, project: state.project, q: state.q, sort: state.sort, dir: state.dir, page: state.page, pageSize: PAGE_SIZE },
-    dataVersion + retry,
-  );
-  const total = data?.total ?? 0;
-  const first = total ? (state.page - 1) * PAGE_SIZE + 1 : 0;
-  const last = Math.min(state.page * PAGE_SIZE, total);
+  const columns = useMemo(() => sessionColumns(now, roles, (r) => `#${SESSIONS_PATH}/${encodeURIComponent(r.id)}`), [now, roles]);
+  const facets: FacetDef[] = SESSION_FACET_IDS.map((id) => ({
+    id, label: FACET_LABEL[id], icon: FACET_ICON[id], options: facetOptions(id, list.data?.facets?.[id]), selected: state.filters[id] ?? [],
+    onChange: (next) => go({ filters: { ...state.filters, [id]: next } }),
+  }));
+  const reset = () => go({ q: "", group: NO_GROUP, filters: {} });
+
+  const groupList = groupsApi.data?.groups;
+  const total = grouped ? groupList?.length : list.data?.total;
+  const error = grouped ? groupsApi.error : list.error;
+  const pageGroups = groupList?.slice((state.page - 1) * state.size, state.page * state.size);
+  const filtered = !!state.q || Object.values(state.filters).some((v) => v.length);
+  const specs = pageGroups && groupSpecs(pageGroups, {
+    state, since, open, results, toggle: (k) => setOpen((o) => (o.includes(k) ? o.filter((x) => x !== k) : [...o, k])),
+    showAll: ({ by, key }) => go({ group: NO_GROUP, filters: { ...state.filters, [by]: [key] } }),
+  });
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Search is a direct flex item here (not PageHeader `actions`, which is shrink-to-fit) so `w-full` spans the row on mobile. */}
-      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-        <PageHeader
-          title="Sessions"
-          description={
-            // nowrap + a padding-free chip: toggling the chip never changes this line's height.
-            <span className="flex min-w-0 items-center gap-x-3">
-              <span className="shrink-0 tabular-nums">{sessionsCountLabel(data?.total, !!error)} · {RANGE_LABEL[range]}</span>
-              {state.project && <ProjectChip cwd={state.project} onRemove={() => go({ project: "" })} />}
-            </span>
-          }
-        />
-        <Input
-          ref={input}
-          type="search"
-          value={draft}
-          maxLength={SEARCH_MAX_CHARS}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Search title, id or project…"
-          aria-label="Search sessions"
-          className="h-8 w-full sm:w-70"
-        />
-      </div>
-      <DataTable
-        label="Sessions"
-        rows={data?.items}
-        columns={columns}
-        rowKey={(r) => r.id}
-        rowHref={(r) => `#${SESSIONS_PATH}/${encodeURIComponent(r.id)}`}
-        sort={{ key: state.sort, dir: state.dir }}
-        onSort={(s) => go({ sort: s.key as SessionSort, dir: s.dir })} // keys come from `columns`, all valid SessionSorts
-        loading={loading}
-        error={error && new Error(`Couldn't load sessions. ${error.message}`)}
-        onRetry={() => setRetry((n) => n + 1)}
-        empty={
-          state.q ? (
-            <span className="inline-flex flex-wrap items-center justify-center gap-2">
-              No sessions match "{state.q}".
-              <Button size="xs" variant="outline" onClick={() => { setDraft(""); go({ q: "" }); }}>Clear search</Button>
-            </span>
-          ) : (
-            "No sessions in this range."
-          )
-        }
+      <PageHeader title="Sessions" icon={NAV_ICON.sessions} />
+      <TableToolbar
+        search={{ value: state.q, onChange: (q) => go({ q }), placeholder: "Search title, id or project…", label: "Search sessions" }}
+        facets={facets}
+        group={{ value: state.group, options: GROUP_OPTIONS, onChange: (group) => go({ group }) }}
+        view={{
+          columns: columns.slice(1).filter((c) => c.hideable !== false).map((c) => ({ id: c.id, label: typeof c.header === "string" ? c.header : c.id, visible: !hidden.includes(c.id) })),
+          onToggle: toggleCol, density, onDensity: setDensity,
+        }}
+        onReset={reset}
+        summary={<span className="tabular-nums">{sessionsCountLabel(list.data?.total, !!list.error)} · {RANGE_LABEL[range]}</span>}
       />
-      {data && !error && total > PAGE_SIZE && (
-        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span className="tabular-nums">Showing {fmtInt(first)}–{fmtInt(last)} of {fmtInt(total)}</span>
-          <span className="flex gap-1">
-            <Button size="xs" variant="ghost" disabled={state.page <= 1} onClick={() => go({ page: state.page - 1 })}>Previous</Button>
-            <Button size="xs" variant="ghost" disabled={last >= total} onClick={() => go({ page: state.page + 1 })}>Next</Button>
-          </span>
-        </div>
-      )}
+      <DataTable
+        label="Sessions" rows={grouped ? undefined : list.data?.items} groups={grouped ? specs : undefined} columns={columns} hidden={hidden} density={density}
+        rowKey={(r) => r.id} rowHref={(r) => `#${SESSIONS_PATH}/${encodeURIComponent(r.id)}`}
+        sort={{ key: state.sort, dir: state.dir }} onSort={(s) => go({ sort: s.key, dir: s.dir })}
+        loading={grouped ? groupsApi.loading : list.loading} error={error && new Error(`Couldn't load sessions. ${error.message}`)} onRetry={() => setRetry((n) => n + 1)}
+        empty={filtered ? <span className="inline-flex items-center gap-2">No sessions match these filters.<button type="button" onClick={reset} className="underline underline-offset-2">Reset filters</button></span> : "No sessions in this range."}
+      />
+      {!error && <TablePagination label="Sessions" page={state.page} pageSize={state.size} total={total ?? 0} onPage={(page) => go({ page })} onPageSize={(size) => go({ size })} />}
     </div>
   );
 }

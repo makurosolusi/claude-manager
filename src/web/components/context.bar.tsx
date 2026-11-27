@@ -1,13 +1,16 @@
+import { TONE_CLASSES } from "@/lib/color.tokens.ts";
 import { cn } from "@/lib/cn.ts";
 import { contextLevel } from "@/lib/context.level.ts";
 import { fmtTokens } from "@/lib/format.ts";
+import { LEVEL_ICON } from "@/lib/icon.map.ts";
+import { LEVEL_TONE } from "@/lib/status.level.ts";
 
-const FILL = { ok: "bg-ok", warn: "bg-warn", danger: "bg-destructive" } as const;
-
-/** Meter of context window USED (not left), colored by level and always labeled "142k / 200k · 71%". */
+/** Meter of context window USED (not left): tone fill (success/warning/danger), level icon, labeled "142k / 200k · 71%". */
 export function ContextBar({ used, window, size = "sm" }: { used: number; window: number; size?: "sm" | "md" }) {
   const pct = window > 0 ? Math.round((used / window) * 100) : 0;
   const level = contextLevel(pct);
+  const tone = TONE_CLASSES[LEVEL_TONE[level]];
+  const Icon = LEVEL_ICON[level];
   return (
     <div className="flex min-w-0 items-center gap-2">
       <div
@@ -19,10 +22,11 @@ export function ContextBar({ used, window, size = "sm" }: { used: number; window
         aria-valuetext={`${pct}% used`}
         className={cn("flex-1 overflow-hidden rounded-full bg-muted", size === "sm" ? "h-1.5" : "h-2")}
       >
-        <div className={cn("h-full rounded-full", FILL[level])} style={{ width: `${Math.min(pct, 100)}%` }} />
+        <div className={cn("h-full rounded-full", tone.dot)} style={{ width: `${Math.min(pct, 100)}%` }} />
       </div>
-      <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground tabular-nums">
-        {fmtTokens(used)} / {fmtTokens(window)} · <span className={cn(level !== "ok" && "font-medium text-foreground")}>{pct}%</span>
+      <span className="flex shrink-0 items-center gap-1 text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+        <Icon aria-hidden className={cn("size-3.5", tone.text)} />
+        {fmtTokens(used)} / {fmtTokens(window)} · <span className={cn("font-medium", tone.text)}>{pct}%</span>
       </span>
     </div>
   );

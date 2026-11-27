@@ -43,6 +43,13 @@ const MIGRATIONS = [
     trigger TEXT, pre_tokens INTEGER, post_tokens INTEGER
   );
   `,
+  `
+  -- v0.2.0: new filters/facets scan sessions by last_ts/project and count agents/tools per session; without these each is a full scan.
+  CREATE INDEX IF NOT EXISTS sessions_last_ts ON sessions(last_ts);
+  CREATE INDEX IF NOT EXISTS sessions_project ON sessions(project_cwd, last_ts);
+  CREATE INDEX IF NOT EXISTS agents_session ON agents(session_id);
+  CREATE INDEX IF NOT EXISTS tool_calls_session ON tool_calls(session_id, name);
+  `,
 ];
 
 /** Opens (and migrates) the analytics DB; file is owner-only since it may hold prompt text. */

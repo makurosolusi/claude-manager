@@ -4,6 +4,38 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-11-27
+
+### Added
+
+- Colour system: opus is blue, sonnet is orange and haiku is teal. Roles have their own colours and icons,
+  and status, cache hit rate, context level and stop reason are colour coded. The cost column shows a heat marker.
+- Icons throughout the dashboard.
+- Table toolkit on every table: search, facet filters with counts, grouping with subtotals, column visibility,
+  row density, pagination with a page size of 25, 50 or 100, and table state kept in the URL.
+- Redesigned Projects, Roles (grouped by tier, with By model and By role tables), Live (context levels)
+  and Session detail (request table with filters, plus models, tools and agents panels).
+- Search over a session's requests.
+- Favicon.
+- MIT license.
+
+### Changed
+
+- The Overview chart stacks cost by model family.
+- Live refreshes when new data is synced, not every 5 seconds.
+- The dashboard `project` filter matches the project exactly, not by substring.
+- Database migration v2 adds indexes. A v0.1.0 binary refuses a v2 database with
+  `data.db schema v2 is newer than this claude-manager (v1); upgrade the binary`. To downgrade, run
+  `sqlite3 ~/.claude-manager/data.db "PRAGMA user_version = 1"` first (use `$CLAUDE_MANAGER_HOME/data.db`
+  if you set that variable). The indexes stay in the file and are harmless.
+
+### Fixed
+
+- Mobile title truncation.
+- Stale data shown for a moment when switching between sessions.
+- Focus ring on the chart.
+- Mobile tap targets.
+
 ## [0.1.0] - 2026-11-27
 
 ### Added

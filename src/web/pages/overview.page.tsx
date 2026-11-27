@@ -1,5 +1,9 @@
 import { useState, type ReactNode } from "react";
+import type { PageProps } from "@/lib/page.props.ts";
 import { TriangleAlert } from "lucide-react";
+import { ModelDot } from "@/components/model.badge.tsx";
+import { NAV_ICON, KPI_ICON } from "@/lib/icon.map.ts";
+import { cacheLevel } from "@/lib/status.level.ts";
 import type { Overview, Page, ProjectRow, SessionRow, Totals } from "../../server/dashboard.types.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { PageHeader } from "@/components/page.header.tsx";
@@ -14,8 +18,8 @@ import { useApi } from "@/lib/api.client.ts";
 import { cacheHitRate, fmtDelta, fmtInt, fmtPct, fmtProject, fmtUsd } from "@/lib/format.ts";
 import { hashHref } from "@/lib/hash.route.ts";
 import { DEFAULT_RANGE, type Range } from "@/lib/range.ts";
+import { SECOND_TICK_MS, useNow } from "@/lib/now.ts";
 import { costByTier } from "@/lib/tier.cost.ts";
-import type { Tiers } from "@/lib/model.tier.ts";
 
 /** Rows in the Top projects / Top sessions lists. */
 export const TOP_N = 5;
@@ -51,16 +55,17 @@ const ViewAll = ({ href }: { href: string }) => (
 );
 const Skeleton = ({ className }: { className: string }) => <div aria-hidden className={`animate-pulse rounded-sm bg-muted ${className}`} />;
 
-/** Overview dashboard: 4 KPIs with deltas, stacked daily cost by model, top projects/sessions, cost by tier. */
-export function OverviewPage({ since, range, dataVersion, tiers }: { since: string; range: Range; dataVersion: number; tiers: Tiers | undefined }) {
+/** Overview dashboard: 4 KPIs with deltas, stacked daily cost by model family, top projects/sessions, cost by tier. */
+export function OverviewPage({ since, range, dataVersion, tiers }: PageProps) {
   const [retry, setRetry] = useState(0);
+  const now = useNow(SECOND_TICK_MS);
   const tick = dataVersion + retry;
   const onRetry = () => setRetry((n) => n + 1);
   const ov = useApi<Overview>("/api/overview", { since }, tick);
   const projects = useApi<Page<ProjectRow>>("/api/projects", { since, pageSize: TOP_N }, tick);
   const sessions = useApi<Page<SessionRow>>("/api/sessions", { since, sort: "cost", dir: "desc", pageSize: TOP_N }, tick);
   const rangeParam = range === DEFAULT_RANGE ? undefined : range;
-  const header = <PageHeader title="Overview" description={range === "all" ? PERIOD_TEXT.all : `${PERIOD_TEXT[range]} · all projects`} />;
+  const header = <PageHeader icon={NAV_ICON.overview} title="Overview" description={range === "all" ? PERIOD_TEXT.all : `${PERIOD_TEXT[range]} · all projects`} />;
 
   if (ov.error && !ov.data) {
     return (
@@ -101,13 +106,19 @@ export function OverviewPage({ since, range, dataVersion, tiers }: { since: stri
       id: "share", header: <span className="sr-only">Share</span>, width: "w-20",
       cell: (r) => (
         <span aria-hidden className="block h-1.5 w-16 overflow-hidden rounded-full bg-muted" title={totalCost ? fmtPct(r.cost_usd / totalCost) : undefined}>
-          <span className="block h-full rounded-full bg-brand/70" style={{ width: `${totalCost ? (r.cost_usd / totalCost) * 100 : 0}%` }} />
+          <span className="block h-full rounded-full bg-foreground/50" style={{ width: `${totalCost ? (r.cost_usd / totalCost) * 100 : 0}%` }} />
         </span>
       ),
     },
   ];
   const sessionCols: Column<SessionRow>[] = [
-    { id: "session", header: "Session", cell: (r) => <SessionCell id={r.id} title={r.title} projectCwd={r.project_cwd} /> },
+    { id: "session", header: "Session", cell: (r) => (
+        <span className="flex min-w-0 items-center gap-2">
+          {r.model && <ModelDot model={r.model} />}
+          <span className="min-w-0 flex-1"><SessionCell id={r.id} title={r.title} projectCwd={r.project_cwd} lastTs={r.last_ts} now={now} /></span>
+        </span>
+      ),
+    },
     { id: "cost", header: "Cost (est.)", align: "right", width: "w-24", cell: (r) => <CostCell usd={r.cost_usd} unpriced={r.unpriced} /> },
     { id: "last", header: "Last active", align: "right", width: "w-24", hideBelow: "sm", cell: (r) => <RelativeTime iso={r.last_ts} /> },
   ];
@@ -116,13 +127,13 @@ export function OverviewPage({ since, range, dataVersion, tiers }: { since: stri
     <>
       {header}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard label="Est. cost" value={kpi(fmtUsd(totalCost))} delta={delta(deltas?.cost, "pct")} hint={d?.total.unpriced ? `${fmtInt(d.total.unpriced)} requests unpriced` : undefined} />
-        <KpiCard label="Requests" value={kpi(fmtInt(d?.total.requests ?? 0))} delta={delta(deltas?.requests, "pct")} />
-        <KpiCard label="Sessions" value={kpi(fmtInt(d?.total.sessions ?? 0))} delta={delta(deltas?.sessions, "pct")} />
-        <KpiCard label="Cache hit rate" value={kpi(d ? fmtPct(cacheHitRate(d.total)) : "")} delta={delta(deltas?.cacheHit, "pt")} />
+        <KpiCard icon={KPI_ICON.cost} label="Est. cost" value={kpi(fmtUsd(totalCost))} delta={delta(deltas?.cost, "pct")} hint={d?.total.unpriced ? `${fmtInt(d.total.unpriced)} requests unpriced` : undefined} />
+        <KpiCard icon={KPI_ICON.requests} label="Requests" value={kpi(fmtInt(d?.total.requests ?? 0))} delta={delta(deltas?.requests, "pct")} />
+        <KpiCard icon={KPI_ICON.sessions} label="Sessions" value={kpi(fmtInt(d?.total.sessions ?? 0))} delta={delta(deltas?.sessions, "pct")} />
+        <KpiCard icon={KPI_ICON.cache} tone={d ? cacheLevel(cacheHitRate(d.total)) : undefined} label="Cache hit rate" value={kpi(d ? fmtPct(cacheHitRate(d.total)) : "")} delta={delta(deltas?.cacheHit, "pt")} />
       </div>
       <Panel title="Cost per day (est.)" action={chart && <CostLegend series={chart.series} />}>
-        {chart ? <CostChart series={chart.series} points={chart.points} /> : <Skeleton className="h-56 w-full" />}
+        {chart ? <CostChart series={chart.series} points={chart.points} models={chart.models} /> : <Skeleton className="h-56 w-full" />}
       </Panel>
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel title="Top projects" action={<ViewAll href={hashHref("/projects", { range: rangeParam })} />}>
