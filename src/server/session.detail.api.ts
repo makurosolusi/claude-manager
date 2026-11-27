@@ -5,7 +5,7 @@ import { contextWindow } from "./context.window.ts";
 import { HTTP, HttpError, MAX_QUERY_CHARS, pageQuery } from "./dashboard.params.ts";
 import { FAMILIES, REQUEST_GROUPS, type ApiError } from "./dashboard.types.ts";
 import {
-  REQUEST_SORTS, type RequestDimension, type RequestFilter, type RequestGroupBy, type RequestGroups, type RequestQuery,
+  REQUEST_SORTS, REROUTED_VALUES, type RequestDimension, type RequestFilter, type RequestGroupBy, type RequestGroups, type RequestQuery,
   type RequestsResponse, type SessionDetailFull,
 } from "./session.detail.types.ts";
 
@@ -24,13 +24,14 @@ const oneOf = <T extends string>(name: string, values: readonly T[], raw: string
 /** Repeatable filter params (each list capped by count and length; family values must be known families) plus the `q` search. */
 function filters(url: URL): RequestFilter {
   const f: RequestFilter = {};
-  for (const name of ["family", "agent", "stop", "tool"] as const satisfies RequestDimension[]) {
+  for (const name of ["family", "agent", "stop", "tool", "rerouted"] as const satisfies RequestDimension[]) {
     const values = url.searchParams.getAll(name);
     if (!values.length) continue;
     if (values.length > MAX_FACET_VALUES) throw bad(`invalid ${name}: use at most ${MAX_FACET_VALUES} values`);
     for (const v of values) {
       if (v.length > MAX_VALUE_CHARS) throw bad(`invalid ${name}: each value must be at most ${MAX_VALUE_CHARS} characters`);
       if (name === "family") oneOf(name, FAMILIES, v);
+      if (name === "rerouted") oneOf(name, REROUTED_VALUES, v);
     }
     f[name] = values;
   }

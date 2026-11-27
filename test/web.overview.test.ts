@@ -7,7 +7,7 @@ import { FAMILY_COLOR, FAMILY_LABEL, type Tiers } from "../src/web/lib/model.tie
 
 // test-only fixtures
 const row = (key: string, cost_usd: number, requests = 10): UsageRow => ({ key, cost_usd, requests, input: 100, output: 50, cache_read: 300, cache_write: 100, unpriced: 0 });
-const tot = (o: Partial<Totals>): Totals => ({ requests: 0, input: 0, output: 0, cache_read: 0, cache_write: 0, cost_usd: 0, unpriced: 0, sessions: 0, ...o });
+const tot = (o: Partial<Totals>): Totals => ({ requests: 0, input: 0, output: 0, cache_read: 0, cache_write: 0, cost_usd: 0, unpriced: 0, sessions: 0, rerouted: 0, ...o });
 
 test("costByTier: family fallback, fixed order, empty tiers kept, other only when present", () => {
   const tiers = costByTier([row("claude-haiku-4-5", 1), row("claude-opus-4-7", 6), row("claude-sonnet-4-5", 3)]);

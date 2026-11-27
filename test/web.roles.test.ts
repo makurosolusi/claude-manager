@@ -12,7 +12,7 @@ const roles: RoleMeta[] = [
   { name: "qa-bot", tier: "basic", source: "custom" },
 ];
 const row = (role: string, model: string, cost: number, requests = 1): RoleRow =>
-  ({ role, model, requests, input: 10, output: 5, cache_read: 20, cache_write: 1, cost_usd: cost, unpriced: 0 });
+  ({ role, model, requests, input: 10, output: 5, cache_read: 20, cache_write: 1, cost_usd: cost, unpriced: 0, rerouted: 0 });
 const data = [
   row("manager", "claude-opus-4-7", 10, 4),
   row("coder", "claude-opus-4-7", 6, 2), // configured work, billed think

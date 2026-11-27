@@ -30,7 +30,7 @@ export async function checkRouting(
     out.push({
       ok: "warn",
       label:
-        "ANTHROPIC_BASE_URL is set: a gateway can serve a different model than the one requested. Compare requested vs served in the dashboard; unset it to rule the gateway out",
+        "ANTHROPIC_BASE_URL is set: a gateway can serve a different model than the one requested. Open the dashboard and look for \"rerouted\" requests (requested vs served model); unset it to rule the gateway out",
     });
   }
   const owned = new Set(installs.flatMap((r) => Object.keys(r.files)));

@@ -162,13 +162,13 @@ describe("meta, favicon, migration, family sql", () => {
     }
   });
 
-  test("migration v2 creates the indexes and re-opening is a no-op", () => {
+  test("migrations create the v2 indexes and re-opening is a no-op", () => {
     const version = () => db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
     const indexes = () => db.query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'index'").all().map((r) => r.name);
-    expect(version()).toBe(2);
+    expect(version()).toBe(3);
     for (const name of ["sessions_last_ts", "sessions_project", "agents_session", "tool_calls_session"]) expect(indexes()).toContain(name);
     const again = openDb(join(ctx.app, "data.db"));
-    expect(again.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(2);
+    expect(again.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(3);
     again.close();
   });
 

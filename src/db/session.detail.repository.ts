@@ -5,7 +5,7 @@ import type {
   RequestSort, ToolCount,
 } from "../server/session.detail.types.ts";
 import type { PageQuery } from "./dashboard.repository.ts";
-import { FAMILY_SQL, KEY } from "./stats.repository.ts";
+import { FAMILY_SQL, KEY, REROUTED_SQL } from "./stats.repository.ts";
 
 type Params = Record<string, string | number | null>;
 
@@ -23,12 +23,14 @@ const DIM_SQL: Record<RequestDimension, string> = {
   agent: KEY.role,
   stop: "COALESCE(r.stop_reason, 'none')",
   tool: "",
+  rerouted: `CASE WHEN ${REROUTED_SQL} THEN 'yes' ELSE 'no' END`,
 };
 // Filters bind as JSON arrays; NULL = no filter. `tool` uses EXISTS so a multi-tool request is still one row.
 const DIM_WHERE: Record<RequestDimension, string> = {
   family: `($family IS NULL OR ${DIM_SQL.family} IN (SELECT value FROM json_each($family)))`,
   agent: `($agent IS NULL OR ${DIM_SQL.agent} IN (SELECT value FROM json_each($agent)))`,
   stop: `($stop IS NULL OR ${DIM_SQL.stop} IN (SELECT value FROM json_each($stop)))`,
+  rerouted: `($rerouted IS NULL OR ${DIM_SQL.rerouted} IN (SELECT value FROM json_each($rerouted)))`,
   tool: `($tool IS NULL OR EXISTS (SELECT 1 FROM tool_calls tc WHERE tc.message_id = r.message_id
     AND tc.name IN (SELECT value FROM json_each($tool))))`,
 };
@@ -52,7 +54,7 @@ const bindings = (id: string, f: RequestFilter, exclude?: RequestDimension): Par
   ...Object.fromEntries(DIMENSIONS.filter((d) => d !== exclude).map((d) => [d, listParam(f[d])])),
 });
 
-type RequestDbRow = Omit<RequestRow, "tools"> & { tools: string | null };
+type RequestDbRow = Omit<RequestRow, "tools" | "rerouted"> & { tools: string | null; rerouted: number };
 
 /** One page of a session's requests; tool names come from one join over the page rows only. */
 export function requestsPage(db: Database, id: string, f: RequestFilter, q: RequestQuery, p: PageQuery): { items: RequestRow[]; total: number } {
@@ -61,14 +63,14 @@ export function requestsPage(db: Database, id: string, f: RequestFilter, q: Requ
   const rows = db
     .query<RequestDbRow, Params>(
       `SELECT pg.*, group_concat(DISTINCT tc.name) AS tools
-      FROM (SELECT r.message_id, r.ts, r.model, r.agent_id, ${DIM_SQL.agent} AS role, r.stop_reason, r.input,
+      FROM (SELECT r.message_id, r.ts, r.model, r.requested_model, ${REROUTED_SQL} AS rerouted, r.agent_id, ${DIM_SQL.agent} AS role, r.stop_reason, r.input,
           r.cache_5m + r.cache_1h AS cache_write, r.cache_read, r.output, COALESCE(r.cost_usd, 0) AS cost_usd, ${CONTEXT} AS context
         ${FROM} WHERE ${where()} ORDER BY ${order} LIMIT $limit OFFSET $offset) pg
       LEFT JOIN tool_calls tc ON tc.message_id = pg.message_id GROUP BY pg.message_id ORDER BY ${order}`,
     )
     .all({ ...params, limit: p.pageSize, offset: (p.page - 1) * p.pageSize });
   const total = db.query<{ n: number }, Params>(`SELECT COUNT(*) AS n ${FROM} WHERE ${where()}`).get(params)!.n;
-  return { items: rows.map((r) => ({ ...r, tools: r.tools ? r.tools.split(",") : [] })), total };
+  return { items: rows.map((r) => ({ ...r, rerouted: r.rerouted === 1, tools: r.tools ? r.tools.split(",") : [] })), total };
 }
 
 /** Per-dimension counts; each ignores its own filter so options stay selectable. */
@@ -82,7 +84,7 @@ export function requestFacets(db: Database, id: string, f: RequestFilter): Reque
       .query<FacetCount, Params>(`${sql} WHERE ${where(dim)} GROUP BY value ORDER BY count DESC, value LIMIT $limit`)
       .all({ ...bindings(id, f, dim), limit: LIST_LIMIT });
   };
-  return { family: count("family"), agent: count("agent"), stop: count("stop"), tool: count("tool") };
+  return { family: count("family"), agent: count("agent"), stop: count("stop"), tool: count("tool"), rerouted: count("rerouted") };
 }
 
 /** Usage per group over every matching request (not one page), most expensive first. */
