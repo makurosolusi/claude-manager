@@ -38,6 +38,8 @@ export interface Config {
   disabledRoles: string[];
   /** Keep user prompt text in the local DB (false = metadata only). */
   storePromptText: boolean;
+  /** Port for `claude-manager dashboard` (overridden by --port). */
+  dashboardPort?: number;
 }
 
 export const configPath = () => join(appDir(), "config.json");
@@ -50,6 +52,7 @@ export async function loadConfig(): Promise<Config> {
     customRoles: saved.customRoles ?? {},
     disabledRoles: saved.disabledRoles ?? [],
     storePromptText: saved.storePromptText ?? true,
+    dashboardPort: saved.dashboardPort,
   };
 }
 
