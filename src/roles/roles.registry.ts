@@ -19,8 +19,13 @@ export function assertTools(tools: string[]): void {
   }
 }
 
-/** Presets + custom roles with config overrides applied; disabled roles excluded. */
-export function resolveRoles(config: Config): Role[] {
+/** Claude Code's built-in subagents (docs verified 2026-11-27); listed read-only on the Agents page. */
+export const BUILTIN_AGENTS = ["Explore", "Plan", "general-purpose", "claude", "statusline-setup", "claude-code-guide", "web-fetch"];
+
+export type RoleEntry = Role & { disabled: boolean };
+
+/** Presets + custom roles with config overrides applied; disabled roles are included and flagged. */
+export function allRoles(config: Config): RoleEntry[] {
   const custom: Role[] = Object.entries(config.customRoles).map(([name, r]) => ({
     name,
     tier: r.tier,
@@ -30,13 +35,19 @@ export function resolveRoles(config: Config): Role[] {
     prompt: r.prompt ?? `You are the ${name} specialist. ${r.description}`,
     source: "custom",
   }));
-  return [...PRESET_ROLES, ...custom]
-    .filter((role) => !config.disabledRoles.includes(role.name))
-    .map((role) => {
-      const override = config.roleModels[role.name];
-      if (!override) return role;
-      return isTier(override) ? { ...role, tier: override } : { ...role, model: override };
-    });
+  return [...PRESET_ROLES, ...custom].map((role) => {
+    const override = config.roleModels[role.name];
+    const disabled = config.disabledRoles.includes(role.name);
+    if (!override) return { ...role, disabled };
+    return isTier(override) ? { ...role, tier: override, disabled } : { ...role, model: override, disabled };
+  });
+}
+
+/** Presets + custom roles with config overrides applied; disabled roles excluded. */
+export function resolveRoles(config: Config): Role[] {
+  return allRoles(config)
+    .filter((role) => !role.disabled)
+    .map(({ disabled: _disabled, ...role }) => role);
 }
 
 export function findRole(config: Config, name: string): Role {
