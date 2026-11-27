@@ -5,7 +5,9 @@ import { SyncIndicator } from "@/components/sync.indicator.tsx";
 import { ThemeToggle } from "@/components/theme.toggle.tsx";
 import { cn } from "@/lib/cn.ts";
 import { hashHref, useHashRoute, withParams } from "@/lib/hash.route.ts";
+import { SECOND_TICK_MS, useNow } from "@/lib/now.ts";
 import { DEFAULT_RANGE, parseRange, sinceFor, type Range } from "@/lib/range.ts";
+import type { SyncMeta } from "../server/dashboard.types.ts";
 import { useSyncMeta, withPollError } from "@/lib/sync.meta.ts";
 import { OverviewPage } from "@/pages/overview.page.tsx";
 import { ProjectsPage } from "@/pages/projects.page.tsx";
@@ -30,6 +32,11 @@ const NAV = [
 /** URL value for a range; the default is omitted so clean URLs stay clean. */
 const rangeParam = (r: Range) => (r === DEFAULT_RANGE ? undefined : r);
 
+/** Sync status with its own 1s clock, so "Synced Ns ago" ticks between polls without re-rendering the whole shell. */
+function HeaderSync({ meta }: { meta: SyncMeta | undefined }) {
+  return <SyncIndicator meta={meta} now={useNow(SECOND_TICK_MS)} />;
+}
+
 /** Dashboard shell: sticky header (nav, sync status, URL-backed range, theme), page switch, footer. */
 export function App() {
   const route = useHashRoute();
@@ -53,13 +60,14 @@ export function App() {
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
-        {/* <640: row 1 = logo · sync · theme, row 2 = nav (scrolls) · range. ≥640: one h-12 row. */}
+        {/* <640: row 1 = logo · sync · theme, row 2 = nav (full width, scrolls without a scrollbar), row 3 = range.
+            Sharing row 2 with the range picker squeezed the nav until links clipped behind it. ≥640: one h-12 row. */}
         <div className={cn(CONTAINER, "flex flex-wrap items-center gap-x-4 gap-y-2 py-2 sm:h-12 sm:flex-nowrap sm:py-0")}>
-          <a href={hashHref("/", { range: rangeParam(range) })} className="order-1 flex shrink-0 items-center gap-2 rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-ring">
+          <a href={hashHref("/", { range: rangeParam(range) })} className="order-1 flex shrink-0 items-center gap-2 rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring">
             <span aria-hidden className="size-2.5 rounded-[2px] bg-brand" />
             <span className="font-mono text-[13px] font-semibold">claude-manager</span>
           </a>
-          <nav aria-label="Main" className="order-5 -mx-1 flex min-w-0 flex-1 gap-0.5 overflow-x-auto px-1 sm:order-2">
+          <nav aria-label="Main" className="order-5 -mx-1 flex min-w-0 basis-full gap-0.5 overflow-x-auto px-1 [scrollbar-width:none] sm:order-2 sm:basis-auto sm:flex-1 [&::-webkit-scrollbar]:hidden">
             {NAV.map((n) => {
               const active = n.match(path);
               return (
@@ -68,7 +76,7 @@ export function App() {
                   href={hashHref(n.path, { range: rangeParam(range) })}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "rounded-md px-2.5 py-1 text-[13px] whitespace-nowrap outline-none focus-visible:outline-2 focus-visible:outline-ring",
+                    "rounded-md px-2.5 py-1 text-[13px] whitespace-nowrap outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
                     active ? "bg-surface-hover text-foreground" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -78,7 +86,7 @@ export function App() {
             })}
           </nav>
           <div className="order-2 ml-auto sm:order-3">
-            <SyncIndicator meta={withPollError(meta, error)} now={Date.now()} />
+            <HeaderSync meta={withPollError(meta, error)} />
           </div>
           <div aria-hidden className="order-4 basis-full sm:hidden" />
           <div className="order-6 sm:order-4">

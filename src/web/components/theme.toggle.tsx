@@ -54,7 +54,7 @@ export function ThemeToggle() {
             setChoice(value);
           }}
           className={cn(
-            "inline-flex size-6 items-center justify-center rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-ring",
+            "inline-flex size-6 items-center justify-center rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
             choice === value ? "bg-surface-hover text-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >

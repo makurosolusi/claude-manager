@@ -44,7 +44,7 @@ const sub = (r: Row) => r.kind === "model" && "text-xs text-fg-subtle";
 function columns(tiers: Tiers | undefined): Column<Row>[] {
   return [
     { id: "tier", header: "Tier", cell: (r) => (r.kind === "tier" ? <TierLabel row={r.tier} tiers={tiers} /> : <ModelLabel model={r.model.model} />) },
-    { id: "share", header: "Share", align: "right", width: "w-36", cell: (r) => <ShareBar share={sums(r).share} dim={r.kind === "model"} /> },
+    { id: "share", header: "Share", align: "right", width: "w-36", hideBelow: "sm", cell: (r) => <ShareBar share={sums(r).share} dim={r.kind === "model"} /> },
     { id: "cost", header: "Cost (est.)", align: "right", width: "w-28", cell: (r) => <span className={cn(sub(r))}><CostCell usd={sums(r).cost_usd} unpriced={sums(r).unpriced} /></span> },
     { id: "requests", header: "Requests", align: "right", width: "w-24", hideBelow: "sm", cell: (r) => <span className={cn(sub(r))}>{fmtInt(sums(r).requests)}</span> },
     { id: "cache", header: "Cache hit", align: "right", width: "w-24", hideBelow: "md", cell: (r) => <span className={cn(sub(r))}>{sums(r).requests ? fmtPct(cacheHitRate(sums(r))) : "—"}</span> },

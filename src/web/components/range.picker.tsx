@@ -20,7 +20,7 @@ export function RangePicker({ value, onChange, disabled }: { value: Range; onCha
           aria-pressed={r === value}
           onClick={() => onChange(r)}
           className={cn(
-            "h-6 rounded-sm px-2 text-xs font-medium tabular-nums outline-none focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed",
+            "h-6 rounded-sm px-2 text-xs font-medium tabular-nums outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring disabled:cursor-not-allowed",
             r === value ? "bg-surface-hover text-foreground" : "text-muted-foreground enabled:hover:text-foreground",
           )}
         >

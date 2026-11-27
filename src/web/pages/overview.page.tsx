@@ -47,7 +47,7 @@ function Panel({ title, action, children }: { title: string; action?: ReactNode;
 }
 
 const ViewAll = ({ href }: { href: string }) => (
-  <a href={href} className="rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">View all →</a>
+  <a href={href} className="rounded-sm text-xs text-muted-foreground outline-hidden hover:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring">View all →</a>
 );
 const Skeleton = ({ className }: { className: string }) => <div aria-hidden className={`animate-pulse rounded-sm bg-muted ${className}`} />;
 

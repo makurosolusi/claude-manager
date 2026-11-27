@@ -59,7 +59,7 @@ function HeaderCell<T>({ c, sort, onSort }: { c: Column<T>; sort?: Sort; onSort?
         <button
           type="button"
           onClick={() => onSort(nextSort(sort, c.sortKey!))}
-          className={cn("group/sort inline-flex items-center gap-1 rounded-sm outline-none hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring", active && "text-foreground", c.align === "right" && "flex-row-reverse")}
+          className={cn("group/sort inline-flex items-center gap-1 rounded-sm outline-hidden hover:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring", active && "text-foreground", c.align === "right" && "flex-row-reverse")}
         >
           {c.header}
           <Icon aria-hidden className={cn("size-3", !active && "opacity-0 group-hover/sort:opacity-60 group-focus-visible/sort:opacity-60")} />
@@ -120,7 +120,7 @@ export function DataTable<T>(p: DataTableProps<T>) {
           {columns.map((c, i) => (
             <td key={c.id} className={cn("px-3 text-[13px]", colClass(c), i === 0 && "max-w-0")}>
               {i === 0 && href ? (
-                <a href={href} className="block min-w-0 truncate rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-ring">
+                <a href={href} className="block min-w-0 truncate rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring">
                   {c.cell(r)}
                 </a>
               ) : (

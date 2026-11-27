@@ -1,19 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
 import type { Page, SessionRow, SessionSort } from "../../server/dashboard.types.ts";
 import { CostCell } from "@/components/cost.cell.tsx";
 import { DataTable, type Column } from "@/components/data.table.tsx";
 import { PageHeader } from "@/components/page.header.tsx";
+import { ProjectChip } from "@/components/project.chip.tsx";
 import { RelativeTime } from "@/components/relative.time.tsx";
 import { SessionCell } from "@/components/session.cell.tsx";
 import { TokenCell } from "@/components/token.cell.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { PAGE_SIZE, useApi } from "@/lib/api.client.ts";
-import { fmtInt, fmtModel, fmtProject } from "@/lib/format.ts";
+import { fmtInt, fmtModel } from "@/lib/format.ts";
 import { FAMILY_COLOR, modelFamily } from "@/lib/model.tier.ts";
 import type { Range } from "@/lib/range.ts";
-import { SEARCH_MAX_CHARS, SESSIONS_PATH, parseSessionsQuery, sessionsHref, type SessionsState } from "@/lib/sessions.query.ts";
+import { SEARCH_MAX_CHARS, SESSIONS_PATH, parseSessionsQuery, sessionsCountLabel, sessionsHref, type SessionsState } from "@/lib/sessions.query.ts";
 
 /** Typing pause before the search is written to the URL (and fetched). */
 const SEARCH_DEBOUNCE_MS = 250;
@@ -85,35 +85,29 @@ export function SessionsPage({ since, range, dataVersion, params }: { since: str
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader
-        title="Sessions"
-        description={
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="tabular-nums">{data ? `${fmtInt(total)} ${total === 1 ? "session" : "sessions"}` : "Loading…"} · {RANGE_LABEL[range]}</span>
-            {state.project && (
-              <span className="inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-xs">
-                <span className="text-fg-subtle">project:</span>
-                <span className="font-mono text-foreground" title={state.project}>{fmtProject(state.project)}</span>
-                <button type="button" aria-label="Remove project filter" onClick={() => go({ project: "" })} className="rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
-                  <X aria-hidden className="size-3" />
-                </button>
-              </span>
-            )}
-          </span>
-        }
-        actions={
-          <Input
-            ref={input}
-            type="search"
-            value={draft}
-            maxLength={SEARCH_MAX_CHARS}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Search title, id or project…"
-            aria-label="Search sessions"
-            className="h-8 w-full sm:w-70"
-          />
-        }
-      />
+      {/* Search is a direct flex item here (not PageHeader `actions`, which is shrink-to-fit) so `w-full` spans the row on mobile. */}
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <PageHeader
+          title="Sessions"
+          description={
+            // nowrap + a padding-free chip: toggling the chip never changes this line's height.
+            <span className="flex min-w-0 items-center gap-x-3">
+              <span className="shrink-0 tabular-nums">{sessionsCountLabel(data?.total, !!error)} · {RANGE_LABEL[range]}</span>
+              {state.project && <ProjectChip cwd={state.project} onRemove={() => go({ project: "" })} />}
+            </span>
+          }
+        />
+        <Input
+          ref={input}
+          type="search"
+          value={draft}
+          maxLength={SEARCH_MAX_CHARS}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Search title, id or project…"
+          aria-label="Search sessions"
+          className="h-8 w-full sm:w-70"
+        />
+      </div>
       <DataTable
         label="Sessions"
         rows={data?.items}
@@ -136,7 +130,7 @@ export function SessionsPage({ since, range, dataVersion, params }: { since: str
           )
         }
       />
-      {data && total > PAGE_SIZE && (
+      {data && !error && total > PAGE_SIZE && (
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
           <span className="tabular-nums">Showing {fmtInt(first)}–{fmtInt(last)} of {fmtInt(total)}</span>
           <span className="flex gap-1">

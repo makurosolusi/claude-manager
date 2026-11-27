@@ -1,5 +1,6 @@
 import { SESSION_SORTS, type SessionSort } from "../../server/dashboard.types.ts";
 import type { SortDir } from "@/components/data.table.tsx";
+import { fmtInt } from "@/lib/format.ts";
 import { hashHref } from "@/lib/hash.route.ts";
 import { DEFAULT_RANGE, type Range } from "@/lib/range.ts";
 
@@ -35,6 +36,13 @@ export function parseSessionsQuery(params: URLSearchParams): SessionsState {
     project: params.get("project") ?? "",
     page: Number.isInteger(page) && page > 1 ? page : 1,
   };
+}
+
+/** Subtitle count: "—" on error so a stale total from the last good fetch is never shown. */
+export function sessionsCountLabel(total: number | undefined, failed: boolean): string {
+  if (failed) return "—";
+  if (total === undefined) return "Loading…";
+  return `${fmtInt(total)} ${total === 1 ? "session" : "sessions"}`;
 }
 
 /** Hash link for list state + range; default values are left out so URLs stay short. */

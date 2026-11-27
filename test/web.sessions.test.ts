@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { parseHash } from "../src/web/lib/hash.route.ts";
-import { SEARCH_MAX_CHARS, parseSessionsQuery, sessionsHref, type SessionsState } from "../src/web/lib/sessions.query.ts";
+import { SEARCH_MAX_CHARS, parseSessionsQuery, sessionsCountLabel, sessionsHref, type SessionsState } from "../src/web/lib/sessions.query.ts";
 
 const parse = (qs: string) => parseSessionsQuery(new URLSearchParams(qs));
 const defaults: SessionsState = { q: "", sort: "last", dir: "desc", project: "", page: 1 };
@@ -38,4 +38,11 @@ test("non-default range and state are kept and round-trip", () => {
 
 test("blank search is not written", () => {
   expect(sessionsHref({ ...defaults, sort: "tokens", dir: "desc", q: "   " }, "all")).toBe("#/sessions?range=all&sort=tokens");
+});
+
+test("count label hides a stale total on error", () => {
+  expect(sessionsCountLabel(42, true)).toBe("—");
+  expect(sessionsCountLabel(undefined, false)).toBe("Loading…");
+  expect(sessionsCountLabel(1, false)).toBe("1 session");
+  expect(sessionsCountLabel(1234, false)).toBe("1,234 sessions");
 });

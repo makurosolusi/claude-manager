@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AgentNode } from "../src/server/dashboard.types.ts";
+import { getJson } from "../src/web/lib/api.client.ts";
 import { flattenAgentTree } from "../src/web/lib/agent.tree.ts";
 import { fmtTime, fmtTokens, fmtUsd, shortPath } from "../src/web/lib/format.ts";
 import { hashHref, parseHash, withParams } from "../src/web/lib/hash.route.ts";
@@ -66,4 +67,17 @@ test("withPollError surfaces a failed poll even without prior meta", () => {
   expect(withPollError(meta, undefined)).toBe(meta);
   expect(withPollError(meta, new Error("GET /api/meta failed (500): boom"))).toEqual({ ...meta, error: "GET /api/meta failed (500): boom" });
   expect(withPollError(undefined, new Error("x"))).toEqual({ synced_at: null, changed_at: null, interval_ms: META_POLL_FALLBACK_MS, error: "x" });
+});
+
+test("getJson names the endpoint on network failure and keeps the cause", async () => {
+  const real = globalThis.fetch;
+  const cause = new TypeError("Failed to fetch");
+  globalThis.fetch = (() => Promise.reject(cause)) as unknown as typeof fetch; // test-only
+  try {
+    const err = (await getJson("/api/sessions", { page: 1 }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toBe("GET /api/sessions failed: network error (Failed to fetch)");
+    expect(err.cause).toBe(cause);
+  } finally {
+    globalThis.fetch = real;
+  }
 });

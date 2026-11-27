@@ -41,7 +41,7 @@ export function KpiCard({ label, value, delta, hint }: KpiCardProps) {
   return (
     <section className="flex min-w-0 flex-col gap-2 rounded-lg border bg-card p-4">
       <h2 className="text-[13px] font-medium text-muted-foreground">{label}</h2>
-      <p className="truncate text-[28px] leading-none font-semibold tracking-[-0.02em] text-card-foreground tabular-nums">{value}</p>
+      <div className="truncate text-[28px] leading-none font-semibold tracking-[-0.02em] text-card-foreground tabular-nums">{value}</div>
       {(delta || hint) && (
         <div className="flex flex-col gap-0.5">
           {delta && <DeltaLine {...delta} />}
