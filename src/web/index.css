@@ -112,6 +112,14 @@
   --color-tone-neutral-fg: var(--tone-neutral-fg);
   --color-tone-neutral-bg: var(--tone-neutral-bg);
   --color-tone-neutral-border: var(--tone-neutral-border);
+  --color-ext-1: var(--ext-1);
+  --color-ext-1-fg: var(--ext-1-fg);
+  --color-ext-2: var(--ext-2);
+  --color-ext-2-fg: var(--ext-2-fg);
+  --color-ext-3: var(--ext-3);
+  --color-ext-3-fg: var(--ext-3-fg);
+  --color-ext-4: var(--ext-4);
+  --color-ext-4-fg: var(--ext-4-fg);
   --radius-sm: calc(var(--radius) - 4px); /* badge, dot chip: 4px */
   --radius-md: calc(var(--radius) - 2px); /* controls: 6px */
   --radius-lg: var(--radius); /* panels: 8px */
@@ -214,6 +222,14 @@
   --tone-neutral-fg: #555555;
   --tone-neutral-bg: #f3f3f3;
   --tone-neutral-border: #d1d1d1;
+  --ext-1: #8a8f00;
+  --ext-1-fg: #6d7100;
+  --ext-2: #00989b;
+  --ext-2-fg: #00787b;
+  --ext-3: #7381de;
+  --ext-3-fg: #5a66b9;
+  --ext-4: #d16587;
+  --ext-4-fg: #ad4c6c;
 }
 
 /* Dark palette. Written twice (OS preference / explicit choice) because CSS cannot
@@ -311,6 +327,14 @@
     --tone-neutral-fg: #cecece;
     --tone-neutral-bg: #222222;
     --tone-neutral-border: #484848;
+    --ext-1: #898d18;
+    --ext-1-fg: #898d18;
+    --ext-2: #009799;
+    --ext-2-fg: #009799;
+    --ext-3: #7381d7;
+    --ext-3-fg: #7381d7;
+    --ext-4: #f090ab;
+    --ext-4-fg: #f090ab;
   }
 }
 
@@ -406,6 +430,14 @@
   --tone-neutral-fg: #cecece;
   --tone-neutral-bg: #222222;
   --tone-neutral-border: #484848;
+  --ext-1: #898d18;
+  --ext-1-fg: #898d18;
+  --ext-2: #009799;
+  --ext-2-fg: #009799;
+  --ext-3: #7381d7;
+  --ext-3-fg: #7381d7;
+  --ext-4: #f090ab;
+  --ext-4-fg: #f090ab;
 }
 
 @layer base {
