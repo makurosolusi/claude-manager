@@ -42,5 +42,5 @@ export const requestColumns = (roles?: readonly RoleMeta[]): Column<RequestRow>[
   { id: "stop", header: "Stop", cell: (r) => <StopReasonBadge reason={r.stop_reason} />, width: "w-32", hideBelow: "md" },
   { id: "context", header: "Context", cell: (r) => fmtTokens(r.context), align: "right", sortKey: "context", width: "w-20", hideBelow: "sm" },
   { id: "tokens", header: "Tokens", cell: (r) => <TokenCell usage={r} />, align: "right", sortKey: "tokens", width: "w-20", hideBelow: "lg" },
-  { id: "cost", header: "Cost (est.)", cell: (r) => <CostCell usd={r.cost_usd} heat="request" />, align: "right", sortKey: "cost", width: "w-24" },
+  { id: "cost", header: "Cost (est.)", cell: (r) => <CostCell usd={r.cost_usd} />, align: "right", sortKey: "cost", width: "w-24" },
 ];

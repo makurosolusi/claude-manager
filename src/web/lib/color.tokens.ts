@@ -47,15 +47,6 @@ export const ROLE_CLASSES: readonly HueClasses[] = [
   { badge: "border-role-6-border bg-role-6-bg text-role-6-fg", text: "text-role-6-fg", dot: "bg-role-6" },
 ];
 
-/** Cost-heat bar fills, step 1..5 (index 0..4). */
-export const HEAT_CLASSES: readonly string[] = [
-  "bg-heat-1",
-  "bg-heat-2",
-  "bg-heat-3",
-  "bg-heat-4",
-  "bg-heat-5",
-];
-
 /** Preset role → colour slot; fixed so presets never move (tier order think → work → basic). */
 export const PRESET_SLOTS: Readonly<Record<string, RoleSlot>> = {
   manager: 1,

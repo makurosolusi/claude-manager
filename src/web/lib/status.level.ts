@@ -3,20 +3,12 @@ import type { ToneKey } from "./color.tokens.ts";
 import { SESSION_STATUS_MIN } from "../../server/dashboard.types.ts";
 
 export type SessionStatus = "live" | "idle" | "ended";
-/** Cost-heat scale: per request, per session, or aggregated (project/role/model/group). */
-export type HeatScale = "request" | "session" | "aggregate";
 
 const MINUTE_MS = 60_000;
 /** Cache-hit ratio at or above which caching is good (success). */
 export const CACHE_GOOD = 0.8;
 /** Cache-hit ratio at or above which caching is poor-but-present (warning); below is danger. */
 export const CACHE_POOR = 0.5;
-/** Upper bounds (USD) of heat steps 1-4 per scale; above the last bound is step 5. Absolute, so one cost looks the same on every page. */
-export const COST_HEAT_STEPS: Record<HeatScale, readonly number[]> = {
-  request: [0.01, 0.05, 0.2, 1],
-  session: [0.1, 1, 5, 20],
-  aggregate: [1, 10, 50, 200],
-};
 
 /** Session status from its last activity: live ≤ 5 min, idle ≤ 15 min, else ended. Missing/invalid timestamp → ended. */
 export function sessionStatus(lastTs: string | null | undefined, now: number): SessionStatus {
@@ -42,8 +34,3 @@ export const STOP_TONE: Record<string, ToneKey> = {
 };
 /** Tone for a stop reason (null/unknown → neutral). */
 export const stopTone = (reason: string | null): ToneKey => (reason && Object.hasOwn(STOP_TONE, reason) ? STOP_TONE[reason]! : "neutral");
-
-/** Heat step 1..5 for a USD cost on a scale; step = 1 + number of bounds the cost exceeds (a cost equal to a bound stays in the lower step). */
-export function costHeat(usd: number, scale: HeatScale): 1 | 2 | 3 | 4 | 5 {
-  return (1 + COST_HEAT_STEPS[scale].filter((bound) => usd > bound).length) as 1 | 2 | 3 | 4 | 5;
-}

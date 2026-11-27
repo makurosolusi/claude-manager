@@ -112,11 +112,6 @@
   --color-tone-neutral-fg: var(--tone-neutral-fg);
   --color-tone-neutral-bg: var(--tone-neutral-bg);
   --color-tone-neutral-border: var(--tone-neutral-border);
-  --color-heat-1: var(--heat-1);
-  --color-heat-2: var(--heat-2);
-  --color-heat-3: var(--heat-3);
-  --color-heat-4: var(--heat-4);
-  --color-heat-5: var(--heat-5);
   --radius-sm: calc(var(--radius) - 4px); /* badge, dot chip: 4px */
   --radius-md: calc(var(--radius) - 2px); /* controls: 6px */
   --radius-lg: var(--radius); /* panels: 8px */
@@ -219,11 +214,6 @@
   --tone-neutral-fg: #555555;
   --tone-neutral-bg: #f3f3f3;
   --tone-neutral-border: #d1d1d1;
-  --heat-1: #e1ad63;
-  --heat-2: #cd9130;
-  --heat-3: #b37903;
-  --heat-4: #956300;
-  --heat-5: #774f02;
 }
 
 /* Dark palette. Written twice (OS preference / explicit choice) because CSS cannot
@@ -321,11 +311,6 @@
     --tone-neutral-fg: #cecece;
     --tone-neutral-bg: #222222;
     --tone-neutral-border: #484848;
-    --heat-1: #5e4216;
-    --heat-2: #845a0f;
-    --heat-3: #ab7302;
-    --heat-4: #d28f09;
-    --heat-5: #f5ae39;
   }
 }
 
@@ -421,11 +406,6 @@
   --tone-neutral-fg: #cecece;
   --tone-neutral-bg: #222222;
   --tone-neutral-border: #484848;
-  --heat-1: #5e4216;
-  --heat-2: #845a0f;
-  --heat-3: #ab7302;
-  --heat-4: #d28f09;
-  --heat-5: #f5ae39;
 }
 
 @layer base {

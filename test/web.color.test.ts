@@ -6,7 +6,7 @@ import { ShareBar } from "../src/web/components/share.bar.tsx";
 import { FAMILY_CLASSES, PRESET_SLOTS, fnv1a32, roleColor, type RoleMeta } from "../src/web/lib/color.tokens.ts";
 import { FAMILY_ICON, KPI_ICON, UI_ICON, toolIcon } from "../src/web/lib/icon.map.ts";
 import { FAMILY_COLOR, FAMILY_LABEL, modelFamily, tierFamily, tierOf } from "../src/web/lib/model.tier.ts";
-import { COST_HEAT_STEPS, cacheLevel, costHeat, sessionStatus, stopTone } from "../src/web/lib/status.level.ts";
+import { cacheLevel, sessionStatus, stopTone } from "../src/web/lib/status.level.ts";
 
 const NOW = Date.parse("2026-11-27T12:00:00Z");
 const ago = (min: number) => new Date(NOW - min * 60_000).toISOString();
@@ -30,19 +30,6 @@ test("roleColor: neutral, presets, hashed custom", () => {
   expect(roleColor("constructor").custom).toBe(true); // prototype keys are not presets
   const meta: RoleMeta[] = [{ name: "coder", tier: "work", source: "custom" }];
   expect(roleColor("coder", meta).custom).toBe(true);
-});
-
-test("costHeat buckets are absolute log steps per scale", () => {
-  expect(costHeat(0, "request")).toBe(1);
-  expect(costHeat(0.01, "request")).toBe(1);
-  expect(costHeat(0.011, "request")).toBe(2);
-  expect(costHeat(1, "request")).toBe(4);
-  expect(costHeat(1.01, "request")).toBe(5);
-  expect(costHeat(0.5, "session")).toBe(2);
-  expect(costHeat(25, "session")).toBe(5);
-  expect(costHeat(10, "aggregate")).toBe(2);
-  expect(costHeat(500, "aggregate")).toBe(5);
-  for (const bounds of Object.values(COST_HEAT_STEPS)) expect(bounds).toHaveLength(4);
 });
 
 test("sessionStatus thresholds 5 / 15 minutes", () => {
