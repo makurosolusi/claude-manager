@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
-import { pageWindow } from "../src/web/components/table.pagination.tsx";
+import { createElement } from "react";
+import { renderToString } from "react-dom/server";
+import { pageWindow, TablePagination } from "../src/web/components/table.pagination.tsx";
 import { nextSort, visibleColumns, type Column } from "../src/web/components/data.table.tsx";
-import { primaryIndex } from "../src/web/components/data.table.body.tsx";
+import { fillIndex, primaryIndex, splitError } from "../src/web/components/data.table.body.tsx";
 import { hashHref, parseHash, withParams } from "../src/web/lib/hash.route.ts";
 import { DEFAULT_PAGE_SIZE, parseTableQuery, patchTable, tableParams, type TableSpec, type TableState } from "../src/web/lib/table.query.ts";
 
@@ -88,4 +90,34 @@ test("visibleColumns keeps the primary column even when hidden lists it", () => 
   const col = (id: string, primary?: boolean): Column<number> => ({ id, header: id, cell: () => id, primary });
   const cols = [col("status"), col("session", true), col("m")];
   expect(visibleColumns(cols, ["status", "session", "m"]).map((c) => c.id)).toEqual(["session"]);
+});
+
+const col = (id: string, extra: Partial<Column<unknown>> = {}): Column<unknown> => ({ id, header: id, cell: () => null, ...extra });
+
+test("fillIndex: the `fill` column wins, else the primary column, else the first", () => {
+  expect(fillIndex([col("a"), col("b")])).toBe(0);
+  expect(fillIndex([col("a"), col("b", { primary: true })])).toBe(1);
+  expect(fillIndex([col("a", { primary: true }), col("b", { fill: true })])).toBe(1);
+});
+
+test("splitError puts the human sentence first and the transport text in the detail", () => {
+  expect(splitError("Couldn't load roles. GET /api/roles failed (500): boom")).toEqual({ title: "Couldn't load roles.", detail: "GET /api/roles failed (500): boom" });
+  expect(splitError("GET /api/x failed")).toEqual({ title: "Couldn't load this data.", detail: "GET /api/x failed" });
+});
+
+const pager = (p: { total: number; sizes?: number[]; noun?: string; pageSize?: number }) =>
+  // React splits text nodes with comment markers; drop them so text can be matched.
+  renderToString(createElement(TablePagination, { page: 1, pageSize: p.pageSize ?? 50, label: "T", onPage: () => {}, onPageSize: () => {}, ...p })).replaceAll("<!-- -->", "");
+
+test("TablePagination: a single page shows only the count and noun, no buttons or size select", () => {
+  const html = pager({ total: 7, noun: "projects" });
+  expect(html).toContain("7 projects");
+  expect(html).not.toContain("<button");
+  expect(html).not.toContain("<select");
+});
+
+test("TablePagination: size select only when it can change something", () => {
+  expect(pager({ total: 131 })).toContain("<select");
+  expect(pager({ total: 131 })).toContain("Showing 1");
+  expect(pager({ total: 60, sizes: [25], pageSize: 25 })).not.toContain("<select"); // single size
 });

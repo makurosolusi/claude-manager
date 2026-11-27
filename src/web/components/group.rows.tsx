@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, Sigma } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { Column } from "@/components/data.table.tsx";
 import { cn } from "@/lib/cn.ts";
 import { fmtInt } from "@/lib/format.ts";
@@ -23,20 +23,22 @@ interface GroupRowsProps<T> {
   columns: Column<T>[];
   /** Index of the primary column, which holds the toggle button. */
   primary: number;
+  /** Index of the column that takes the leftover width. */
+  fill: number;
   rowH: string;
   renderRow: (r: T) => ReactNode;
   cellClass: (c: Column<T>) => string;
 }
 
 /** A `<tbody>` holding a group header row (button with aria-expanded) followed by its rows when open. */
-export function GroupRows<T>({ spec: g, columns, primary, rowH, renderRow, cellClass }: GroupRowsProps<T>) {
+export function GroupRows<T>({ spec: g, columns, primary, rowH, renderRow, cellClass, fill }: GroupRowsProps<T>) {
   const id = `${useId()}-${g.key.replace(/\W/g, "_")}`;
   const Chevron = g.open ? ChevronDown : ChevronRight;
   return (
     <tbody id={id}>
       <tr className="h-9 border-b bg-muted/40">
         {columns.map((c, i) => (
-          <td key={c.id} className={cn("px-3 text-[13px]", cellClass(c), i === primary && "w-full max-w-0")}>
+          <td key={c.id} className={cn("px-3 text-[13px]", cellClass(c), i === fill && "w-full max-w-0")}>
             {i === primary ? (
               <button
                 type="button"
@@ -45,16 +47,14 @@ export function GroupRows<T>({ spec: g, columns, primary, rowH, renderRow, cellC
                 onClick={g.onToggle}
                 className="flex w-full min-w-0 items-center gap-2 rounded-sm text-left font-medium outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
               >
+                <span className="sr-only">Subtotal </span>
                 <Chevron aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
                 <span className="truncate">{g.label}</span>
                 <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground tabular-nums">{fmtInt(g.count)}</span>
               </button>
             ) : (
               g.totals[c.id] !== undefined && (
-                <span className="inline-flex items-center gap-1 font-medium">
-                  <Sigma aria-label="Subtotal" className="size-3 text-muted-foreground" />
-                  {g.totals[c.id]}
-                </span>
+                <span className="font-semibold">{g.totals[c.id]}</span>
               )
             )}
           </td>

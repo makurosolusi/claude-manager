@@ -1,3 +1,4 @@
+import { FAMILIES } from "../../server/dashboard.types.ts";
 import type { TableSpec } from "@/lib/table.query.ts";
 
 /** Facet / group dimensions of the requests table (names match the API params). */
@@ -11,7 +12,7 @@ export const REQUEST_SPEC: TableSpec = {
   defaultSort: "ts",
   defaultDir: "desc",
   groups: ["none", "agent", "family", "stop"],
-  facets: { agent: "free", family: ["opus", "sonnet", "haiku", "other"], stop: "free", tool: "free" },
+  facets: { agent: "free", family: FAMILIES, stop: "free", tool: "free" },
 };
 
 /** Requests (or, with `groupsBy`, groups) endpoint path of one session; pass filters in the `useApi` query. */

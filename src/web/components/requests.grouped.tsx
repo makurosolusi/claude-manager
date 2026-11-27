@@ -89,7 +89,7 @@ export function GroupedRequests({ sessionId, state, go, columns, hidden, density
         onRetry={() => setRetry((n) => n + 1)}
       />
       {api.data && all.length === 0 && <p className="p-6 text-center text-sm text-muted-foreground">{empty}</p>}
-      <TablePagination label="Groups" page={state.page} pageSize={state.size} total={all.length} onPage={(page) => go({ page })} onPageSize={(size) => go({ size })} />
+      <TablePagination label="Groups" noun="groups" page={state.page} pageSize={state.size} total={all.length} onPage={(page) => go({ page })} onPageSize={(size) => go({ size })} />
     </>
   );
 }

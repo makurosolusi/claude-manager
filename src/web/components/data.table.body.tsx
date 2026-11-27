@@ -16,6 +16,20 @@ export const colClass = <T,>(c: Column<T>) => cn(c.align === "right" && "text-ri
 /** Index of the column that fills the leftover width and carries the row link: the first with `primary`, else the first column. */
 export const primaryIndex = <T,>(columns: Column<T>[]): number => Math.max(0, columns.findIndex((c) => c.primary));
 
+/** Index of the column that takes the leftover width: the first with `fill`, else the primary one. */
+export const fillIndex = <T,>(columns: Column<T>[]): number => {
+  const i = columns.findIndex((c) => c.fill);
+  return i >= 0 ? i : primaryIndex(columns);
+};
+
+const FALLBACK_ERROR = "Couldn't load this data.";
+
+/** Splits "Couldn't load X. GET /api/x failed (500): boom" into the sentence and the technical detail; other messages get a generic sentence. */
+export function splitError(message: string): { title: string; detail: string } {
+  const m = /^(Couldn't [^.]*\.)\s+([\s\S]+)$/.exec(message);
+  return m ? { title: m[1]!, detail: m[2]! } : { title: FALLBACK_ERROR, detail: message };
+}
+
 function StateRow({ span, children, alert, tall }: { span: number; children: ReactNode; alert?: boolean; tall?: boolean }) {
   return (
     <tr>
@@ -38,12 +52,13 @@ export function TableBody<T>(p: DataTableProps<T> & { columns: Column<T>[] }) {
   const rowH = ROW_H[density];
   const span = columns.length;
   const pi = primaryIndex(columns);
+  const fi = fillIndex(columns);
   const renderRow = (r: T) => {
     const href = rowHref?.(r);
     return (
       <tr key={rowKey(r)} onClick={href ? (e) => go(e, href) : undefined} className={cn("border-b hover:bg-surface-hover", rowH, href && "cursor-pointer")}>
         {columns.map((c, i) => (
-          <td key={c.id} className={cn("px-3 text-[13px]", colClass(c), i === pi && "w-full max-w-0")}>
+          <td key={c.id} className={cn("px-3 text-[13px]", colClass(c), i === fi && "w-full max-w-0")}>
             {i === pi && href ? (
               <a href={href} className="block min-w-0 truncate rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring">
                 {c.cell(r)}
@@ -58,20 +73,27 @@ export function TableBody<T>(p: DataTableProps<T> & { columns: Column<T>[] }) {
   };
 
   if (p.error) {
+    const { title, detail } = splitError(p.error.message);
     return (
       <tbody>
-        <StateRow span={span} alert>
-          <span className="inline-flex items-center gap-2">
-            <TriangleAlert aria-hidden className="size-4 text-destructive" />
-            <span className="text-foreground">{p.error.message}</span>
-            {p.onRetry && <Button size="xs" variant="outline" onClick={p.onRetry}>Retry</Button>}
+        <StateRow span={span} alert tall>
+          <span className="inline-flex flex-col items-center gap-2">
+            <span className="inline-flex items-center gap-2">
+              <TriangleAlert aria-hidden className="size-4 text-destructive" />
+              <span className="text-foreground">{title}</span>
+              {p.onRetry && <Button size="xs" variant="outline" onClick={p.onRetry}>Retry</Button>}
+            </span>
+            <details className="font-mono text-xs text-fg-subtle">
+              <summary className="cursor-pointer">Details</summary>
+              {detail}
+            </details>
           </span>
         </StateRow>
       </tbody>
     );
   }
   if (p.groups) {
-    return p.groups.map((g) => <GroupRows key={g.key} spec={g} columns={columns} primary={pi} rowH={rowH} renderRow={renderRow} cellClass={colClass} />);
+    return p.groups.map((g) => <GroupRows key={g.key} spec={g} columns={columns} primary={pi} fill={fi} rowH={rowH} renderRow={renderRow} cellClass={colClass} />);
   }
   if (!rows) {
     return (

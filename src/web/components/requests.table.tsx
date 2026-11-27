@@ -1,11 +1,11 @@
 import { useState } from "react";
 import type { RequestRow, RequestsResponse } from "../../server/session.detail.types.ts";
+import { NoMatchState } from "@/components/client.table.tsx";
 import { DataTable } from "@/components/data.table.tsx";
 import { GroupedRequests } from "@/components/requests.grouped.tsx";
 import { requestColumns } from "@/components/requests.columns.tsx";
 import { TablePagination } from "@/components/table.pagination.tsx";
 import { TableToolbar } from "@/components/table.toolbar.tsx";
-import { Button } from "@/components/ui/button.tsx";
 import type { RoleMeta } from "@/lib/color.tokens.ts";
 import { useApi } from "@/lib/api.client.ts";
 import { fmtInt } from "@/lib/format.ts";
@@ -36,18 +36,13 @@ export function RequestsTable({ sessionId, roles, tick = 0 }: { sessionId: strin
   );
   const filtered = state.q !== "" || Object.values(state.filters).some((v) => v.length > 0);
   const reset = () => go({ q: "", filters: {}, group: NO_GROUP });
-  const empty = filtered ? (
-    <span className="inline-flex flex-wrap items-center justify-center gap-2">
-      No requests match these filters.
-      <Button size="xs" variant="outline" onClick={reset}>Reset filters</Button>
-    </span>
-  ) : "No requests recorded for this session.";
+  const empty = filtered ? <NoMatchState noun="requests" onReset={reset} /> : "No requests recorded for this session.";
   const total = flat.data?.total;
 
   return (
     <div className="flex flex-col gap-3">
       <TableToolbar
-        search={{ value: state.q, onChange: (q) => go({ q }), placeholder: "Search model, agent, tool or stop reason…", label: "Search requests" }}
+        search={{ value: state.q, onChange: (q) => go({ q }), placeholder: "Search requests…", label: "Search requests" }}
         facets={requestFacets(flat.data?.facets, state, (filters) => go({ filters }))}
         group={{ value: state.group, options: GROUP_OPTIONS, onChange: (group) => go({ group }) }}
         view={{
@@ -78,7 +73,7 @@ export function RequestsTable({ sessionId, roles, tick = 0 }: { sessionId: strin
             empty={empty}
           />
           {flat.data && !flat.error && (
-            <TablePagination label="Requests" page={state.page} pageSize={state.size} total={flat.data.total} onPage={(page) => go({ page })} onPageSize={(size) => go({ size })} />
+            <TablePagination label="Requests" noun="requests" page={state.page} pageSize={state.size} total={flat.data.total} onPage={(page) => go({ page })} onPageSize={(size) => go({ size })} />
           )}
         </>
       )}

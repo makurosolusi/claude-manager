@@ -17,6 +17,8 @@ export interface Column<T> {
   width?: string; // Tailwind width class, e.g. "w-24"; leave the primary column flexible
   /** Fills the leftover width, truncates, and carries the row link / group label; default = the first column. */
   primary?: boolean;
+  /** Takes the leftover width and truncates (`w-full max-w-0`); default = the primary column. Give the primary column a `width` when another column fills. */
+  fill?: boolean;
   hideBelow?: "sm" | "md" | "lg";
   hideable?: boolean; // default true; the primary column is never hideable
   total?: (rows: T[]) => ReactNode; // present on any column = a footer row with totals
@@ -31,6 +33,8 @@ export interface DataTableProps<T> {
   onSort?: (s: Sort) => void;
   density?: "compact" | "comfortable";
   loading?: boolean;
+  /** Old data of the previous query is on screen while the new one loads: dimmed and aria-busy. */
+  stale?: boolean;
   error?: Error;
   onRetry?: () => void;
   empty?: ReactNode;
@@ -56,7 +60,7 @@ function HeaderCell<T>({ c, sort, onSort }: { c: Column<T>; sort?: Sort; onSort?
       scope="col"
       aria-sort={sortable ? (active ? ARIA_SORT[sort!.dir] : "none") : undefined}
       // sticky only ≥sm: below that the wrapper scrolls horizontally, which would trap a sticky header.
-      className={cn("z-10 h-9 border-b bg-background px-3 text-xs font-medium whitespace-nowrap text-muted-foreground sm:sticky sm:top-12", colClass(c), c.align !== "right" && "text-left")}
+      className={cn("z-10 h-9 border-b bg-[var(--table-bg,var(--background))] px-3 text-xs font-medium whitespace-nowrap text-muted-foreground sm:sticky sm:top-12", colClass(c), c.align !== "right" && "text-left")}
     >
       {!sortable ? c.header : (
         <button
@@ -83,7 +87,7 @@ export function DataTable<T>(p: DataTableProps<T>) {
   const columns = visibleColumns(p.columns, p.hidden);
   return (
     <div className="w-full max-sm:overflow-x-auto">
-      <table aria-label={p.label} aria-busy={p.loading || undefined} className="w-full border-collapse">
+      <table aria-label={p.label} aria-busy={p.loading || p.stale || undefined} className={cn("w-full border-collapse transition-opacity", p.stale && "opacity-60")}>
         <thead>
           <tr>
             {columns.map((c) => (
