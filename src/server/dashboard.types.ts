@@ -13,7 +13,7 @@ export const SESSION_SORTS = ["last", "cost", "requests", "tokens", "agents"] as
 export type SessionSort = (typeof SESSION_SORTS)[number];
 export interface SessionQuery { sort: SessionSort; dir: "asc" | "desc"; q?: string }
 /** Model families as the SQL helper and the web bundle name them. */
-export const FAMILIES = ["opus", "sonnet", "haiku", "other"] as const;
+export const FAMILIES = ["opus", "sonnet", "haiku", "fable", "other"] as const;
 export const SESSION_STATUSES = ["live", "idle", "ended"] as const;
 /** Minutes since `last_ts` up to which a session is live / idle; older = ended. */
 export const SESSION_STATUS_MIN = { live: 5, idle: 15 } as const;

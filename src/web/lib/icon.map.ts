@@ -1,16 +1,16 @@
 import {
-  Activity, ArrowDown, ArrowRight, ArrowUp, Ban, Bot, Brain, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft,
+  Activity, ArrowDown, ArrowRight, ArrowUp, Ban, BookOpen, Boxes, Bot, Brain, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft,
   ChevronsRight, ChevronsUpDown, CircleCheck, CircleHelp, CirclePause, CircleSlash, Clock, Code, Coins, Columns3, Compass, Copy,
   Cpu, DatabaseZap, Download, Ellipsis, Feather, FilePen, FilePlus, FileText, FolderGit2, FolderOpen, FolderSearch, FunnelX,
   Gauge, Gem, GitBranch, Globe, Group, Hammer, Inbox, Layers, LayoutDashboard, Leaf, ListFilter, ListTodo, LoaderCircle,
   MessageSquare, MessagesSquare, Monitor, Moon, NotebookPen, OctagonX, PenLine, Plug, Radio, RotateCcw, Rows3, Rows4, Scissors,
-  Search, SearchX, ShieldCheck, Shrink, Sigma, SquareTerminal, Sun, Telescope, TextSearch, Timer, TriangleAlert, UserRound, Users,
+  Search, SearchX, ShieldCheck, Shrink, SlidersHorizontal, SquareTerminal, Sun, Telescope, TextSearch, Timer, TriangleAlert, UserRound, Users,
   WifiOff, Workflow, Wrench, X, Zap, type LucideIcon,
 } from "lucide-react";
 import type { ModelFamily, TierKey } from "./model.tier.ts";
 
 /** Icon per model family. */
-export const FAMILY_ICON: Record<ModelFamily, LucideIcon> = { opus: Gem, sonnet: Feather, haiku: Leaf, other: Cpu };
+export const FAMILY_ICON: Record<ModelFamily, LucideIcon> = { opus: Gem, sonnet: Feather, haiku: Leaf, fable: BookOpen, other: Cpu };
 /** Icon per tier (think/work/basic/other). */
 export const TIER_ICON: Record<TierKey, LucideIcon> = { think: Brain, work: Hammer, basic: Zap, other: CircleHelp };
 /** Icon per preset role. */
@@ -42,7 +42,7 @@ export const UI_ICON = {
   sortAsc: ArrowUp, sortDesc: ArrowDown, sortIdle: ChevronsUpDown, collapsed: ChevronRight, expanded: ChevronDown, check: Check, remove: X,
   empty: Inbox, noMatch: SearchX, error: TriangleAlert, retry: RotateCcw, offline: WifiOff, loading: LoaderCircle,
   themeSystem: Monitor, themeLight: Sun, themeDark: Moon,
-  copy: Copy, viewAll: ArrowRight, unpriced: CircleHelp, subtotal: Sigma, back: ChevronLeft,
+  copy: Copy, viewAll: ArrowRight, unpriced: CircleHelp, model: Boxes, tier: SlidersHorizontal, back: ChevronLeft,
 } satisfies Record<string, LucideIcon>;
 
 const TOOL_ICON: Record<string, LucideIcon> = {

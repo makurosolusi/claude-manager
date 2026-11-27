@@ -1,8 +1,11 @@
 import { expect, test } from "bun:test";
 import { Wrench, Plug, Bot, FileText } from "lucide-react";
-import { PRESET_SLOTS, fnv1a32, roleColor, type RoleMeta } from "../src/web/lib/color.tokens.ts";
-import { toolIcon } from "../src/web/lib/icon.map.ts";
-import { FAMILY_COLOR, tierFamily } from "../src/web/lib/model.tier.ts";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { ShareBar } from "../src/web/components/share.bar.tsx";
+import { FAMILY_CLASSES, PRESET_SLOTS, fnv1a32, roleColor, type RoleMeta } from "../src/web/lib/color.tokens.ts";
+import { FAMILY_ICON, KPI_ICON, UI_ICON, toolIcon } from "../src/web/lib/icon.map.ts";
+import { FAMILY_COLOR, FAMILY_LABEL, modelFamily, tierFamily, tierOf } from "../src/web/lib/model.tier.ts";
 import { COST_HEAT_STEPS, cacheLevel, costHeat, sessionStatus, stopTone } from "../src/web/lib/status.level.ts";
 
 const NOW = Date.parse("2026-11-27T12:00:00Z");
@@ -78,4 +81,36 @@ test("tier wears the colour of its configured model family", () => {
   expect(tierFamily("basic", { basic: "claude-haiku-4-5" })).toBe("haiku");
   expect(tierFamily("other", { think: "claude-opus-4-7" })).toBe("other");
   expect(FAMILY_COLOR.haiku).toBe("var(--model-haiku)");
+});
+
+test("fable is the 4th family with its own colour, icon and no default tier", () => {
+  expect(modelFamily("fable-5-2")).toBe("fable");
+  expect(modelFamily("claude-FABLE-5-2[1m]")).toBe("fable");
+  expect(FAMILY_COLOR.fable).toBe("var(--model-fable)");
+  expect(FAMILY_LABEL.fable).toBe("Fable");
+  expect(FAMILY_CLASSES.fable.dot).toBe("bg-model-fable");
+  expect(FAMILY_ICON.fable).not.toBe(FAMILY_ICON.other);
+  expect(tierOf("fable-5-2")).toBe("other");
+  expect(tierOf("fable-5-2", { think: "fable-5-2" })).toBe("think");
+});
+
+test("icon map: facet icons are distinct from family and KPI icons", () => {
+  const reserved = [...Object.values(FAMILY_ICON), ...Object.values(KPI_ICON)];
+  expect(reserved).not.toContain(UI_ICON.model);
+  expect(reserved).not.toContain(UI_ICON.tier);
+  expect(UI_ICON.model).not.toBe(UI_ICON.tier);
+  for (const f of ["opus", "sonnet", "haiku", "fable", "other"] as const) expect(FAMILY_ICON[f]).toBeDefined();
+});
+
+test("ShareBar clamps and formats: 0, <0.1%, 100%, out of range", () => {
+  const html = (share: number) => renderToStaticMarkup(createElement(ShareBar, { share }));
+  expect(html(0)).toContain("width:0%");
+  expect(html(0)).toContain(">0.0%<");
+  expect(html(0.0004)).toContain("&lt;0.1%");
+  expect(html(1)).toContain("width:100%");
+  expect(html(1)).toContain(">100.0%<");
+  expect(html(7)).toContain("width:100%");
+  expect(html(-1)).toContain("width:0%");
+  expect(html(Number.NaN)).toContain("width:0%");
+  expect(html(0.5)).toContain("bg-foreground/15"); // visible track
 });

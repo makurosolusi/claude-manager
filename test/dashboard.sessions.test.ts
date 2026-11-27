@@ -87,7 +87,7 @@ describe("sessions filters", () => {
 
   test("bad values are 400 with the allowed list", async () => {
     for (const [qs, msg] of [
-      ["family=gpt", 'invalid family "gpt": use one of opus, sonnet, haiku, other'],
+      ["family=gpt", 'invalid family "gpt": use one of opus, sonnet, haiku, fable, other'],
       ["status=dead", 'invalid status "dead": use one of live, idle, ended'],
     ] as const) {
       const res = call(`/api/sessions?${qs}`);
@@ -173,7 +173,7 @@ describe("meta, favicon, migration, family sql", () => {
   });
 
   test("FAMILY_SQL matches modelFamily()", () => {
-    const models = ["claude-opus-5-5", "Claude-SONNET-4-6[1m]", "claude-haiku-4-5-20251001", "mystery", "", "gpt-opus-clone"];
+    const models = ["claude-opus-5-5", "Claude-SONNET-4-6[1m]", "claude-haiku-4-5-20251001", "mystery", "", "gpt-opus-clone", "fable-5-2", "claude-FABLE-5-2[1m]"];
     for (const m of models) {
       const sql = db.query<{ f: string }, { m: string }>(`SELECT ${FAMILY_SQL("$m")} AS f`).get({ m })!.f;
       expect(sql).toBe(modelFamily(m));

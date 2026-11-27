@@ -60,6 +60,10 @@
   --color-model-haiku-fg: var(--model-haiku-fg);
   --color-model-haiku-bg: var(--model-haiku-bg);
   --color-model-haiku-border: var(--model-haiku-border);
+  --color-model-fable: var(--model-fable);
+  --color-model-fable-fg: var(--model-fable-fg);
+  --color-model-fable-bg: var(--model-fable-bg);
+  --color-model-fable-border: var(--model-fable-border);
   --color-model-other: var(--model-other);
   --color-model-other-fg: var(--model-other-fg);
   --color-model-other-bg: var(--model-other-bg);
@@ -163,6 +167,10 @@
   --model-haiku-fg: #046450;
   --model-haiku-bg: #e0faf1;
   --model-haiku-border: #a2e1cc;
+  --model-fable: #a8459e;
+  --model-fable-fg: #7d2f75;
+  --model-fable-bg: #fbeffa;
+  --model-fable-border: #ebc2e5;
   --model-other: #747474;
   --model-other-fg: #555555;
   --model-other-bg: #f3f3f3;
@@ -261,6 +269,10 @@
     --model-haiku-fg: #85e3c6;
     --model-haiku-bg: #00291f;
     --model-haiku-border: #045543;
+    --model-fable: #c565ba;
+    --model-fable-fg: #f0bfe8;
+    --model-fable-bg: #301429;
+    --model-fable-border: #63345b;
     --model-other: #808080;
     --model-other-fg: #cecece;
     --model-other-bg: #222222;
@@ -357,6 +369,10 @@
   --model-haiku-fg: #85e3c6;
   --model-haiku-bg: #00291f;
   --model-haiku-border: #045543;
+  --model-fable: #c565ba;
+  --model-fable-fg: #f0bfe8;
+  --model-fable-bg: #301429;
+  --model-fable-border: #63345b;
   --model-other: #808080;
   --model-other-fg: #cecece;
   --model-other-bg: #222222;

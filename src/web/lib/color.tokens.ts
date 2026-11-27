@@ -24,6 +24,7 @@ export const FAMILY_CLASSES: Record<ModelFamily, HueClasses> = {
   opus: { badge: "border-model-opus-border bg-model-opus-bg text-model-opus-fg", text: "text-model-opus-fg", dot: "bg-model-opus" },
   sonnet: { badge: "border-model-sonnet-border bg-model-sonnet-bg text-model-sonnet-fg", text: "text-model-sonnet-fg", dot: "bg-model-sonnet" },
   haiku: { badge: "border-model-haiku-border bg-model-haiku-bg text-model-haiku-fg", text: "text-model-haiku-fg", dot: "bg-model-haiku" },
+  fable: { badge: "border-model-fable-border bg-model-fable-bg text-model-fable-fg", text: "text-model-fable-fg", dot: "bg-model-fable" },
   other: { badge: "border-model-other-border bg-model-other-bg text-model-other-fg", text: "text-model-other-fg", dot: "bg-model-other" },
 };
 

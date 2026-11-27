@@ -57,7 +57,7 @@ export const listParam = (v?: readonly string[]): string | null => (v?.length ? 
 
 /** Model family of a SQL model-id expression; mirrors `modelFamily()` in the web bundle. */
 export const FAMILY_SQL = (col: string) =>
-  `CASE WHEN instr(lower(${col}), 'opus') > 0 THEN 'opus' WHEN instr(lower(${col}), 'sonnet') > 0 THEN 'sonnet' WHEN instr(lower(${col}), 'haiku') > 0 THEN 'haiku' ELSE 'other' END`;
+  `CASE WHEN instr(lower(${col}), 'opus') > 0 THEN 'opus' WHEN instr(lower(${col}), 'sonnet') > 0 THEN 'sonnet' WHEN instr(lower(${col}), 'haiku') > 0 THEN 'haiku' WHEN instr(lower(${col}), 'fable') > 0 THEN 'fable' ELSE 'other' END`;
 
 /** SQL bindings for `WHERE`. */
 export const filterParams = (f: StatsFilter): Params => ({
