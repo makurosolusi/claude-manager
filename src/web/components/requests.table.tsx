@@ -43,7 +43,7 @@ export function RequestsTable({ sessionId, roles, tick = 0 }: { sessionId: strin
     <div className="flex flex-col gap-3">
       <TableToolbar
         search={{ value: state.q, onChange: (q) => go({ q }), placeholder: "Search requests…", label: "Search requests" }}
-        facets={requestFacets(flat.data?.facets, state, (filters) => go({ filters }))}
+        facets={requestFacets(flat.data?.facets, state, (filters) => go({ filters }), roles)}
         group={{ value: state.group, options: GROUP_OPTIONS, onChange: (group) => go({ group }) }}
         view={{
           columns: columns.slice(1).map((c) => ({ id: c.id, label: String(c.header), visible: !hidden.includes(c.id) })),

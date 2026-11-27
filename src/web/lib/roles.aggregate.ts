@@ -11,7 +11,7 @@ export const ROLE_KINDS: readonly RoleKind[] = ["preset", "custom", "external"];
 /** A role × model row with the tier its model was billed under. */
 export interface TieredRow extends RoleRow { tier: TierKey }
 /** Usage summed over one key (a model, a role or a tier), its tier, and its share of the overall cost (0..1). */
-export interface AggRow extends Usage { key: string; tier: TierKey; count: number; share: number }
+export interface AggRow extends Usage { key: string; tier: TierKey; count: number; share: number; rerouted: number }
 
 const USAGE_KEYS = ["requests", "input", "output", "cache_read", "cache_write", "cost_usd", "unpriced"] as const;
 
@@ -21,6 +21,9 @@ export function sumUsage(rows: readonly Usage[]): Usage {
   for (const r of rows) for (const k of USAGE_KEYS) out[k] += r[k];
   return out;
 }
+
+/** Rerouted requests summed over any role rows. */
+export const sumRerouted = (rows: readonly { rerouted: number }[]): number => rows.reduce((n, r) => n + r.rerouted, 0);
 
 /** Stamps each row with `tierOf(model, tiers)` so tier totals match Overview "Cost by tier". */
 export const withTier = (rows: readonly RoleRow[], tiers?: Partial<Tiers>): TieredRow[] =>
@@ -53,7 +56,7 @@ export function aggregateBy(rows: readonly TieredRow[], key: (r: TieredRow) => s
   return groupBy([...rows], key)
     .map(({ key: k, rows: rs }) => {
       const u = sumUsage(rs);
-      return { key: k, tier: tierFor(k, rs), count: rs.length, share: share(u.cost_usd, total), ...u };
+      return { key: k, tier: tierFor(k, rs), count: rs.length, share: share(u.cost_usd, total), rerouted: sumRerouted(rs), ...u };
     })
     .sort((a, b) => b.cost_usd - a.cost_usd);
 }
@@ -74,6 +77,6 @@ export function tierSubtotals(rows: readonly TieredRow[], total = sumUsage(rows)
     const rs = by.get(t);
     if (!rs) return [];
     const u = sumUsage(rs);
-    return [{ key: t, tier: t, count: rs.length, share: share(u.cost_usd, total), ...u }];
+    return [{ key: t, tier: t, count: rs.length, share: share(u.cost_usd, total), rerouted: sumRerouted(rs), ...u }];
   });
 }

@@ -6,6 +6,7 @@ import { ContextBar } from "@/components/context.bar.tsx";
 import { CostCell } from "@/components/cost.cell.tsx";
 import { KpiCard } from "@/components/kpi.card.tsx";
 import { ModelBadge } from "@/components/model.badge.tsx";
+import { RerouteChip } from "@/components/reroute.badge.tsx";
 import { RelativeTime } from "@/components/relative.time.tsx";
 import { RoleBadge } from "@/components/role.badge.tsx";
 import { SessionStatusBadge } from "@/components/status.badge.tsx";
@@ -77,6 +78,7 @@ export function SessionHeader({ session: s, models, roles }: Pick<SessionDetailF
         {s.git_branch && <Meta icon={UI_ICON.branch}>{s.git_branch}</Meta>}
         <RoleBadge role={s.main_agent ?? "main"} roles={roles} />
         {model && <ModelBadge model={model} extra={s.models > 1 ? `+${s.models - 1}` : undefined} />}
+        {s.rerouted > 0 && <RerouteChip count={s.rerouted} />}
         <Meta icon={UI_ICON.time}>
           Started {fmtTime(s.first_ts)} · active <RelativeTime iso={s.last_ts} /> · {fmtSpan(s.first_ts, s.last_ts)} long
         </Meta>

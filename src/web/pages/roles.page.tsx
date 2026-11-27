@@ -8,6 +8,7 @@ import type { GroupSpec } from "@/components/group.rows.tsx";
 import { ModelBadge } from "@/components/model.badge.tsx";
 import { PageHeader } from "@/components/page.header.tsx";
 import { ByModelTable, ByRoleTable, usageColumns } from "@/components/role.tables.tsx";
+import { ReroutedCount } from "@/components/reroute.badge.tsx";
 import { ShareBar } from "@/components/share.bar.tsx";
 import { RoleBadge } from "@/components/role.badge.tsx";
 import { TablePagination } from "@/components/table.pagination.tsx";
@@ -20,7 +21,7 @@ import { fmtInt, fmtModel, fmtTokens } from "@/lib/format.ts";
 import { CUSTOM_ROLE_ICON, FAMILY_ICON, KPI_ICON, NAV_ICON, ROLE_ICON, TIER_ICON } from "@/lib/icon.map.ts";
 import { FAMILY_LABEL, TIER_ORDER, modelFamily, type ModelFamily } from "@/lib/model.tier.ts";
 import type { Range } from "@/lib/range.ts";
-import { ROLE_KINDS, cacheHitLabel, configuredTierMismatch, roleKind, sumUsage, withTier, type TieredRow } from "@/lib/roles.aggregate.ts";
+import { ROLE_KINDS, cacheHitLabel, configuredTierMismatch, roleKind, sumRerouted, sumUsage, withTier, type TieredRow } from "@/lib/roles.aggregate.ts";
 import { runClientTable, groupBy } from "@/lib/table.client.ts";
 import { useViewPrefs } from "@/lib/use.view.prefs.ts";
 import { NO_GROUP, PAGE_SIZES, parseTableQuery, patchTable, tableParams, type TableSpec, type TableState } from "@/lib/table.query.ts";
@@ -39,7 +40,7 @@ const KIND_LABEL = { preset: "Preset", custom: "Custom", external: "External" };
 const KIND_ICON = { preset: NAV_ICON.roles, custom: CUSTOM_ROLE_ICON, external: ROLE_ICON.subagent! };
 const cap = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
 const SPEC: TableSpec = {
-  sorts: ["cost", "requests", "tokens", "role", "model"], defaultSort: "cost", defaultDir: "desc",
+  sorts: ["cost", "requests", "tokens", "rerouted", "role", "model"], defaultSort: "cost", defaultDir: "desc",
   groups: [DEFAULT_GROUP, "role", "family", NO_GROUP], facets: { tier: TIER_ORDER, family: FAMILIES, kind: [...ROLE_KINDS] },
 };
 const tokens = (r: TieredRow) => r.input + r.output + r.cache_read + r.cache_write;
@@ -69,7 +70,7 @@ export function RolesPage({ since, range, dataVersion, params, tiers, roles }: P
     text: (r) => `${r.role} ${r.model}`,
     facets: { tier: (r) => r.tier, family: (r) => modelFamily(r.model), kind: (r) => roleKind(r.role, roles) },
     unique: { kind: (r) => r.role },
-    sort: { cost: (r) => r.cost_usd, requests: (r) => r.requests, tokens, role: (r) => r.role, model: (r) => r.model },
+    sort: { cost: (r) => r.cost_usd, requests: (r) => r.requests, rerouted: (r) => r.rerouted, tokens, role: (r) => r.role, model: (r) => r.model },
   });
 
   const columns: Column<TieredRow>[] = [
@@ -102,7 +103,7 @@ export function RolesPage({ since, range, dataVersion, params, tiers, roles }: P
       return {
         key: g.key, label: labelOf(g.key, g.rows[0]!), count: g.rows.length, rows: g.rows, open: flips.includes(g.key) === collapsed,
         onToggle: () => setFlipped((f) => ({ ...f, [group]: flips.includes(g.key) ? flips.filter((x) => x !== g.key) : [...flips, g.key] })),
-        totals: { requests: fmtInt(u.requests), tokens: fmtTokens(u.input + u.output + u.cache_read + u.cache_write), cache: cacheHitLabel(u), cost: <CostCell usd={u.cost_usd} unpriced={u.unpriced} />, share: <ShareBar share={share(u)} /> },
+        totals: { requests: fmtInt(u.requests), rerouted: <ReroutedCount count={sumRerouted(g.rows)} />, tokens: fmtTokens(u.input + u.output + u.cache_read + u.cache_write), cache: cacheHitLabel(u), cost: <CostCell usd={u.cost_usd} unpriced={u.unpriced} />, share: <ShareBar share={share(u)} /> },
       };
     });
 

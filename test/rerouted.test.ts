@@ -10,7 +10,7 @@ import { sync } from "../src/ingest/ingest.service.ts";
 import { handleApi } from "../src/server/dashboard.api.ts";
 import type { Overview, Page, RoleRow, SessionDetail, SessionRow } from "../src/server/dashboard.types.ts";
 import type { RequestsResponse } from "../src/server/session.detail.types.ts";
-import { fmtRerouted, rerouteNote } from "../src/web/components/reroute.badge.tsx";
+import { fmtRerouted, rerouteNote } from "../src/web/lib/reroute.ts";
 import { normalizeModel } from "../src/web/lib/model.tier.ts";
 import { useTempHome } from "./test.home.ts";
 
@@ -153,6 +153,6 @@ describe("rerouted detection", () => {
 });
 
 test("badge helpers", () => {
-  expect(rerouteNote("claude-sonnet-5-5", "claude-opus-5-5")).toBe("Requested sonnet-5-5, served by opus-5-5");
+  expect(rerouteNote("claude-sonnet-5-5", "claude-opus-5-5")).toContain("Requested sonnet-5-5, served by opus-5-5. A proxy or gateway (ANTHROPIC_BASE_URL)");
   expect(fmtRerouted(12, 1500)).toBe("12 of 1,500 rerouted");
 });

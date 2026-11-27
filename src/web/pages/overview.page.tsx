@@ -8,6 +8,7 @@ import type { Overview, Page, ProjectRow, SessionRow, Totals } from "../../serve
 import { Button } from "@/components/ui/button.tsx";
 import { PageHeader } from "@/components/page.header.tsx";
 import { Panel } from "@/components/panel.tsx";
+import { ReroutedLink } from "@/components/reroute.badge.tsx";
 import { KpiCard, type KpiDelta } from "@/components/kpi.card.tsx";
 import { DataTable, type Column } from "@/components/data.table.tsx";
 import { CostCell } from "@/components/cost.cell.tsx";
@@ -125,7 +126,7 @@ export function OverviewPage({ since, range, dataVersion, tiers }: PageProps) {
       <div aria-busy={stale || undefined} className={cn("flex flex-col gap-6 transition-opacity", stale && "opacity-60")}>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={KPI_ICON.cost} label="Cost (est.)" value={kpi(fmtUsd(totalCost))} delta={delta(deltas?.cost, "pct")} hint={d?.total.unpriced ? `${plural(d.total.unpriced, "request")} unpriced` : undefined} />
-        <KpiCard icon={KPI_ICON.requests} label="Requests" value={kpi(fmtInt(d?.total.requests ?? 0))} delta={delta(deltas?.requests, "pct")} />
+        <KpiCard icon={KPI_ICON.requests} label="Requests" value={kpi(fmtInt(d?.total.requests ?? 0))} delta={delta(deltas?.requests, "pct")} hint={d && d.total.rerouted > 0 ? <ReroutedLink count={d.total.rerouted} href={hashHref("/sessions", { range: rangeParam })} /> : undefined} />
         <KpiCard icon={KPI_ICON.sessions} label="Sessions" value={kpi(fmtInt(d?.total.sessions ?? 0))} delta={delta(deltas?.sessions, "pct")} />
         <KpiCard icon={KPI_ICON.cache} tone={d ? cacheLevel(cacheHitRate(d.total)) : undefined} label="Cache hit rate" value={kpi(d ? fmtPct(cacheHitRate(d.total)) : "")} delta={delta(deltas?.cacheHit, "pt")} />
       </div>

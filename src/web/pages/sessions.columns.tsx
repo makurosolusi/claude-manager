@@ -4,6 +4,7 @@ import type { Column } from "@/components/data.table.tsx";
 import { ModelBadge } from "@/components/model.badge.tsx";
 import { RelativeTime } from "@/components/relative.time.tsx";
 import { RoleBadge } from "@/components/role.badge.tsx";
+import { RerouteMark } from "@/components/reroute.badge.tsx";
 import { SessionCell } from "@/components/session.cell.tsx";
 import { SessionStatusBadge } from "@/components/status.badge.tsx";
 import { TokenCell } from "@/components/token.cell.tsx";
@@ -21,7 +22,12 @@ export function sessionColumns(now: number, roles?: readonly RoleMeta[], hrefOf?
   return [
     { id: "status", header: <span className="sr-only">Status</span>, cell: (r) => <SessionStatusBadge lastTs={r.last_ts} now={now} iconOnly />, width: "w-10", hideBelow: "sm" },
     { id: "session", header: "Session", primary: true, cell: (r) => <SessionCell id={r.id} title={r.title} projectCwd={r.project_cwd} href={hrefOf?.(r)} lastTs={r.last_ts} now={now} /> },
-    { id: "model", header: "Model", cell: (r) => (r.model ? <ModelBadge model={r.model} extra={r.models > 1 ? `+${r.models - 1}` : undefined} /> : <Dash />), width: "w-44", hideBelow: "md" },
+    { id: "model", header: "Model", cell: (r) => (r.model ? (
+      <span className="inline-flex max-w-full items-center gap-1.5">
+        <ModelBadge model={r.model} extra={r.models > 1 ? `+${r.models - 1}` : undefined} />
+        <RerouteMark count={r.rerouted} total={r.requests} />
+      </span>
+    ) : <Dash />), width: "w-44", hideBelow: "md" },
     { id: "role", header: "Role", cell: (r) => <RoleBadge role={r.main_agent ?? DEFAULT_ROLE} roles={roles} />, width: "w-32", hideBelow: "lg" },
     { id: "agents", header: "Agents", cell: (r) => <span className={cn(!r.agents && "text-fg-subtle")}>{fmtInt(r.agents)}</span>, align: "right", sortKey: "agents", width: "w-16", hideBelow: "md" },
     { id: "requests", header: "Requests", cell: (r) => fmtInt(r.requests), align: "right", sortKey: "requests", width: "w-20", hideBelow: "md" },
