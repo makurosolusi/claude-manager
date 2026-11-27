@@ -37,14 +37,15 @@ export async function getJson<T>(path: string, query: Query = {}, signal?: Abort
   return (await res.json()) as T;
 }
 
-/** Result of `useApi`: data, error and loading flag. `loading` is true only while there is nothing to show yet (first load or a new resource); a background refresh keeps `data` and leaves `loading` false. */
+/** Result of `useApi`: data, error and loading flag. `loading` is true only while there is nothing to show yet (first load or a new resource); a background refresh keeps `data` and leaves `loading` false. `stale` is true while the data still belongs to the previous query of the same endpoint (a user changed range, filter or page): keep it on screen but dim it. */
 export interface ApiState<T> {
   data: T | undefined;
   error: Error | undefined;
   loading: boolean;
+  stale: boolean;
 }
 
-/** Query params that slide on every refresh (e.g. the range's lower bound) and so don't identify the resource. */
+/** Query params that slide on every refresh (the range's lower bound) and so don't identify the resource. Callers also pass `range`, which does: a new range is a new resource, the same range recomputing `since` is a refresh. */
 const VOLATILE_PARAMS = ["since"];
 
 /** `url` without its volatile params: two URLs with the same identity are the same resource, refreshed. */
@@ -72,29 +73,37 @@ export function visibleFor<S extends { key: string }>(state: S, key: string): S 
   return state.key === key ? state : undefined;
 }
 
-/** Fetches `path` whenever it, `query`, or `tick` changes (stale-while-revalidate): a refresh of the same resource keeps the old data until the new lands; a different resource (path or query, ignoring the sliding `since`) drops it. A `null` path skips the fetch. */
+/** What a hook should show: the state of the requested resource, else (same endpoint, different query, data held) the previous data flagged `stale`, else nothing (skeleton). */
+export function viewOf<S extends { key: string; path: string; data: unknown; error: unknown }>(state: S, key: string, path: string): { cur: S | undefined; stale: boolean } {
+  const cur = visibleFor(state, key);
+  if (cur) return { cur, stale: false };
+  const held = state.path === path && state.data !== undefined && state.error === undefined;
+  return { cur: held ? state : undefined, stale: held };
+}
+
+/** Fetches `path` whenever it, `query`, or `tick` changes (stale-while-revalidate): a refresh of the same resource (identity ignores the sliding `since`) keeps the old data silently; a new query on the same endpoint keeps it flagged `stale` until the new data lands; another endpoint drops it. A `null` path skips the fetch. */
 export function useApi<T>(path: string | null, query: Query = {}, tick = 0): ApiState<T> {
   const url = path === null ? "" : withQuery(path, query);
   const key = identityOf(url);
-  const [state, setState] = useState<{ key: string; data: T | undefined; error: Error | undefined }>({ key, data: undefined, error: undefined });
+  const [state, setState] = useState<{ key: string; path: string; data: T | undefined; error: Error | undefined }>({ key, path: path ?? "", data: undefined, error: undefined });
   useEffect(() => {
     if (path === null) return;
     const ctrl = new AbortController();
     getJson<T>(path, query, ctrl.signal).then(
       (data) => setState((s) => {
         const d = keepRef(s.key === key ? s.data : undefined, data);
-        return s.key === key && !s.error && d === s.data ? s : { key, data: d, error: undefined };
+        return s.key === key && !s.error && d === s.data ? s : { key, path: path!, data: d, error: undefined };
       }),
       (error: unknown) => {
         if (ctrl.signal.aborted) return; // superseded by a newer request; its result will land instead
-        setState((s) => ({ key, data: s.key === key ? s.data : undefined, error: error instanceof Error ? error : new Error(String(error)) }));
+        setState((s) => ({ key, path: path!, data: s.key === key ? s.data : undefined, error: error instanceof Error ? error : new Error(String(error)) }));
       },
     );
     return () => ctrl.abort();
   }, [url, tick]);
   // The effect runs after the render that changed the key; hide the old resource's data in that render too.
-  const cur = path === null ? undefined : visibleFor(state, key);
-  return { data: cur?.data, error: cur?.error, loading: isLoading(cur, path !== null) };
+  const { cur, stale } = path === null ? { cur: undefined, stale: false } : viewOf(state, key, path);
+  return { data: cur?.data, error: cur?.error, loading: isLoading(cur, path !== null), stale };
 }
 
 /** Fetches every full URL (results keyed by URL; an Error value marks a failed one, a missing key is still loading). Results of resources no longer requested are dropped; the rest stay (even across a sliding `since`) until the refetch replaces them. */

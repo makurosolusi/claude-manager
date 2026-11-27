@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { identityOf, isLoading, keepRef, useApi, visibleFor, withQuery } from "../src/web/lib/api.client.ts";
+import { identityOf, isLoading, keepRef, useApi, viewOf, visibleFor, withQuery } from "../src/web/lib/api.client.ts";
 
 test("withQuery repeats array keys and keeps single values", () => {
   expect(withQuery("/api/x", { page: 2, agent: ["main", "coder"], stop: ["none"] })).toBe("/api/x?page=2&agent=main&agent=coder&stop=none");
@@ -53,4 +53,29 @@ test("keepRef keeps the old reference for identical JSON and swaps it for change
   expect(keepRef(undefined, next)).toBe(next);
   const e2 = new Error("b");
   expect(keepRef<unknown>(new Error("a"), e2)).toBe(e2);
+});
+
+test("identityOf: same range with a recomputed since is one resource, another range is a new one", () => {
+  const a = withQuery("/api/x", { since: "2026-01-02T00:00:00.000Z", range: "30d", page: 1 });
+  const b = withQuery("/api/x", { since: "2026-01-02T00:05:00.000Z", range: "30d", page: 1 });
+  const c = withQuery("/api/x", { since: "2025-12-26T00:00:00.000Z", range: "7d", page: 1 });
+  expect(identityOf(a)).toBe(identityOf(b));
+  expect(identityOf(a)).not.toBe(identityOf(c));
+  expect(identityOf(a)).toContain("range=30d");
+  expect(identityOf(a)).not.toContain("since");
+});
+
+test("viewOf: refresh of the same resource is not stale, a new query on the same endpoint dims old data, another endpoint drops it", () => {
+  const state = { key: "/api/x?range=30d", path: "/api/x", data: [1], error: undefined };
+  expect(viewOf(state, "/api/x?range=30d", "/api/x")).toEqual({ cur: state, stale: false });
+  expect(viewOf(state, "/api/x?range=7d", "/api/x")).toEqual({ cur: state, stale: true });
+  expect(viewOf(state, "/api/y", "/api/y")).toEqual({ cur: undefined, stale: false });
+  const failed = { ...state, data: undefined, error: new Error("x") };
+  expect(viewOf(failed, "/api/x?range=7d", "/api/x")).toEqual({ cur: undefined, stale: false });
+});
+
+test("a stale view is not a skeleton: isLoading is false while old data is held", () => {
+  const state = { key: "/api/x?range=30d", path: "/api/x", data: [1], error: undefined };
+  const { cur } = viewOf(state, "/api/x?range=7d", "/api/x");
+  expect(isLoading(cur, true)).toBe(false);
 });
