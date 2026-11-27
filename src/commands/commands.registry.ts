@@ -7,6 +7,7 @@ import { statsCommand } from "./stats.command.ts";
 import { syncCommand } from "./sync.command.ts";
 import { tierCommand } from "./tier.command.ts";
 import { uninstallCommand } from "./uninstall.command.ts";
+import { updateCommand } from "./update.command.ts";
 
 export const commands: Command[] = [
   installCommand,
@@ -17,4 +18,5 @@ export const commands: Command[] = [
   statsCommand,
   dashboardCommand,
   doctorCommand,
+  updateCommand,
 ];
