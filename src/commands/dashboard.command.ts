@@ -24,6 +24,11 @@ function serve(db: Database, port: number, meta: MetaProvider) {
     return Bun.serve({
       hostname: HOSTNAME,
       port,
+      // Bun defaults to dev mode unless NODE_ENV=production, which injects the HMR client and error overlay.
+      development: false,
+      // Bun 1.4.2: with development:false a second server silently shares a busy port despite the documented
+      // reusePort default of false; set it explicitly so EADDRINUSE still surfaces as "port in use".
+      reusePort: false,
       routes: { "/": index },
       fetch: (req) => handleApi(req, db, port, meta) ?? new Response("Not Found", { status: 404 }),
     });
