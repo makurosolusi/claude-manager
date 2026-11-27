@@ -1,6 +1,7 @@
 {
   "name": "claude-manager",
   "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
   "private": true,
   "packageManager": "bun@1.4.2",
