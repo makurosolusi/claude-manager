@@ -18,7 +18,7 @@ import { ShareBar } from "@/components/share.bar.tsx";
 import { TierTable } from "@/components/tier.table.tsx";
 import { cn } from "@/lib/cn.ts";
 import { useApi } from "@/lib/api.client.ts";
-import { cacheHitRate, fmtDelta, fmtInt, fmtPct, fmtProject, fmtUsd } from "@/lib/format.ts";
+import { cacheHitRate, fmtDelta, fmtInt, fmtPct, fmtProject, fmtUsd, plural } from "@/lib/format.ts";
 import { hashHref } from "@/lib/hash.route.ts";
 import { DEFAULT_RANGE, type Range } from "@/lib/range.ts";
 import { SECOND_TICK_MS, useNow } from "@/lib/now.ts";
@@ -124,7 +124,7 @@ export function OverviewPage({ since, range, dataVersion, tiers }: PageProps) {
       {header}
       <div aria-busy={stale || undefined} className={cn("flex flex-col gap-6 transition-opacity", stale && "opacity-60")}>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={KPI_ICON.cost} label="Est. cost" value={kpi(fmtUsd(totalCost))} delta={delta(deltas?.cost, "pct")} hint={d?.total.unpriced ? `${fmtInt(d.total.unpriced)} requests unpriced` : undefined} />
+        <KpiCard icon={KPI_ICON.cost} label="Cost (est.)" value={kpi(fmtUsd(totalCost))} delta={delta(deltas?.cost, "pct")} hint={d?.total.unpriced ? `${plural(d.total.unpriced, "request")} unpriced` : undefined} />
         <KpiCard icon={KPI_ICON.requests} label="Requests" value={kpi(fmtInt(d?.total.requests ?? 0))} delta={delta(deltas?.requests, "pct")} />
         <KpiCard icon={KPI_ICON.sessions} label="Sessions" value={kpi(fmtInt(d?.total.sessions ?? 0))} delta={delta(deltas?.sessions, "pct")} />
         <KpiCard icon={KPI_ICON.cache} tone={d ? cacheLevel(cacheHitRate(d.total)) : undefined} label="Cache hit rate" value={kpi(d ? fmtPct(cacheHitRate(d.total)) : "")} delta={delta(deltas?.cacheHit, "pt")} />

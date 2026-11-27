@@ -8,7 +8,7 @@ import { TablePagination } from "@/components/table.pagination.tsx";
 import { TableToolbar } from "@/components/table.toolbar.tsx";
 import type { RoleMeta } from "@/lib/color.tokens.ts";
 import { useApi } from "@/lib/api.client.ts";
-import { fmtInt } from "@/lib/format.ts";
+import { plural } from "@/lib/format.ts";
 import { useHashRoute, withParams } from "@/lib/hash.route.ts";
 import { requestFacets } from "@/lib/requests.facets.ts";
 import { REQUEST_SPEC, requestsPath } from "@/lib/requests.query.ts";
@@ -52,7 +52,7 @@ export function RequestsTable({ sessionId, roles, tick = 0 }: { sessionId: strin
           onDensity: setDensity,
         }}
         onReset={reset}
-        summary={total === undefined ? "Loading…" : `${fmtInt(total)} ${total === 1 ? "request" : "requests"}`}
+        summary={total === undefined ? "Loading…" : plural(total, "request")}
       />
       {grouped ? (
         <GroupedRequests key={`${state.group}|${state.sort}|${state.dir}|${state.q}|${JSON.stringify(state.filters)}`} sessionId={sessionId} state={state} go={go} columns={columns} hidden={hidden} density={density} empty={empty} roles={roles} tick={tick} />

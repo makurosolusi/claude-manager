@@ -80,6 +80,9 @@ export function fmtProject(cwd: string | null | undefined): string {
 /** Short model name without vendor prefix or date: "claude-opus-4-7-20260101" → "opus-4-7". */
 export const fmtModel = (id: string | null | undefined) => (id ? normalizeModel(id).replace(/^claude-/, "") : "—");
 
+/** "1 request" / "3 requests": `n` formatted with `fmtInt`, noun pluralised with a plain "s". */
+export const plural = (n: number, noun: string) => `${fmtInt(n)} ${noun}${n === 1 ? "" : "s"}`;
+
 /** Positive shares below this read "<0.1%" instead of a false "0.0%". */
 const PCT_FLOOR = 0.001;
 

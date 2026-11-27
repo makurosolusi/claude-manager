@@ -5,7 +5,7 @@ import type { UsageRow } from "../../server/dashboard.types.ts";
 import { CostCell } from "@/components/cost.cell.tsx";
 import { ModelBadge } from "@/components/model.badge.tsx";
 import { cn } from "@/lib/cn.ts";
-import { fmtInt } from "@/lib/format.ts";
+import { fmtInt, plural } from "@/lib/format.ts";
 import { toolIcon } from "@/lib/icon.map.ts";
 
 /** Tools listed before the panel scrolls. */
@@ -23,7 +23,7 @@ export function ModelsPanel({ models }: { models: UsageRow[] }) {
             <li key={m.key} className="flex items-center justify-between gap-3 py-1.5">
               <ModelBadge model={m.key} />
               <span className="flex shrink-0 items-center gap-3 text-muted-foreground tabular-nums">
-                <span>{fmtInt(m.requests)} requests</span>
+                <span>{plural(m.requests, "request")}</span>
                 <span className="text-foreground"><CostCell usd={m.cost_usd} unpriced={m.unpriced} /></span>
               </span>
             </li>

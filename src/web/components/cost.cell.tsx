@@ -1,7 +1,7 @@
 import { Tooltip } from "@/components/ui/tooltip.tsx";
 import { HEAT_CLASSES } from "@/lib/color.tokens.ts";
 import { cn } from "@/lib/cn.ts";
-import { fmtInt, fmtUsd } from "@/lib/format.ts";
+import { fmtUsd, plural } from "@/lib/format.ts";
 import { costHeat, type HeatScale } from "@/lib/status.level.ts";
 
 /** Disclaimer attached to every cost figure. */
@@ -17,7 +17,7 @@ export function CostCell({ usd, unpriced = 0, heat }: { usd: number; unpriced?: 
     </span>
   );
   if (unpriced <= 0) return value;
-  const note = `${fmtInt(unpriced)} ${unpriced === 1 ? "request" : "requests"} with unknown pricing excluded`;
+  const note = `${plural(unpriced, "request")} with unknown pricing excluded`;
   return (
     <Tooltip focusable content={note}>
       {value}

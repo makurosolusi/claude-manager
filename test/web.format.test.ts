@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { fmtClock } from "../src/web/lib/detail.format.ts";
-import { cacheHitRate, fmtDelta, fmtDeltaPct, fmtTime, fmtTokens, fmtUsdAxis, fmtDuration, fmtModel, fmtPct, fmtProject, fmtRelative } from "../src/web/lib/format.ts";
+import { cacheHitRate, fmtDelta, fmtDeltaPct, fmtTime, fmtTokens, fmtUsdAxis, fmtDuration, fmtModel, fmtPct, fmtProject, fmtRelative, plural } from "../src/web/lib/format.ts";
 import { modelFamily, normalizeModel, tierOf, type Tiers } from "../src/web/lib/model.tier.ts";
 import { DEFAULT_RANGE, parseRange } from "../src/web/lib/range.ts";
 import { contextLevel } from "../src/web/lib/context.level.ts";
@@ -130,4 +130,10 @@ test("fmtTime drops the current year; fmtClock is 12h", () => {
   expect(fmtTime(new Date(2025, 10, 27, 23, 5).toISOString(), now)).toMatch(/^Nov 27, 2025, 11:05\sPM$/);
   expect(fmtClock(iso)).toMatch(/^11:05:59\sPM$/);
   expect(fmtClock(null)).toBe("—");
+});
+
+test("plural formats the count and pluralises the noun", () => {
+  expect(plural(1, "request")).toBe("1 request");
+  expect(plural(0, "request")).toBe("0 requests");
+  expect(plural(1234, "session")).toBe("1,234 sessions");
 });

@@ -8,7 +8,7 @@ import { CostCell } from "@/components/cost.cell.tsx";
 import { LIVE_HIDEABLE, liveColumns } from "@/components/live.columns.tsx";
 import { PageHeader } from "@/components/page.header.tsx";
 import { useApi } from "@/lib/api.client.ts";
-import { fmtInt, fmtProject } from "@/lib/format.ts";
+import { fmtProject, plural } from "@/lib/format.ts";
 import { hashHref } from "@/lib/hash.route.ts";
 import { FAMILY_ICON, LEVEL_ICON, NAV_ICON, STATUS_ICON, UI_ICON } from "@/lib/icon.map.ts";
 import { GROUP_LEVEL, GROUP_PROJECT, LEVEL_LABEL, LIVE_PATH, LIVE_SPEC, levelOf, liveTableOptions } from "@/lib/live.table.ts";
@@ -73,7 +73,7 @@ export function LivePage({ dataVersion, params }: Omit<PageProps, "since">) {
         searchPlaceholder="Search title, id or project…"
         grouping={state.group === GROUP_LEVEL ? levelGrouping : grouping}
         result={result}
-        summary={error ? undefined : `${fmtInt(n)} active ${n === 1 ? "session" : "sessions"}`}
+        summary={error ? undefined : `${plural(n, "active session")}`}
         rowKey={(s) => s.id}
         rowHref={(s) => hashHref(`/sessions/${encodeURIComponent(s.id)}`)}
         loading={loading}

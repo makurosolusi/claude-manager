@@ -4,7 +4,7 @@ import { ModelDot } from "@/components/model.badge.tsx";
 import { RoleBadge } from "@/components/role.badge.tsx";
 import type { RoleMeta } from "@/lib/color.tokens.ts";
 import { flattenAgentTree } from "@/lib/agent.tree.ts";
-import { fmtInt, fmtModel } from "@/lib/format.ts";
+import { fmtModel, plural } from "@/lib/format.ts";
 
 /** Pixels of indentation per spawn level. */
 const INDENT_PX = 16;
@@ -28,7 +28,7 @@ export function AgentTree({ agents, roles }: { agents: AgentNode[]; roles?: read
               ))}
             </span>
             <span className="flex items-center gap-3 text-muted-foreground tabular-nums">
-              <span>{fmtInt(a.requests)} requests</span>
+              <span>{plural(a.requests, "request")}</span>
               <span className="text-foreground"><CostCell usd={a.cost_usd} unpriced={a.unpriced} /></span>
             </span>
           </div>
