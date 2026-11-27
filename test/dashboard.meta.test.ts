@@ -26,8 +26,23 @@ describe("liveMeta", () => {
     save({ customRoles: { "qa-extra": { tier: "basic", description: "x" } } });
     const meta = liveMeta(state);
     save("{ not json");
-    expect(meta().roles.some((r) => r.name === "qa-extra")).toBe(true);
+    const next = meta();
+    expect(next.roles.some((r) => r.name === "qa-extra")).toBe(true);
+    expect(next.error).toStartWith("config.json is invalid: ");
+    expect(next.error).toEndWith("; showing last valid roles");
     expect(() => loadConfigSync()).toThrow("invalid JSON");
+  });
+
+  test("a sync error wins over the config error, and a fixed config clears the message", () => {
+    save({ customRoles: {} });
+    const s: SyncMeta = { ...state, error: "boom" };
+    const meta = liveMeta(s);
+    save("{ not json");
+    expect(meta().error).toBe("boom");
+    s.error = null;
+    expect(meta().error).toContain("config.json is invalid");
+    save({ customRoles: {} });
+    expect(meta().error).toBeNull();
   });
 
   test("sync state is spread live", () => {
