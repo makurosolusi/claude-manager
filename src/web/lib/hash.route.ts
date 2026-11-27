@@ -18,6 +18,16 @@ export function hashHref(path: string, params: Record<string, string | undefined
   return `#${path}${qs.size ? `?${qs}` : ""}`;
 }
 
+/** Href for `route` with `patch` applied; other params are kept, and empty/undefined patch values remove the key. */
+export function withParams(route: Route, patch: Record<string, string | undefined>): string {
+  const params = new URLSearchParams(route.params);
+  for (const [k, v] of Object.entries(patch)) {
+    if (v) params.set(k, v);
+    else params.delete(k);
+  }
+  return `#${route.path}${params.size ? `?${params}` : ""}`;
+}
+
 /** Current hash route, updated on `hashchange`. */
 export function useHashRoute(): Route {
   const [hash, setHash] = useState(location.hash);
