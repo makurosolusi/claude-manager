@@ -68,6 +68,7 @@ export function RolesPage({ since, range, dataVersion, params, tiers, roles }: P
   const t = runClientTable(rows, state, {
     text: (r) => `${r.role} ${r.model}`,
     facets: { tier: (r) => r.tier, family: (r) => modelFamily(r.model), kind: (r) => roleKind(r.role, roles) },
+    unique: { kind: (r) => r.role },
     sort: { cost: (r) => r.cost_usd, requests: (r) => r.requests, tokens, role: (r) => r.role, model: (r) => r.model },
   });
 
@@ -133,7 +134,7 @@ export function RolesPage({ since, range, dataVersion, params, tiers, roles }: P
         summary={data && data.total > data.items.length ? `Showing the first ${fmtInt(data.items.length)} of ${fmtInt(data.total)} role × model rows.` : undefined}
       />
       <DataTable
-        label="Roles × models" rows={data ? (group === NO_GROUP ? t.page : t.filtered) : undefined} groups={data ? specs : undefined} columns={columns} rowKey={key} hidden={hidden} density={density}
+        label="Roles × models" rows={data ? (group === NO_GROUP ? t.page : t.filtered) : undefined} groups={data && specs?.length ? specs : undefined} columns={columns} rowKey={key} hidden={hidden} density={density}
         sort={{ key: state.sort, dir: state.dir }} onSort={(s) => go({ sort: s.key, dir: s.dir })}
         loading={loading} stale={stale} error={error && new Error(`Couldn't load roles. ${error.message}`)} onRetry={() => setRetry((n) => n + 1)}
         empty={state.q || Object.values(state.filters).some((f) => f.length) ? <NoMatchState noun="roles" onReset={reset} /> : "No role usage in this range."}

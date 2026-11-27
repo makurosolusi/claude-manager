@@ -30,7 +30,7 @@ export function usageColumns<T extends Usage>(share: (r: T) => number, only?: st
     { id: "tokens", header: "Tokens", cell: (r) => <TokenCell usage={r} />, align: "right", sortKey: "tokens", width: "w-20", hideBelow: "sm" },
     { id: "cache", header: "Cache hit", cell: cacheHitLabel, align: "right", width: "w-20", hideBelow: "lg" },
     { id: "cost", header: "Cost (est.)", cell: (r) => <CostCell usd={r.cost_usd} unpriced={r.unpriced} heat="aggregate" />, align: "right", sortKey: "cost", width: "w-24" },
-    { id: "share", header: "Share", cell: (r) => <ShareBar share={share(r)} />, align: "right", sortKey: "share", width: "w-24", hideBelow: "md" },
+    { id: "share", header: "Share", cell: (r) => <ShareBar share={share(r)} />, align: "right", sortKey: "share", width: "w-32", hideBelow: "md" },
   ];
   return only ? all.filter((c) => only.includes(c.id)) : all;
 }
@@ -92,5 +92,5 @@ export function ByRoleTable({ rows, tiers, roles }: { rows: TieredRow[]; tiers?:
     { id: "kind", header: "Kind", cell: (r: AggRow) => <span className="capitalize text-muted-foreground">{roleKind(r.key, roles)}</span>, width: "w-16", hideBelow: "lg" as const },
     { id: "tier", header: "Tier", cell: (r: AggRow) => <TierBadge tier={r.tier} tiers={tiers} />, width: "w-24", hideBelow: "md" as const },
   ];
-  return <AggTable label="By role" rows={byRole(rows, roles)} lead={lead} tiers={tiers} keep={["requests", "cost", "share"]} />;
+  return <AggTable label="By role" rows={byRole(rows, roles)} lead={lead} tiers={tiers} keep={["cost", "share"]} />;
 }

@@ -7,6 +7,8 @@ export interface ClientTableOptions<T> {
   text: (r: T) => string;
   facets: Record<string, (r: T) => string>;
   sort: Record<string, (r: T) => number | string>;
+  /** Facet ids whose counts tally distinct values of this key instead of rows (e.g. roles, not role × model rows). */
+  unique?: Record<string, (r: T) => string>;
 }
 
 export interface ClientTableResult<T> {
@@ -29,11 +31,15 @@ export function runClientTable<T>(rows: T[], s: ClientTableState, o: ClientTable
   const counts: Record<string, Map<string, number>> = {};
   for (const id of Object.keys(o.facets)) {
     const m = new Map<string, number>();
+    const seen = new Map<string, Set<string>>();
     for (const r of searched) {
       if (!passes(r, id)) continue;
       const v = o.facets[id]!(r);
-      m.set(v, (m.get(v) ?? 0) + 1);
+      const u = o.unique?.[id];
+      if (!u) m.set(v, (m.get(v) ?? 0) + 1);
+      else seen.set(v, (seen.get(v) ?? new Set()).add(u(r)));
     }
+    for (const [v, s] of seen) m.set(v, s.size);
     counts[id] = m;
   }
 
