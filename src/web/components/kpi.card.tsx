@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
-import { ArrowDown, ArrowRight, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, type LucideIcon } from "lucide-react";
+import { cn } from "@/lib/cn.ts";
+import { TONE_CLASSES, type ToneKey } from "@/lib/color.tokens.ts";
 
 /** Change vs the previous period; `value` null = no baseline. Shown in neutral grey (color is reserved for warnings). */
 export interface KpiDelta {
@@ -8,11 +10,15 @@ export interface KpiDelta {
   periodLabel: string;
 }
 
+/** Props of a headline KPI panel. */
 export interface KpiCardProps {
   label: string;
   value: ReactNode;
   delta?: KpiDelta;
   hint?: ReactNode;
+  icon?: LucideIcon;
+  /** Colours the value with the tone text token (e.g. cache hit level). */
+  tone?: ToneKey;
 }
 
 /** Deltas whose magnitude rounds below this read as "no change". */
@@ -37,11 +43,14 @@ function DeltaLine({ value, unit, periodLabel }: KpiDelta) {
 }
 
 /** Headline metric panel: label, large tabular value, optional neutral delta and hint line. */
-export function KpiCard({ label, value, delta, hint }: KpiCardProps) {
+export function KpiCard({ label, value, delta, hint, icon: Icon, tone }: KpiCardProps) {
   return (
     <section className="flex min-w-0 flex-col gap-2 rounded-lg border bg-card p-4">
-      <h2 className="text-[13px] font-medium text-muted-foreground">{label}</h2>
-      <div className="truncate text-[28px] leading-none font-semibold tracking-[-0.02em] text-card-foreground tabular-nums">{value}</div>
+      <h2 className="flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground">
+        {Icon && <Icon aria-hidden className="size-4 shrink-0" />}
+        {label}
+      </h2>
+      <div className={cn("truncate text-[28px] leading-none font-semibold tracking-[-0.02em] tabular-nums", tone ? TONE_CLASSES[tone].text : "text-card-foreground")}>{value}</div>
       {(delta || hint) && (
         <div className="flex flex-col gap-0.5">
           {delta && <DeltaLine {...delta} />}

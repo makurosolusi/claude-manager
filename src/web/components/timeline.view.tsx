@@ -3,10 +3,15 @@ import type { Page, TimelineItem } from "../../server/dashboard.types.ts";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { StatusView } from "@/components/status.view.tsx";
-import { Pager } from "@/components/pager.view.tsx";
-import { Cost } from "@/components/cost.label.tsx";
-import { PAGE_SIZE, useApi } from "@/lib/api.client.ts";
+import { CostCell } from "@/components/cost.cell.tsx";
+import { ModelBadge } from "@/components/model.badge.tsx";
+import { TablePagination } from "@/components/table.pagination.tsx";
+import { useApi } from "@/lib/api.client.ts";
 import { fmtInt, fmtTime, fmtTokens } from "@/lib/format.ts";
+import { PAGE_SIZES } from "@/lib/table.query.ts";
+
+/** Prompts per page until the viewer picks another size. */
+const DEFAULT_TIMELINE_SIZE = PAGE_SIZES[0];
 
 /** Prompts longer than this are folded until expanded. */
 const PROMPT_PREVIEW_CHARS = 280;
@@ -29,9 +34,10 @@ function PromptText({ text }: { text: string | null }) {
 }
 
 /** Paginated user prompts of a session, each with the usage it triggered. */
-export function Timeline({ sessionId }: { sessionId: string }) {
+export function Timeline({ sessionId, tick = 0 }: { sessionId: string; tick?: number }) {
   const [page, setPage] = useState(1);
-  const state = useApi<Page<TimelineItem>>(`/api/sessions/${encodeURIComponent(sessionId)}/timeline`, { page, pageSize: PAGE_SIZE });
+  const [size, setSize] = useState<number>(DEFAULT_TIMELINE_SIZE);
+  const state = useApi<Page<TimelineItem>>(`/api/sessions/${encodeURIComponent(sessionId)}/timeline`, { page, pageSize: size }, tick);
   return (
     <StatusView state={state} isEmpty={(d) => d.items.length === 0} emptyText="No prompts recorded.">
       {(d) => (
@@ -42,11 +48,7 @@ export function Timeline({ sessionId }: { sessionId: string }) {
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <span>{fmtTime(t.ts)}</span>
                   {t.source && <Badge variant="outline">{t.source}</Badge>}
-                  {t.models.map((m) => (
-                    <Badge key={m} variant="secondary">
-                      {m}
-                    </Badge>
-                  ))}
+                  {t.models.map((m) => <ModelBadge key={m} model={m} />)}
                 </div>
                 <PromptText text={t.text} />
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground tabular-nums">
@@ -55,12 +57,12 @@ export function Timeline({ sessionId }: { sessionId: string }) {
                   <span>{fmtTokens(t.output)} out</span>
                   <span>{fmtTokens(t.cache_read)} cache read</span>
                   <span>{fmtTokens(t.cache_write)} cache write</span>
-                  <Cost usd={t.cost_usd} />
+                  <CostCell usd={t.cost_usd} unpriced={t.unpriced} />
                 </div>
               </li>
             ))}
           </ol>
-          <Pager page={d.page} pageSize={d.pageSize} total={d.total} onPage={setPage} />
+          <TablePagination label="Prompts" page={page} pageSize={size} total={d.total} onPage={setPage} onPageSize={(n) => { setSize(n); setPage(1); }} />
         </>
       )}
     </StatusView>
