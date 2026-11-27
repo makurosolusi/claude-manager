@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
-import type { AgentNode, Page, ProjectRow, RoleRow, SessionRow, TimelineItem } from "../server/dashboard.types.ts";
-import { KEY, WHERE, type StatsFilter } from "./stats.repository.ts";
+import type { AgentNode, Page, ProjectRow, RoleRow, SessionQuery, SessionRow, SessionSort, TimelineItem } from "../server/dashboard.types.ts";
+import { filterParams, KEY, WHERE, type StatsFilter } from "./stats.repository.ts";
 
 /** Page window: 1-based page number and its size. */
 export type PageQuery = { page: number; pageSize: number };
@@ -15,12 +15,25 @@ const USAGE = `COUNT(r.message_id) AS requests, COALESCE(SUM(r.input), 0) AS inp
 
 const CONTEXT = "r.input + r.cache_read + r.cache_5m + r.cache_1h";
 const FROM_REQUESTS = "FROM requests r LEFT JOIN agents a ON a.id = r.agent_id LEFT JOIN sessions s ON s.id = r.session_id";
-const SESSION_WHERE = "s.last_ts >= $since AND ($project IS NULL OR instr(s.project_cwd, $project) > 0)";
-const SESSION_SELECT = `SELECT s.id, s.title, s.project_cwd, s.git_branch, s.main_agent, s.first_ts, s.last_ts,
-  (SELECT COUNT(*) FROM agents ag WHERE ag.session_id = s.id) AS agents, ${USAGE}
+// ponytail: q is a full scan of sessions; move to FTS if it grows past ~100k sessions.
+const SESSION_WHERE = `s.last_ts >= $since AND ($project IS NULL OR instr(s.project_cwd, $project) > 0)
+  AND ($q IS NULL OR instr(lower(coalesce(s.title, '') || ' ' || s.id || ' ' || coalesce(s.project_cwd, '')), lower($q)) > 0)`;
+const SESSION_GROUPED = `SELECT s.id, s.title, s.project_cwd, s.git_branch, s.main_agent, s.first_ts, s.last_ts,
+  (SELECT COUNT(*) FROM agents ag WHERE ag.session_id = s.id) AS agents, COUNT(DISTINCT r.model) AS models, ${USAGE}
   FROM sessions s LEFT JOIN requests r ON r.session_id = s.id`;
+// Most main-agent requests wins; sessions with no main requests fall back to the most requests overall.
+const MAIN_MODEL = `(SELECT m.model FROM requests m WHERE m.session_id = pg.id GROUP BY m.model
+  ORDER BY SUM(m.agent_id IS NULL) DESC, COUNT(*) DESC, m.model LIMIT 1) AS model`;
+/** Adds `model` to an already-limited session row set, so the correlated subquery runs at most once per returned row. */
+const withModel = (limited: string, order: string) => `SELECT pg.*, ${MAIN_MODEL} FROM (${limited}) pg ORDER BY ${order}`;
 
-const filterParams = (f: StatsFilter): Params => ({ since: f.since, project: f.project ?? null });
+const SORT_SQL: Record<SessionSort, string> = {
+  last: "last_ts",
+  cost: "cost_usd",
+  requests: "requests",
+  tokens: "input + output + cache_read + cache_write",
+  agents: "agents",
+};
 const pageParams = (p: PageQuery): Params => ({ limit: p.pageSize, offset: (p.page - 1) * p.pageSize });
 const splitModels = (m: string | null) => (m ? m.split(",") : []);
 
@@ -42,20 +55,21 @@ export function projectsPage(db: Database, f: StatsFilter, p: PageQuery): Page<P
   );
 }
 
-/** Sessions active since the filter's start, newest first, with whole-session totals. */
-export function sessionsPage(db: Database, f: StatsFilter, p: PageQuery): Page<SessionRow> {
+/** Sessions active since the filter's start matching `q`, sorted by `q.sort` (id breaks ties), with whole-session totals. */
+export function sessionsPage(db: Database, f: StatsFilter, p: PageQuery, q: SessionQuery = { sort: "last", dir: "desc" }): Page<SessionRow> {
+  const order = `${SORT_SQL[q.sort]} ${q.dir}, id`;
   return paged<SessionRow>(
     db,
     p,
-    `${SESSION_SELECT} WHERE ${SESSION_WHERE} GROUP BY s.id ORDER BY s.last_ts DESC, s.id LIMIT $limit OFFSET $offset`,
+    withModel(`SELECT * FROM (${SESSION_GROUPED} WHERE ${SESSION_WHERE} GROUP BY s.id) ORDER BY ${order} LIMIT $limit OFFSET $offset`, order),
     `SELECT COUNT(*) AS n FROM sessions s WHERE ${SESSION_WHERE}`,
-    filterParams(f),
+    { ...filterParams(f), q: q.q ?? null },
   );
 }
 
 /** One session with whole-session totals (main agent + subagents), or undefined. */
 export function sessionById(db: Database, id: string): SessionRow | undefined {
-  return db.query<SessionRow, Params>(`${SESSION_SELECT} WHERE s.id = $id GROUP BY s.id`).get({ id }) ?? undefined;
+  return db.query<SessionRow, Params>(withModel(`${SESSION_GROUPED} WHERE s.id = $id GROUP BY s.id`, "pg.id")).get({ id }) ?? undefined;
 }
 
 type AgentDbRow = Omit<AgentNode, "models"> & { models: string | null };

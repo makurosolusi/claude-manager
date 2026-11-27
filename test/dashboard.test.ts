@@ -5,8 +5,9 @@ import { dirname, join } from "node:path";
 import { openDb } from "../src/db/db.schema.ts";
 import { sync } from "../src/ingest/ingest.service.ts";
 import { contextWindow, DEFAULT_CONTEXT_WINDOW, LONG_CONTEXT_WINDOW } from "../src/server/context.window.ts";
-import { handleApi } from "../src/server/dashboard.api.ts";
-import type { LiveSession, Overview, Page, ProjectRow, RoleRow, SessionDetail, SessionRow, TimelineItem } from "../src/server/dashboard.types.ts";
+import { DEFAULT_TIER_MODELS } from "../src/config/config.store.ts";
+import { handleApi, overview, SYNC_INTERVAL_MS } from "../src/server/dashboard.api.ts";
+import type { DashboardMeta, LiveSession, Overview, Page, ProjectRow, RoleRow, SessionDetail, SessionRow, TimelineItem } from "../src/server/dashboard.types.ts";
 import { useTempHome } from "./test.home.ts";
 
 // test-only fixtures: synthetic transcripts shaped like Claude Code's JSONL, never real logs.
@@ -57,6 +58,7 @@ beforeEach(async () => {
     A(s(1), assistant("m1", "claude-opus-5-5", { input_tokens: 1000, output_tokens: 100 }, [spawn("tu_1")])),
     A(s(10), prompt("second")),
     A(s(11), assistant("m2", "claude-opus-5-5", { input_tokens: 2000, output_tokens: 200 })),
+    A(s(12), { type: "ai-title", aiTitle: "Fix Stripe Webhook" }),
   ]);
   write(
     log("/work/app", OLD, "aaa"),
@@ -194,6 +196,85 @@ describe("dashboard api", () => {
     expect(call("/api/overview", { method: "POST" }).status).toBe(405);
     expect(call("/api/unknown").status).toBe(404);
     expect(handleApi(new Request(`${BASE}/`), db)).toBeUndefined();
+  });
+});
+
+describe("dashboard api: overview deltas and charts", () => {
+  test("prev is null for all-time and holds the equal-length window before since", async () => {
+    expect((await get<Overview>("/api/overview?since=1970-01-01")).prev).toBeNull();
+    // Window = last 70 min (both live sessions); prev = the 70 min before it (the 2h-old session).
+    const o = overview(db, { since: new Date(now - 70 * MIN).toISOString() }, now);
+    expect(o.total).toMatchObject({ requests: 3, sessions: 2 });
+    expect(o.prev).toMatchObject({ requests: 4, sessions: 1, input: 3800 });
+  });
+
+  test("total counts distinct sessions", async () => {
+    expect((await get<Overview>("/api/overview")).total.sessions).toBe(3);
+    expect((await get<Overview>("/api/overview?project=app")).total.sessions).toBe(1);
+  });
+
+  test("byDayModel splits byDay by model without losing cost or requests", async () => {
+    const o = await get<Overview>("/api/overview");
+    const sum = (rows: { cost_usd: number; requests: number }[]) => rows.reduce((a, r) => ({ cost_usd: a.cost_usd + r.cost_usd, requests: a.requests + r.requests }), { cost_usd: 0, requests: 0 });
+    expect(sum(o.byDayModel).cost_usd).toBeCloseTo(sum(o.byDay).cost_usd, 10);
+    expect(sum(o.byDayModel).requests).toBe(7);
+    expect(new Set(o.byDayModel.map((r) => r.model))).toEqual(new Set(["claude-haiku-4-5", "claude-opus-5-5", "claude-sonnet-5-5"]));
+  });
+});
+
+describe("dashboard api: session sort, search and model", () => {
+  test("sort=cost orders by cost in both directions", async () => {
+    const desc = (await get<Page<SessionRow>>("/api/sessions?sort=cost&dir=desc")).items.map((s) => s.cost_usd);
+    expect(desc).toHaveLength(3);
+    expect(desc).toEqual([...desc].sort((a, b) => b - a));
+    const asc = (await get<Page<SessionRow>>("/api/sessions?sort=cost&dir=asc")).items.map((s) => s.cost_usd);
+    expect(asc).toEqual([...desc].reverse());
+    const byRequests = await get<Page<SessionRow>>("/api/sessions?sort=requests&pageSize=1");
+    expect(byRequests.items.map((s) => s.id)).toEqual([OLD]);
+  });
+
+  test("unknown sort or dir and an over-long q are 400", async () => {
+    const res = call("/api/sessions?sort=x");
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe('invalid sort "x": use one of last, cost, requests, tokens, agents');
+    expect(call("/api/sessions?dir=up").status).toBe(400);
+    expect(call(`/api/sessions?q=${"a".repeat(201)}`).status).toBe(400);
+  });
+
+  test("q matches title, id prefix and project path, case-insensitively", async () => {
+    const ids = async (q: string) => (await get<Page<SessionRow>>(`/api/sessions?q=${encodeURIComponent(q)}`)).items.map((s) => s.id).sort();
+    expect(await ids("stripe webhook")).toEqual([OLD]);
+    expect(await ids("bbbbbbbb")).toEqual([LIVE_200K]);
+    expect(await ids("/WORK/WEB")).toEqual([LIVE_200K, LIVE_1M]);
+    expect(await ids("  ")).toHaveLength(3);
+    const p = await get<Page<SessionRow>>("/api/sessions?q=work&project=app");
+    expect(p).toMatchObject({ total: 1, items: [{ id: OLD }] });
+  });
+
+  test("model is the main agent's most-used model; models counts every model", async () => {
+    const d = await get<SessionDetail>(`/api/sessions/${OLD}`);
+    expect(d.session).toMatchObject({ model: "claude-opus-5-5", models: 3, title: "Fix Stripe Webhook" });
+    const row = (await get<Page<SessionRow>>("/api/sessions")).items.find((s) => s.id === LIVE_1M);
+    expect(row).toMatchObject({ model: "claude-haiku-4-5", models: 1 });
+  });
+});
+
+describe("dashboard api: meta", () => {
+  test("without a provider reports never synced and the default tiers", async () => {
+    expect(await get<DashboardMeta>("/api/meta")).toEqual({ synced_at: null, changed_at: null, error: null, interval_ms: SYNC_INTERVAL_MS, tiers: DEFAULT_TIER_MODELS });
+  });
+
+  test("returns the provider's sync state and configured tiers", async () => {
+    const meta: DashboardMeta = {
+      synced_at: "2026-11-27T10:00:00.000Z",
+      changed_at: "2026-11-27T09:59:00.000Z",
+      error: "disk full",
+      interval_ms: 1000,
+      tiers: { think: "claude-opus-test", work: "claude-sonnet-test", basic: "claude-haiku-test" }, // test-only
+    };
+    const res = handleApi(new Request(`${BASE}/api/meta`), db, undefined, () => meta)!;
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(meta);
   });
 });
 
