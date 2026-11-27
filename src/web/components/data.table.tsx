@@ -83,7 +83,7 @@ export function DataTable<T>(p: DataTableProps<T>) {
   const columns = visibleColumns(p.columns, p.hidden);
   return (
     <div className="w-full max-sm:overflow-x-auto">
-      <table aria-label={p.label} aria-busy={p.loading || undefined} className={cn("w-full border-collapse", p.loading && p.rows && "opacity-60 transition-opacity")}>
+      <table aria-label={p.label} aria-busy={p.loading || undefined} className="w-full border-collapse">
         <thead>
           <tr>
             {columns.map((c) => (
