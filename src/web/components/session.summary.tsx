@@ -78,7 +78,7 @@ export function SessionHeader({ session: s, models, roles }: Pick<SessionDetailF
         <RoleBadge role={s.main_agent ?? "main"} roles={roles} />
         {model && <ModelBadge model={model} extra={s.models > 1 ? `+${s.models - 1}` : undefined} />}
         <Meta icon={UI_ICON.time}>
-          {fmtTime(s.first_ts)} → <RelativeTime iso={s.last_ts} /> · {fmtSpan(s.first_ts, s.last_ts)}
+          Started {fmtTime(s.first_ts)} · active <RelativeTime iso={s.last_ts} /> · {fmtSpan(s.first_ts, s.last_ts)} long
         </Meta>
         <CopyId id={s.id} />
       </div>
@@ -94,7 +94,7 @@ export function SessionKpis({ session: s, compactions, context }: { session: Ses
   return (
     <>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={KPI_ICON.cost} label="Est. cost" value={<CostCell usd={s.cost_usd} unpriced={s.unpriced} />} hint="At API list prices" />
+        <KpiCard icon={KPI_ICON.cost} label="Cost (est.)" value={<CostCell usd={s.cost_usd} unpriced={s.unpriced} />} />
         <KpiCard icon={KPI_ICON.requests} label="Requests" value={fmtInt(s.requests)} />
         <KpiCard icon={KPI_ICON.tokens} label="Tokens" value={fmtTokens(tokens)} hint={`Cache hit ${fmtPct(cacheHitRate(s))}`} />
         <KpiCard icon={KPI_ICON.agents} label="Agents" value={fmtInt(s.agents)} hint={plural(compactions, "compaction")} />

@@ -28,7 +28,7 @@ export function AgentTree({ agents, roles }: { agents: AgentNode[]; roles?: read
               ))}
             </span>
             <span className="flex items-center gap-3 text-muted-foreground tabular-nums">
-              <span>{fmtInt(a.requests)} req</span>
+              <span>{fmtInt(a.requests)} requests</span>
               <span className="text-foreground"><CostCell usd={a.cost_usd} unpriced={a.unpriced} /></span>
             </span>
           </div>

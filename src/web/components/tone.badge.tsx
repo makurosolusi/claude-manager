@@ -27,7 +27,7 @@ export function ToneBadge({ tone = "neutral", hue, icon: Icon, children, dashed,
       )}
     >
       <Icon aria-hidden className="size-3.5 shrink-0" />
-      <span className="truncate">{children}</span>
+      <span className="truncate" title={typeof children === "string" ? children : undefined}>{children}</span>
     </span>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { COST_NOTE } from "@/components/cost.cell.tsx";
 import { RangePicker } from "@/components/range.picker.tsx";
 import { SyncIndicator } from "@/components/sync.indicator.tsx";
@@ -33,23 +33,6 @@ const NAV = [
 /** URL value for a range; the default is omitted so clean URLs stay clean. */
 const rangeParam = (r: Range) => (r === DEFAULT_RANGE ? undefined : r);
 
-/** True while a nav strip still has content scrolled out of view to its right; drives the mobile fade hint. */
-function useMoreRight() {
-  const ref = useRef<HTMLElement>(null);
-  const [more, setMore] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const update = () => setMore(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
-    update();
-    el.addEventListener("scroll", update, { passive: true });
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => { el.removeEventListener("scroll", update); ro.disconnect(); };
-  }, []);
-  return { ref, more };
-}
-
 /** Sync status with its own 1s clock, so "Synced Ns ago" ticks between polls without re-rendering the whole shell. */
 function HeaderSync({ meta }: { meta: SyncMeta | undefined }) {
   return <SyncIndicator meta={meta} now={useNow(SECOND_TICK_MS)} />;
@@ -58,7 +41,6 @@ function HeaderSync({ meta }: { meta: SyncMeta | undefined }) {
 /** Dashboard shell: sticky header (nav, sync status, URL-backed range, theme), page switch, footer. */
 export function App() {
   const route = useHashRoute();
-  const nav = useMoreRight();
   const { path, params } = route;
   const { meta, error, dataVersion } = useSyncMeta();
   const range = parseRange(params.get("range"));
@@ -79,15 +61,15 @@ export function App() {
 
   return (
     <div className="flex min-h-dvh flex-col">
+      <a href="#main" className="sr-only z-30 rounded-md bg-background px-3 py-2 text-sm focus:not-sr-only focus:fixed focus:left-4 focus:top-2 focus:outline-2 focus:outline-solid focus:outline-ring">Skip to content</a>
       <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
-        {/* <640 (~105px tall): row 1 = logo · sync dot · theme, row 2 = nav (scrolls; right-edge fade while more links are out of view) + native range select.
-            ≥640: one h-12 row. */}
-        <div className={cn(CONTAINER, "flex flex-wrap items-center gap-x-4 gap-y-1 py-1 sm:h-12 sm:flex-nowrap sm:py-0")}>
-          <a href={hashHref("/", { range: rangeParam(range) })} className="order-1 flex shrink-0 items-center gap-2 rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring">
+        {/* <640: row 1 = logo · sync · range · theme, row 2 = 5-column nav (all links visible, 48px targets). ≥640: one h-12 row. */}
+        <div className={cn(CONTAINER, "flex flex-wrap items-center gap-x-3 gap-y-0 sm:h-12 sm:flex-nowrap sm:gap-x-4")}>
+          <a href={hashHref("/", { range: rangeParam(range) })} className="order-1 flex min-h-11 shrink-0 items-center gap-2 rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring sm:min-h-0">
             <span aria-hidden className="size-2.5 rounded-[2px] bg-brand" />
             <span className="font-mono text-[13px] font-semibold">claude-manager</span>
           </a>
-          <nav ref={nav.ref} aria-label="Main" className={cn("order-5 -mx-1 flex min-w-0 flex-1 basis-0 gap-0.5 overflow-x-auto px-1 [scrollbar-width:none] sm:order-2 [&::-webkit-scrollbar]:hidden", nav.more && "max-sm:[mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)]")}>
+          <nav aria-label="Main" className="order-5 -mx-4 grid basis-full grid-cols-5 sm:order-2 sm:mx-0 sm:flex sm:min-w-0 sm:flex-1 sm:basis-0 sm:gap-0.5">
             {NAV.map((n) => {
               const active = n.match(path);
               return (
@@ -96,11 +78,11 @@ export function App() {
                   href={hashHref(n.path, { range: rangeParam(range) })}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-[13px] whitespace-nowrap outline-hidden sm:min-h-0 sm:px-2.5 sm:py-1 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
-                    active ? "bg-surface-hover text-foreground" : "text-muted-foreground hover:text-foreground",
+                    "relative flex min-h-12 flex-col items-center justify-center gap-0.5 text-[11px] outline-hidden focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring sm:inline-flex sm:min-h-0 sm:flex-row sm:gap-1.5 sm:rounded-md sm:px-2.5 sm:py-1 sm:text-[13px] sm:whitespace-nowrap",
+                    active ? "text-foreground before:absolute before:inset-x-3 before:top-0 before:h-0.5 before:bg-foreground sm:bg-surface-hover sm:before:hidden" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  <n.icon aria-hidden className="hidden size-3.5 min-[360px]:block" />
+                  <n.icon aria-hidden className="size-4 sm:size-3.5" />
                   {n.label}
                 </a>
               );
@@ -109,8 +91,7 @@ export function App() {
           <div className="order-2 ml-auto sm:order-3">
             <HeaderSync meta={withPollError(meta, error)} />
           </div>
-          <div aria-hidden className="order-4 basis-full sm:hidden" />
-          <div className="order-6 sm:order-4">
+          <div className="order-3 sm:order-4">
             <RangePicker
               value={range}
               disabled={timeless}
@@ -120,12 +101,12 @@ export function App() {
               }}
             />
           </div>
-          <div className="order-3 sm:order-5">
+          <div className="order-4 sm:order-5">
             <ThemeToggle />
           </div>
         </div>
       </header>
-      <main className={cn(CONTAINER, "flex flex-col gap-6 py-6")}>{page}</main>
+      <main id="main" tabIndex={-1} className={cn(CONTAINER, "flex flex-col gap-6 py-6 outline-hidden")}>{page}</main>
       <footer className="mt-auto border-t">
         <div className={cn(CONTAINER, "flex flex-wrap justify-between gap-x-6 gap-y-1 py-4 text-xs text-fg-subtle")}>
           <span>Costs · {COST_NOTE}</span>

@@ -67,7 +67,7 @@ export function Timeline({ sessionId, tick = 0 }: { sessionId: string; tick?: nu
             </div>
             <PromptText text={t.text} />
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground tabular-nums">
-              <span>{fmtInt(t.requests)} requests</span>
+              <span>{fmtInt(t.requests)} {t.requests === 1 ? "request" : "requests"}</span>
               <span>{fmtTokens(t.input)} in</span>
               <span>{fmtTokens(t.output)} out</span>
               <span>{fmtTokens(t.cache_read)} cache read</span>
@@ -77,7 +77,7 @@ export function Timeline({ sessionId, tick = 0 }: { sessionId: string; tick?: nu
           </li>
         ))}
       </ol>
-      <TablePagination label="Prompts" page={page} pageSize={size} total={d.total} onPage={setPage} onPageSize={(n) => { setSize(n); setPage(1); }} />
+      <TablePagination label="Prompts" noun="prompts" page={page} pageSize={size} total={d.total} onPage={setPage} onPageSize={(n) => { setSize(n); setPage(1); }} />
     </>
   );
 }

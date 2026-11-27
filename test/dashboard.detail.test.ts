@@ -188,7 +188,7 @@ describe("session detail", () => {
     const cases: [string, string][] = [
       [`/api/sessions/${SID}/requests?sort=bogus`, 'invalid sort "bogus": use one of ts, cost, tokens, context'],
       [`/api/sessions/${SID}/requests?dir=up`, 'invalid dir "up": use one of asc, desc'],
-      [`/api/sessions/${SID}/requests?family=gpt`, 'invalid family "gpt": use one of opus, sonnet, haiku, other'],
+      [`/api/sessions/${SID}/requests?family=gpt`, 'invalid family "gpt": use one of opus, sonnet, haiku, fable, other'],
       [`/api/sessions/${SID}/requests?pageSize=201`, "invalid pageSize"],
       [`/api/sessions/${SID}/requests?${many}`, "at most 20 values"],
       [`/api/sessions/${SID}/requests?stop=${"x".repeat(513)}`, "at most 512 characters"],

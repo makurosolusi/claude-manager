@@ -38,11 +38,28 @@ export function applyTheme(choice: ThemeChoice): void {
   }
 }
 
-/** System / light / dark segmented control for the app header. */
+/** Next choice in the mobile single-button cycle: system, light, dark, back to system. */
+export function nextTheme(c: ThemeChoice): ThemeChoice {
+  return OPTIONS[(OPTIONS.findIndex((o) => o.value === c) + 1) % OPTIONS.length]!.value;
+}
+
+/** System / light / dark control for the app header: one cycle button below sm, a segmented group from sm up. */
 export function ThemeToggle() {
   const [choice, setChoice] = useState<ThemeChoice>(readTheme);
+  const current = OPTIONS.find((o) => o.value === choice)!;
+  const set = (v: ThemeChoice) => { applyTheme(v); setChoice(v); };
   return (
-    <div role="group" aria-label="Theme" className="inline-flex shrink-0 rounded-md border p-0.5">
+    <>
+    <button
+      type="button"
+      aria-label={`Theme: ${current.label}. Activate to change`}
+      title={current.label}
+      onClick={() => set(nextTheme(choice))}
+      className="inline-flex size-11 shrink-0 items-center justify-center rounded-md border text-muted-foreground outline-hidden hover:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring sm:hidden"
+    >
+      <current.Icon aria-hidden className="size-4" />
+    </button>
+    <div role="group" aria-label="Theme" className="hidden shrink-0 rounded-md border p-0.5 sm:inline-flex">
       {OPTIONS.map(({ value, label, Icon }) => (
         <button
           key={value}
@@ -50,12 +67,9 @@ export function ThemeToggle() {
           aria-label={label}
           title={label}
           aria-pressed={choice === value}
-          onClick={() => {
-            applyTheme(value);
-            setChoice(value);
-          }}
+          onClick={() => set(value)}
           className={cn(
-            "inline-flex size-11 items-center sm:size-6 justify-center rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
+            "inline-flex size-6 items-center justify-center rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
             choice === value ? "bg-surface-hover text-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >
@@ -63,5 +77,6 @@ export function ThemeToggle() {
         </button>
       ))}
     </div>
+    </>
   );
 }

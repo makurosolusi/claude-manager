@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Panel } from "@/components/panel.tsx";
 import type { ToolCount } from "../../server/session.detail.types.ts";
 import type { UsageRow } from "../../server/dashboard.types.ts";
 import { CostCell } from "@/components/cost.cell.tsx";
@@ -9,19 +10,6 @@ import { toolIcon } from "@/lib/icon.map.ts";
 
 /** Tools listed before the panel scrolls. */
 const TOOLS_MAX_HEIGHT = "max-h-72";
-
-/** Titled card used by every side panel and the main sections. */
-export function Panel({ title, count, className, children }: { title: string; count?: number; className?: string; children: ReactNode }) {
-  return (
-    <section className={cn("flex min-w-0 flex-col gap-3 rounded-lg border bg-card p-4", className)}>
-      <h2 className="text-[13px] font-medium text-muted-foreground">
-        {title}
-        {count !== undefined && <span className="ml-1.5 tabular-nums text-fg-subtle">{fmtInt(count)}</span>}
-      </h2>
-      {children}
-    </section>
-  );
-}
 
 const Empty = ({ children }: { children: ReactNode }) => <p className="text-sm text-muted-foreground">{children}</p>;
 
@@ -35,8 +23,8 @@ export function ModelsPanel({ models }: { models: UsageRow[] }) {
             <li key={m.key} className="flex items-center justify-between gap-3 py-1.5">
               <ModelBadge model={m.key} />
               <span className="flex shrink-0 items-center gap-3 text-muted-foreground tabular-nums">
-                <span>{fmtInt(m.requests)} req</span>
-                <span className="text-foreground"><CostCell usd={m.cost_usd} unpriced={m.unpriced} heat="aggregate" /></span>
+                <span>{fmtInt(m.requests)} requests</span>
+                <span className="text-foreground"><CostCell usd={m.cost_usd} unpriced={m.unpriced} /></span>
               </span>
             </li>
           ))}

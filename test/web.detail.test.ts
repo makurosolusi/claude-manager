@@ -15,8 +15,8 @@ test("flattenAgentTree orders siblings by cost desc and keeps children under the
   expect(rows.map((r) => `${r.agent.id}:${r.depth}`)).toEqual(["rich:0", "kid2:1", "kid:1", "cheap:0"]);
 });
 
-test("fmtClock is local HH:mm:ss and dashes invalid input", () => {
-  expect(fmtClock(new Date(2026, 10, 26, 4, 2, 7).toISOString())).toBe("04:02:07");
+test("fmtClock is the local 12h clock (P1-14) and dashes invalid input", () => {
+  expect(fmtClock(new Date(2026, 10, 26, 4, 2, 7).toISOString())).toBe("4:02:07 AM");
   expect(fmtClock("nope")).toBe("—");
   expect(fmtClock(null)).toBe("—");
 });
@@ -42,4 +42,11 @@ test("REQUEST_SPEC round-trips table state and drops unknown values", () => {
   expect(s).toMatchObject({ sort: "cost", group: "stop", page: 3, filters: { family: ["opus"], agent: ["coder"], stop: [], tool: [] } });
   expect(parseTableQuery(new URLSearchParams("group=bogus&sort=x"), REQUEST_SPEC)).toMatchObject({ sort: "ts", dir: "desc", group: "none" });
   expect(tableParams(s, REQUEST_SPEC)).toMatchObject({ sort: "cost", group: "stop", family: ["opus"], page: "3" });
+});
+
+test("nextTheme cycles system, light, dark and wraps", async () => {
+  const { nextTheme } = await import("../src/web/components/theme.toggle.tsx");
+  expect(nextTheme("system")).toBe("light");
+  expect(nextTheme("light")).toBe("dark");
+  expect(nextTheme("dark")).toBe("system");
 });
