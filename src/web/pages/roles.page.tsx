@@ -1,12 +1,15 @@
 import { useState } from "react";
 import type { PageProps } from "@/lib/page.props.ts";
-import { CircleHelp, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, type LucideIcon } from "lucide-react";
 import { FAMILIES, type Page, type RoleRow } from "../../server/dashboard.types.ts";
+import { NoMatchState } from "@/components/client.table.tsx";
 import { DataTable, type Column } from "@/components/data.table.tsx";
 import type { GroupSpec } from "@/components/group.rows.tsx";
 import { ModelBadge } from "@/components/model.badge.tsx";
 import { PageHeader } from "@/components/page.header.tsx";
-import { ByModelTable, ByRoleTable, ShareBar, usageColumns } from "@/components/role.tables.tsx";
+import { ByModelTable, ByRoleTable, usageColumns } from "@/components/role.tables.tsx";
+import { ReroutedCount } from "@/components/reroute.badge.tsx";
+import { ShareBar } from "@/components/share.bar.tsx";
 import { RoleBadge } from "@/components/role.badge.tsx";
 import { TablePagination } from "@/components/table.pagination.tsx";
 import { TableToolbar } from "@/components/table.toolbar.tsx";
@@ -18,7 +21,7 @@ import { fmtInt, fmtModel, fmtTokens } from "@/lib/format.ts";
 import { CUSTOM_ROLE_ICON, FAMILY_ICON, KPI_ICON, NAV_ICON, ROLE_ICON, TIER_ICON } from "@/lib/icon.map.ts";
 import { FAMILY_LABEL, TIER_ORDER, modelFamily, type ModelFamily } from "@/lib/model.tier.ts";
 import type { Range } from "@/lib/range.ts";
-import { configuredTierMismatch, roleKind, sumUsage, withTier, type TieredRow } from "@/lib/roles.aggregate.ts";
+import { ROLE_KINDS, cacheHitLabel, configuredTierMismatch, roleKind, sumRerouted, sumUsage, withTier, type TieredRow } from "@/lib/roles.aggregate.ts";
 import { runClientTable, groupBy } from "@/lib/table.client.ts";
 import { useViewPrefs } from "@/lib/use.view.prefs.ts";
 import { NO_GROUP, PAGE_SIZES, parseTableQuery, patchTable, tableParams, type TableSpec, type TableState } from "@/lib/table.query.ts";
@@ -30,12 +33,15 @@ const Layers = KPI_ICON.tokens;
 const TABLE_ID = "roles";
 const DEFAULT_GROUP = "tier";
 const RANGE_LABEL: Record<Range, string> = { "24h": "Last 24 hours", "7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days", all: "All time" };
-const KINDS = ["preset", "custom", "built-in"];
-const KIND_ICON = { preset: NAV_ICON.roles, custom: CUSTOM_ROLE_ICON, "built-in": ROLE_ICON.main! };
+/** Group sets larger than this start collapsed; the subtotal row is the summary. */
+const EXTERNAL_HINT = "Claude Code built-in, plugin or ~/.claude/agents agent, not managed by claude-manager";
+const GROUP_AUTO_COLLAPSE = 6;
+const KIND_LABEL = { preset: "Preset", custom: "Custom", external: "External" };
+const KIND_ICON = { preset: NAV_ICON.roles, custom: CUSTOM_ROLE_ICON, external: ROLE_ICON.subagent! };
 const cap = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
 const SPEC: TableSpec = {
-  sorts: ["cost", "requests", "tokens", "role", "model"], defaultSort: "cost", defaultDir: "desc",
-  groups: [DEFAULT_GROUP, "role", "family", NO_GROUP], facets: { tier: TIER_ORDER, family: FAMILIES, kind: KINDS },
+  sorts: ["cost", "requests", "tokens", "rerouted", "role", "model"], defaultSort: "cost", defaultDir: "desc",
+  groups: [DEFAULT_GROUP, "role", "family", NO_GROUP], facets: { tier: TIER_ORDER, family: FAMILIES, kind: [...ROLE_KINDS] },
 };
 const tokens = (r: TieredRow) => r.input + r.output + r.cache_read + r.cache_write;
 const GROUP_KEY: Record<string, (r: TieredRow) => string> = { tier: (r) => r.tier, role: (r) => r.role, family: (r) => modelFamily(r.model) };
@@ -44,9 +50,10 @@ const GROUP_KEY: Record<string, (r: TieredRow) => string> = { tier: (r) => r.tie
 /** Roles × models (grouped by tier) plus By model and By role tables, all aggregated client-side from one fetch. */
 export function RolesPage({ since, range, dataVersion, params, tiers, roles }: PageProps) {
   const [retry, setRetry] = useState(0);
-  const [closed, setClosed] = useState<string[]>([]);
+  /** Per grouping: keys whose open state differs from the default (open, or collapsed for big sets). */
+  const [flipped, setFlipped] = useState<Record<string, string[]>>({});
   const { hidden, density, toggleCol, setDensity } = useViewPrefs(TABLE_ID);
-  const { data, error, loading } = useApi<Page<RoleRow>>("/api/roles", { since, page: 1, pageSize: ROLES_FETCH_SIZE }, dataVersion + retry);
+  const { data, error, loading, stale } = useApi<Page<RoleRow>>("/api/roles", { since, range, page: 1, pageSize: ROLES_FETCH_SIZE }, dataVersion + retry);
   const route = { path: "/roles", params: params ?? new URLSearchParams() };
   const state: TableState = parseTableQuery(route.params, SPEC);
   const group = route.params.has("group") ? state.group : DEFAULT_GROUP;
@@ -62,41 +69,45 @@ export function RolesPage({ since, range, dataVersion, params, tiers, roles }: P
   const t = runClientTable(rows, state, {
     text: (r) => `${r.role} ${r.model}`,
     facets: { tier: (r) => r.tier, family: (r) => modelFamily(r.model), kind: (r) => roleKind(r.role, roles) },
-    sort: { cost: (r) => r.cost_usd, requests: (r) => r.requests, tokens, role: (r) => r.role, model: (r) => r.model },
+    unique: { kind: (r) => r.role },
+    sort: { cost: (r) => r.cost_usd, requests: (r) => r.requests, rerouted: (r) => r.rerouted, tokens, role: (r) => r.role, model: (r) => r.model },
   });
 
   const columns: Column<TieredRow>[] = [
     {
-      id: "role", header: "Role", sortKey: "role", cell: (r) => {
+      id: "role", width: group === "role" ? undefined : "w-56", header: group === "role" ? "Model" : "Role", sortKey: group === "role" ? "model" : "role", cell: (r) => {
         const hint = configuredTierMismatch(r.role, r.tier, roles);
         return (
           <span className="flex min-w-0 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
-            <span className="inline-flex items-center gap-1.5"><RoleBadge role={r.role} roles={roles} />
-              {hint && <Tooltip focusable content={`Configured tier: ${hint}`}><CircleHelp aria-label={`Configured tier: ${hint}`} className="size-3.5 text-muted-foreground" /></Tooltip>}
+            <span className="inline-flex items-center gap-1.5">{group !== "role" && <RoleBadge role={r.role} roles={roles} />}
+              {hint && <Tooltip focusable content={`Configured for ${hint}, billed as ${r.tier}`}><ArrowLeftRight aria-label={`Configured for ${hint}, billed as ${r.tier}`} className="size-3.5 text-muted-foreground" /></Tooltip>}
             </span>
-            <span className="sm:hidden"><ModelBadge model={r.model} /></span>
+            {group === "role" ? <span className="pl-6"><ModelBadge model={r.model} /></span> : <span className="sm:hidden"><ModelBadge model={r.model} /></span>}
           </span>
         );
       },
     },
-    { id: "model", header: "Model", sortKey: "model", cell: (r) => <ModelBadge model={r.model} />, width: "w-44", hideBelow: "sm" },
+    ...(group === "role" ? [] : [{ id: "model", header: "Model", sortKey: "model", cell: (r: TieredRow) => <ModelBadge model={r.model} />, fill: true, hideBelow: "sm" as const }]),
     ...usageColumns<TieredRow>(share),
   ];
   const labelOf = (k: string, r: TieredRow) =>
     group === "tier" ? <span className="inline-flex items-center gap-2"><TierBadge tier={r.tier} tiers={tiers} />{r.tier !== "other" && tiers?.[r.tier] && <span className="font-mono text-xs text-muted-foreground">{fmtModel(tiers[r.tier])}</span>}</span>
     : group === "role" ? <RoleBadge role={k} roles={roles} /> : <span>{FAMILY_LABEL[k as ModelFamily] ?? cap(k)}</span>;
-  const specs: GroupSpec<TieredRow>[] | undefined = group === NO_GROUP ? undefined : groupBy(t.filtered, GROUP_KEY[group]!)
+  const grouped = group === NO_GROUP ? [] : groupBy(t.filtered, GROUP_KEY[group]!);
+  const collapsed = grouped.length > GROUP_AUTO_COLLAPSE;
+  const flips = flipped[group] ?? [];
+  const specs: GroupSpec<TieredRow>[] | undefined = group === NO_GROUP ? undefined : grouped
     .sort((a, b) => group === "tier" ? TIER_ORDER.indexOf(a.rows[0]!.tier) - TIER_ORDER.indexOf(b.rows[0]!.tier) : sumUsage(b.rows).cost_usd - sumUsage(a.rows).cost_usd)
     .map((g) => {
       const u = sumUsage(g.rows);
       return {
-        key: g.key, label: labelOf(g.key, g.rows[0]!), count: g.rows.length, rows: g.rows, open: !closed.includes(g.key),
-        onToggle: () => setClosed((c) => (c.includes(g.key) ? c.filter((x) => x !== g.key) : [...c, g.key])),
-        totals: { requests: fmtInt(u.requests), tokens: fmtTokens(u.input + u.output + u.cache_read + u.cache_write), cost: <CostCell usd={u.cost_usd} unpriced={u.unpriced} />, share: <ShareBar share={share(u)} /> },
+        key: g.key, label: labelOf(g.key, g.rows[0]!), count: g.rows.length, rows: g.rows, open: flips.includes(g.key) === collapsed,
+        onToggle: () => setFlipped((f) => ({ ...f, [group]: flips.includes(g.key) ? flips.filter((x) => x !== g.key) : [...flips, g.key] })),
+        totals: { requests: fmtInt(u.requests), rerouted: <ReroutedCount count={sumRerouted(g.rows)} />, tokens: fmtTokens(u.input + u.output + u.cache_read + u.cache_write), cache: cacheHitLabel(u), cost: <CostCell usd={u.cost_usd} unpriced={u.unpriced} />, share: <ShareBar share={share(u)} /> },
       };
     });
 
-  const facet = (id: string, label: string, icon: LucideIcon, opts: { value: string; label: string; icon?: LucideIcon }[]) => ({
+  const facet = (id: string, label: string, icon: LucideIcon, opts: { value: string; label: string; icon?: LucideIcon; hint?: string }[]) => ({
     id, label, icon, selected: state.filters[id] ?? [], onChange: (v: string[]) => go({ filters: { ...state.filters, [id]: v } }),
     options: opts.map((o) => ({ ...o, count: t.counts[id]?.get(o.value) ?? 0 })),
   });
@@ -106,13 +117,13 @@ export function RolesPage({ since, range, dataVersion, params, tiers, roles }: P
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader icon={NAV_ICON.roles} title="Roles" description={`${RANGE_LABEL[range]} · ${new Set(rows.map((r) => r.role)).size} roles · ${models} models`} />
+      <PageHeader icon={NAV_ICON.roles} title="Roles" description={data ? `${RANGE_LABEL[range]} · ${new Set(rows.map((r) => r.role)).size} roles · ${models} models` : RANGE_LABEL[range]} />
       <TableToolbar
         search={{ value: state.q, onChange: (q) => go({ q }), placeholder: "Search role or model", label: "Search roles" }}
         facets={[
           facet("tier", "Tier", Layers, TIER_ORDER.map((v) => ({ value: v, label: cap(v), icon: TIER_ICON[v] }))),
           facet("family", "Model", FAMILY_ICON.opus, FAMILIES.map((v) => ({ value: v, label: FAMILY_LABEL[v], icon: FAMILY_ICON[v] }))),
-          facet("kind", "Kind", NAV_ICON.roles, KINDS.map((v) => ({ value: v, label: cap(v), icon: KIND_ICON[v as keyof typeof KIND_ICON] }))),
+          facet("kind", "Kind", NAV_ICON.roles, ROLE_KINDS.map((v) => ({ value: v, label: KIND_LABEL[v], icon: KIND_ICON[v], hint: v === "external" ? EXTERNAL_HINT : undefined }))),
         ]}
         group={{ value: group, options: [{ value: DEFAULT_GROUP, label: "Tier" }, { value: "role", label: "Role" }, { value: "family", label: "Model family" }, { value: NO_GROUP, label: "No grouping" }], onChange: (g) => go({ group: g }) }}
         view={{
@@ -124,14 +135,14 @@ export function RolesPage({ since, range, dataVersion, params, tiers, roles }: P
         summary={data && data.total > data.items.length ? `Showing the first ${fmtInt(data.items.length)} of ${fmtInt(data.total)} role × model rows.` : undefined}
       />
       <DataTable
-        label="Roles × models" rows={group === NO_GROUP ? t.page : t.filtered} groups={specs} columns={columns} rowKey={key} hidden={hidden} density={density}
+        label="Roles × models" rows={data ? (group === NO_GROUP ? t.page : t.filtered) : undefined} groups={data && specs?.length ? specs : undefined} columns={columns} rowKey={key} hidden={hidden} density={density}
         sort={{ key: state.sort, dir: state.dir }} onSort={(s) => go({ sort: s.key, dir: s.dir })}
-        loading={loading} error={error && new Error(`Couldn't load roles. ${error.message}`)} onRetry={() => setRetry((n) => n + 1)}
-        empty={state.q || Object.values(state.filters).some((f) => f.length) ? "No roles match these filters." : "No role usage in this range."}
+        loading={loading} stale={stale} error={error && new Error(`Couldn't load roles. ${error.message}`)} onRetry={() => setRetry((n) => n + 1)}
+        empty={state.q || Object.values(state.filters).some((f) => f.length) ? <NoMatchState noun="roles" onReset={reset} /> : "No role usage in this range."}
       />
       {group === NO_GROUP && <TablePagination label="Roles" page={state.page} pageSize={state.size} total={t.total} sizes={PAGE_SIZES} onPage={(page) => go({ page })} onPageSize={(size) => go({ size })} />}
       {data && (
-        <div className="grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
+        <div className="grid gap-6 xl:grid-cols-2 [&>*]:min-w-0">
           <ByModelTable rows={rows} tiers={tiers} />
           <ByRoleTable rows={rows} tiers={tiers} roles={roles} />
         </div>

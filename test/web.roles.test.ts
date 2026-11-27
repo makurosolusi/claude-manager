@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type { RoleRow } from "../src/server/dashboard.types.ts";
 import type { RoleMeta } from "../src/web/lib/color.tokens.ts";
 import { costByTier } from "../src/web/lib/tier.cost.ts";
-import { byModel, byRole, configuredTierMismatch, roleKind, sumUsage, tierSubtotals, withTier } from "../src/web/lib/roles.aggregate.ts";
+import { byModel, byRole, configuredTierMismatch, byTierOrder, cacheHitLabel, roleKind, sumUsage, tierSubtotals, withTier } from "../src/web/lib/roles.aggregate.ts";
 
 // test-only fixtures
 const tiers = { think: "claude-opus-4-7", work: "claude-sonnet-4-5", basic: "claude-haiku-4-5" };
@@ -12,7 +12,7 @@ const roles: RoleMeta[] = [
   { name: "qa-bot", tier: "basic", source: "custom" },
 ];
 const row = (role: string, model: string, cost: number, requests = 1): RoleRow =>
-  ({ role, model, requests, input: 10, output: 5, cache_read: 20, cache_write: 1, cost_usd: cost, unpriced: 0 });
+  ({ role, model, requests, input: 10, output: 5, cache_read: 20, cache_write: 1, cost_usd: cost, unpriced: 0, rerouted: 0 });
 const data = [
   row("manager", "claude-opus-4-7", 10, 4),
   row("coder", "claude-opus-4-7", 6, 2), // configured work, billed think
@@ -61,10 +61,21 @@ test("configured tier mismatch is reported only when it differs", () => {
   expect(configuredTierMismatch("coder", "think")).toBeUndefined(); // roster not loaded yet
 });
 
-test("roleKind: built-in, preset, custom, unknown counts as custom", () => {
-  expect(roleKind("main", roles)).toBe("built-in");
-  expect(roleKind("subagent")).toBe("built-in");
+test("roleKind comes from the roster only; everything else is external", () => {
   expect(roleKind("coder", roles)).toBe("preset");
   expect(roleKind("qa-bot", roles)).toBe("custom");
-  expect(roleKind("ghost", roles)).toBe("custom");
+  for (const n of ["main", "subagent", "general-purpose", "Explore", "ghost"]) expect(roleKind(n, roles)).toBe("external");
+  expect(roleKind("coder")).toBe("external"); // roster not loaded yet
+});
+
+test("cacheHitLabel is token-weighted, not an average of row rates", () => {
+  const big = { ...sumUsage([]), requests: 1, input: 0, cache_read: 990, cache_write: 10 }; // 99%
+  const small = { ...sumUsage([]), requests: 1, input: 10, cache_read: 0, cache_write: 0 }; // 0%
+  expect(cacheHitLabel(sumUsage([big, small]))).toBe("98.0%");
+  expect(cacheHitLabel(sumUsage([]))).toBe("—");
+});
+
+test("byTierOrder sorts think, work, basic, other", () => {
+  const keys = byTierOrder([{ key: "other" }, { key: "basic" }, { key: "think" }, { key: "work" }]).map((g) => g.key);
+  expect(keys).toEqual(["think", "work", "basic", "other"]);
 });

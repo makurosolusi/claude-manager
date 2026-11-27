@@ -150,7 +150,9 @@ Start it with `claude-manager dashboard`. It is read-only and serves a single pa
 - **Live** (`#/live`): sessions active in the last 15 minutes, with a context bar and estimated context left (OK, warning or critical). It refreshes when new data is synced.
 - **Session detail** (`#/sessions/<id>`): one session with cost, requests, tokens and context. A searchable request table (agent, model, tools, stop reason, context, tokens, cost) has Agent, Model, Stop and Tool filters. Side panels list the models, tools and agents used, and a prompt timeline follows. With `storePromptText` set to `false`, no prompt text is stored.
 
-Colours carry meaning. Opus is blue, sonnet is orange and haiku is teal. Each role has its own colour and icon. Status, cache hit rate, context level and stop reason have colours too, and the cost column carries a heat marker.
+Colours carry meaning. Opus is blue, sonnet is orange, haiku is teal and fable is plum. Each role has its own colour and icon: preset roles are solid badges, while custom roles (person icon) and external agents such as `general-purpose`, `Explore` or `fork` (bot icon) are outlined. The Kind column in By role says which is which (preset, custom or external). Status, cache hit rate, context level and stop reason have colours too.
+
+A request is **rerouted** when the model that answered is not the model that was asked for, usually because a gateway behind `ANTHROPIC_BASE_URL` remaps models. Rerouted requests are flagged with a warning badge in the session's request table (with a Rerouted filter), a chip in the session header, a marker beside the model on Sessions, a Rerouted column on Roles, and a count under the Requests card on Overview. Hover any of them for the requested and served models. See [Troubleshooting](#troubleshooting).
 
 The tables share one toolkit:
 
@@ -170,8 +172,8 @@ Page state lives in the URL hash, so a reload or a shared link keeps the same vi
 | ![Overview page in dark theme](README_ASSETS/overview-dark.png) | ![Overview page in light theme](README_ASSETS/overview-light.png) |
 | **Sessions, dark** | **Sessions with the Role filter open** |
 | ![Sessions page in dark theme](README_ASSETS/sessions-dark.png) | ![Sessions page with the Role facet open](README_ASSETS/sessions-filter.png) |
-| **Roles, grouped by tier** | **Live** |
-| ![Roles page grouped by tier](README_ASSETS/roles.png) | ![Live page showing context use per session](README_ASSETS/live.png) |
+| **Roles, grouped by role** | **Live** |
+| ![Roles page grouped by role, with rerouted requests](README_ASSETS/roles.png) | ![Live page showing context use per session](README_ASSETS/live.png) |
 | **Session detail** | **Sessions, mobile** |
 | ![Session detail page in dark theme](README_ASSETS/session-detail.png) | ![Sessions page on a phone-sized screen](README_ASSETS/sessions-mobile.png) |
 
@@ -226,6 +228,7 @@ Environment variables:
 | Costs differ from your bill | Costs are estimates at API list prices. Subscription plans are not billed this way, and background calls are not in transcripts. | Expected. See [Usage analytics and privacy](#usage-analytics-and-privacy). |
 | `warning: no rates for <model> (cost shown as 0)` | The model has no rates in the built-in table, Claude Code's cache, or `pricing.json`. | Add the model ID to `~/.claude-manager/pricing.json`, then run `claude-manager sync`. |
 | `update` fails with `self-update is not supported on Windows` | Self-update is not built for the Windows binary. | Download the new `.exe` from the Releases page. |
+| A role runs on a different model than its tier (for example `coder` on Opus), or the dashboard marks requests as rerouted | The role file requests the right model, but something overrides it. `claude-manager doctor` flags the usual causes: `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`, `ANTHROPIC_BASE_URL` (a gateway can serve another model than the one requested), a project `.claude/agents/<role>.md` that shadows the installed role, or unmapped `ANTHROPIC_DEFAULT_*_MODEL` aliases. Built-in agents (`general-purpose`, `fork`, `Explore`) and any call that omits a role inherit the main conversation model. | Fix what `doctor` reports (unset the variable, remove the shadow file, or re-run `install`). To pin a built-in agent, define a same-named agent with a `model:`. |
 | `doctor` exits 1 | A check printed `FAIL`. `claude CLI not found in PATH` means Claude Code is missing or not on `PATH`. `cannot parse <path> (Claude Code requires strict JSON)` means `settings.json` is invalid. | Install Claude Code or fix `PATH`, or fix the JSON in the named file. `warn` lines do not change the exit code. |
 | `Permission denied` when running a manually downloaded binary | The file is not executable. The shell prints this message, not claude-manager. | Run `chmod +x` on the binary, for example `chmod +x ~/.local/bin/claude-manager`. |
 

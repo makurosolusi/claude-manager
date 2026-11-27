@@ -87,7 +87,7 @@ describe("sessions filters", () => {
 
   test("bad values are 400 with the allowed list", async () => {
     for (const [qs, msg] of [
-      ["family=gpt", 'invalid family "gpt": use one of opus, sonnet, haiku, other'],
+      ["family=gpt", 'invalid family "gpt": use one of opus, sonnet, haiku, fable, other'],
       ["status=dead", 'invalid status "dead": use one of live, idle, ended'],
     ] as const) {
       const res = call(`/api/sessions?${qs}`);
@@ -162,18 +162,18 @@ describe("meta, favicon, migration, family sql", () => {
     }
   });
 
-  test("migration v2 creates the indexes and re-opening is a no-op", () => {
+  test("migrations create the v2 indexes and re-opening is a no-op", () => {
     const version = () => db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
     const indexes = () => db.query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'index'").all().map((r) => r.name);
-    expect(version()).toBe(2);
+    expect(version()).toBe(3);
     for (const name of ["sessions_last_ts", "sessions_project", "agents_session", "tool_calls_session"]) expect(indexes()).toContain(name);
     const again = openDb(join(ctx.app, "data.db"));
-    expect(again.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(2);
+    expect(again.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(3);
     again.close();
   });
 
   test("FAMILY_SQL matches modelFamily()", () => {
-    const models = ["claude-opus-5-5", "Claude-SONNET-4-6[1m]", "claude-haiku-4-5-20251001", "mystery", "", "gpt-opus-clone"];
+    const models = ["claude-opus-5-5", "Claude-SONNET-4-6[1m]", "claude-haiku-4-5-20251001", "mystery", "", "gpt-opus-clone", "fable-5-2", "claude-FABLE-5-2[1m]"];
     for (const m of models) {
       const sql = db.query<{ f: string }, { m: string }>(`SELECT ${FAMILY_SQL("$m")} AS f`).get({ m })!.f;
       expect(sql).toBe(modelFamily(m));

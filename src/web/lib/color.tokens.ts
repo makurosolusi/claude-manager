@@ -24,6 +24,7 @@ export const FAMILY_CLASSES: Record<ModelFamily, HueClasses> = {
   opus: { badge: "border-model-opus-border bg-model-opus-bg text-model-opus-fg", text: "text-model-opus-fg", dot: "bg-model-opus" },
   sonnet: { badge: "border-model-sonnet-border bg-model-sonnet-bg text-model-sonnet-fg", text: "text-model-sonnet-fg", dot: "bg-model-sonnet" },
   haiku: { badge: "border-model-haiku-border bg-model-haiku-bg text-model-haiku-fg", text: "text-model-haiku-fg", dot: "bg-model-haiku" },
+  fable: { badge: "border-model-fable-border bg-model-fable-bg text-model-fable-fg", text: "text-model-fable-fg", dot: "bg-model-fable" },
   other: { badge: "border-model-other-border bg-model-other-bg text-model-other-fg", text: "text-model-other-fg", dot: "bg-model-other" },
 };
 
@@ -46,13 +47,12 @@ export const ROLE_CLASSES: readonly HueClasses[] = [
   { badge: "border-role-6-border bg-role-6-bg text-role-6-fg", text: "text-role-6-fg", dot: "bg-role-6" },
 ];
 
-/** Cost-heat bar fills, step 1..5 (index 0..4). */
-export const HEAT_CLASSES: readonly string[] = [
-  "bg-heat-1",
-  "bg-heat-2",
-  "bg-heat-3",
-  "bg-heat-4",
-  "bg-heat-5",
+/** Non-preset agent hues (custom + external): outline-only badges (border + text, no tint) from a palette disjoint from role/family/tone hues. */
+export const EXT_CLASSES: readonly HueClasses[] = [
+  { badge: "border-ext-1 text-ext-1-fg", text: "text-ext-1-fg", dot: "bg-ext-1" },
+  { badge: "border-ext-2 text-ext-2-fg", text: "text-ext-2-fg", dot: "bg-ext-2" },
+  { badge: "border-ext-3 text-ext-3-fg", text: "text-ext-3-fg", dot: "bg-ext-3" },
+  { badge: "border-ext-4 text-ext-4-fg", text: "text-ext-4-fg", dot: "bg-ext-4" },
 ];
 
 /** Preset role → colour slot; fixed so presets never move (tier order think → work → basic). */
@@ -78,17 +78,18 @@ export function fnv1a32(s: string): number {
   return h >>> 0;
 }
 
-/** Resolved role colour: `slot` is null for neutral roles; `custom` roles render dashed. */
+/** Resolved role colour: preset `slot`, or `ext` (1-based) for non-preset agents, which render outline-only; both null for neutral roles. */
 export interface RoleColor {
   slot: RoleSlot | null;
+  ext: number | null;
   custom: boolean;
 }
 
-/** Colour slot for a role name: neutral for main/subagent, fixed for presets, `fnv1a32 % 6 + 1` (dashed) for the rest. */
+/** Colour for a role name: neutral for main/subagent, fixed slot for presets, `fnv1a32 % EXT_CLASSES.length + 1` (outline) for the rest. */
 export function roleColor(name: string, roles?: readonly RoleMeta[]): RoleColor {
-  if (NEUTRAL_ROLES.includes(name)) return { slot: null, custom: false };
+  if (NEUTRAL_ROLES.includes(name)) return { slot: null, ext: null, custom: false };
   const source = roles?.find((r) => r.name === name)?.source;
   const preset = Object.hasOwn(PRESET_SLOTS, name) ? PRESET_SLOTS[name] : undefined;
-  if (preset && source !== "custom") return { slot: preset, custom: false };
-  return { slot: (fnv1a32(name) % 6 + 1) as RoleSlot, custom: true };
+  if (preset && source !== "custom") return { slot: preset, ext: null, custom: false };
+  return { slot: null, ext: (fnv1a32(name) % EXT_CLASSES.length) + 1, custom: true };
 }

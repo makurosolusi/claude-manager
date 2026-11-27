@@ -5,7 +5,8 @@ import type { SessionDetailFull } from "../../server/session.detail.types.ts";
 import { AgentTree } from "@/components/agent.tree.view.tsx";
 import { RequestsTable } from "@/components/requests.table.tsx";
 import { SessionHeader, SessionKpis } from "@/components/session.summary.tsx";
-import { ModelsPanel, Panel, ToolsPanel } from "@/components/session.panels.tsx";
+import { Panel } from "@/components/panel.tsx";
+import { ModelsPanel, ToolsPanel } from "@/components/session.panels.tsx";
 import { Timeline } from "@/components/timeline.view.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { useApi } from "@/lib/api.client.ts";
@@ -59,21 +60,19 @@ export function SessionDetailPage({ id, dataVersion, roles }: Props) {
 
   const { session, agents, models, tools, compactions, context } = data;
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <SessionHeader session={session} models={models} roles={roles} />
       <SessionKpis session={session} compactions={compactions} context={context} />
-      <div className="grid items-start gap-4 lg:grid-cols-3">
-        <Panel title="Requests" className="lg:col-span-2">
-          <RequestsTable sessionId={session.id} roles={roles} tick={dataVersion} />
+      <div className="grid items-start gap-4 md:grid-cols-3">
+        <Panel title="Agents" count={agents.length}>
+          <AgentTree agents={agents} roles={roles} />
         </Panel>
-        <aside className="flex min-w-0 flex-col gap-4">
-          <Panel title="Agents" count={agents.length} className="order-first lg:order-last">
-            <AgentTree agents={agents} roles={roles} />
-          </Panel>
-          <ModelsPanel models={models} />
-          <ToolsPanel tools={tools} />
-        </aside>
+        <ModelsPanel models={models} />
+        <ToolsPanel tools={tools} />
       </div>
+      <Panel title="Requests">
+        <RequestsTable sessionId={session.id} roles={roles} tick={dataVersion} />
+      </Panel>
       <Panel title="Prompts">
         <Timeline sessionId={session.id} tick={dataVersion} />
       </Panel>

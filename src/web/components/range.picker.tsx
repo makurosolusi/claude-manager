@@ -1,17 +1,19 @@
 import { cn } from "@/lib/cn.ts";
 import { RANGES, type Range } from "@/lib/range.ts";
 
+/** Tooltip on the dimmed picker: pages that ignore the range say so. */
+const DISABLED_HINT = "Live and session pages ignore the time range";
+
 const LABEL: Record<Range, string> = { "24h": "24h", "7d": "7d", "30d": "30d", "90d": "90d", all: "All" };
 
 /** Segmented time-range control; always rendered, `disabled` on pages not filtered by time (no layout shift). */
 export function RangePicker({ value, onChange, disabled }: { value: Range; onChange: (r: Range) => void; disabled?: boolean }) {
   return (
-    <>
+    <span className="inline-flex" title={disabled ? DISABLED_HINT : undefined}>
       <select
         aria-label="Time range"
         value={value}
         disabled={disabled}
-        title={disabled ? "Not filtered by time range" : undefined}
         onChange={(e) => onChange(e.target.value as Range)}
         className="h-11 rounded-md border bg-background px-2 text-xs font-medium text-foreground outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 sm:hidden"
       >
@@ -22,7 +24,6 @@ export function RangePicker({ value, onChange, disabled }: { value: Range; onCha
     <div
       role="group"
       aria-label="Time range"
-      title={disabled ? "Not filtered by time range" : undefined}
       className={cn("hidden shrink-0 rounded-md border p-0.5 sm:inline-flex", disabled && "opacity-50")}
     >
       {(Object.keys(RANGES) as Range[]).map((r) => (
@@ -41,6 +42,6 @@ export function RangePicker({ value, onChange, disabled }: { value: Range; onCha
         </button>
       ))}
     </div>
-    </>
+    </span>
   );
 }

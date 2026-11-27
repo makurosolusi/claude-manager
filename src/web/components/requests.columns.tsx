@@ -2,6 +2,7 @@ import type { RequestRow } from "../../server/session.detail.types.ts";
 import { CostCell } from "@/components/cost.cell.tsx";
 import type { Column } from "@/components/data.table.tsx";
 import { ModelBadge } from "@/components/model.badge.tsx";
+import { RerouteBadge } from "@/components/reroute.badge.tsx";
 import { RoleBadge } from "@/components/role.badge.tsx";
 import { StopReasonBadge } from "@/components/status.badge.tsx";
 import { TokenCell } from "@/components/token.cell.tsx";
@@ -37,10 +38,15 @@ function ToolsCell({ tools }: { tools: string[] }) {
 export const requestColumns = (roles?: readonly RoleMeta[]): Column<RequestRow>[] => [
   { id: "time", header: "Time", cell: (r) => <time dateTime={r.ts} title={fmtTime(r.ts)} className="font-mono text-xs whitespace-nowrap">{fmtClock(r.ts)}</time>, sortKey: "ts", width: "w-24" },
   { id: "agent", header: "Agent", cell: (r) => <RoleBadge role={r.role} roles={roles} />, width: "w-32" },
-  { id: "model", header: "Model", cell: (r) => <ModelBadge model={r.model} />, width: "w-36", hideBelow: "sm" },
+  { id: "model", header: "Model", cell: (r) => (
+    <span className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1">
+      <ModelBadge model={r.model} />
+      {r.rerouted && <RerouteBadge requested={r.requested_model ?? r.model} served={r.model} />}
+    </span>
+  ), width: "w-56", hideBelow: "sm" },
   { id: "tools", header: "Tools", cell: (r) => <ToolsCell tools={r.tools} />, width: "w-28", hideBelow: "md" },
   { id: "stop", header: "Stop", cell: (r) => <StopReasonBadge reason={r.stop_reason} />, width: "w-32", hideBelow: "md" },
   { id: "context", header: "Context", cell: (r) => fmtTokens(r.context), align: "right", sortKey: "context", width: "w-20", hideBelow: "sm" },
   { id: "tokens", header: "Tokens", cell: (r) => <TokenCell usage={r} />, align: "right", sortKey: "tokens", width: "w-20", hideBelow: "lg" },
-  { id: "cost", header: "Cost (est.)", cell: (r) => <CostCell usd={r.cost_usd} heat="request" />, align: "right", sortKey: "cost", width: "w-24" },
+  { id: "cost", header: "Cost (est.)", cell: (r) => <CostCell usd={r.cost_usd} />, align: "right", sortKey: "cost", width: "w-24" },
 ];

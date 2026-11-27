@@ -18,6 +18,8 @@ export interface RequestRow extends Usage {
   agent_id: string | null;
   ts: string;
   model: string;
+  /** Model the client asked for (transcript `requestedModel`); null when the entry has none. */
+  requested_model: string | null;
   effort: string | null;
   thinking: number;
   stop_reason: string | null;
@@ -137,6 +139,7 @@ function parseAssistant(e: Json, sessionId: string, agentId: string | null, ts: 
     agent_id: agentId,
     ts,
     model: m.model,
+    requested_model: str(e.requestedModel),
     effort: str(e.effort),
     speed: str(u.speed),
     geo: str(u.inference_geo),

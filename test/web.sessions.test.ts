@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
+import { identityOf, withQuery } from "../src/web/lib/api.client.ts";
 import { parseHash } from "../src/web/lib/hash.route.ts";
-import { SESSIONS_SPEC, sessionsApiPath, sessionsCountLabel, sessionsHref } from "../src/web/lib/sessions.query.ts";
+import { SESSIONS_SPEC, sessionsApi, sessionsApiPath, sessionsCountLabel, sessionsHref } from "../src/web/lib/sessions.query.ts";
 import { parseTableQuery, type TableState } from "../src/web/lib/table.query.ts";
 
 const parse = (qs: string) => parseTableQuery(new URLSearchParams(qs), SESSIONS_SPEC);
@@ -62,4 +63,22 @@ test("count label hides a stale total on error", () => {
   expect(sessionsCountLabel(undefined, false)).toBe("Loading…");
   expect(sessionsCountLabel(1, false)).toBe("1 session");
   expect(sessionsCountLabel(1234, false)).toBe("1,234 sessions");
+});
+
+test("group subtotals carry a token-weighted cache hit", async () => {
+  const { groupSpecs } = await import("../src/web/pages/sessions.groups.tsx");
+  const g = { key: "/w/a", count: 2, last_ts: null, input: 10, output: 5, cache_read: 980, cache_write: 10, cost_usd: 1, unpriced: 0 };
+  const [spec] = groupSpecs([g] as never, { state: { ...base, group: "project" }, since: SINCE, open: [], results: {}, toggle() {}, showAll() {} });
+  expect(spec!.totals.cache).toBe("98.0%");
+});
+
+test("sessionsApi splits path and query so a range change keeps the endpoint (stale, not a skeleton)", () => {
+  const a = sessionsApi(SINCE, base, { facets: true, range: "7d" });
+  const b = sessionsApi(SINCE, base, { facets: true, range: "30d" });
+  expect(a.path).toBe("/api/sessions");
+  expect(a.path).toBe(b.path);
+  expect(withQuery(a.path, a.query)).toBe(sessionsApiPath(SINCE, base, { facets: true, range: "7d" }));
+  expect(identityOf(withQuery(a.path, a.query))).not.toBe(identityOf(withQuery(b.path, b.query)));
+  const refreshed = sessionsApi("2026-01-02T00:00:00.000Z", base, { facets: true, range: "7d" });
+  expect(identityOf(withQuery(refreshed.path, refreshed.query))).toBe(identityOf(withQuery(a.path, a.query)));
 });

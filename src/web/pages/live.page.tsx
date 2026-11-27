@@ -8,9 +8,9 @@ import { CostCell } from "@/components/cost.cell.tsx";
 import { LIVE_HIDEABLE, liveColumns } from "@/components/live.columns.tsx";
 import { PageHeader } from "@/components/page.header.tsx";
 import { useApi } from "@/lib/api.client.ts";
-import { fmtInt, fmtProject } from "@/lib/format.ts";
+import { fmtProject, plural } from "@/lib/format.ts";
 import { hashHref } from "@/lib/hash.route.ts";
-import { FAMILY_ICON, LEVEL_ICON, NAV_ICON, STATUS_ICON } from "@/lib/icon.map.ts";
+import { FAMILY_ICON, LEVEL_ICON, NAV_ICON, STATUS_ICON, UI_ICON } from "@/lib/icon.map.ts";
 import { GROUP_LEVEL, GROUP_PROJECT, LEVEL_LABEL, LIVE_PATH, LIVE_SPEC, levelOf, liveTableOptions } from "@/lib/live.table.ts";
 import { FAMILY_LABEL } from "@/lib/model.tier.ts";
 import { NOW_TICK_MS, useNow } from "@/lib/now.ts";
@@ -29,7 +29,7 @@ const grouping: ClientGrouping<LiveSession> = {
   options: [{ value: NO_GROUP, label: "No grouping" }, { value: GROUP_PROJECT, label: "Project" }, { value: GROUP_LEVEL, label: "Context level" }],
   // Groups follow the active grouping; the table only calls these when one is selected.
   of: (s) => ({ key: s.project_cwd ?? "", label: <span className="font-mono text-xs">{fmtProject(s.project_cwd)}</span> }),
-  totals: (rows) => ({ cost: <CostCell usd={rows.reduce((a, r) => a + r.cost_usd, 0)} heat="aggregate" /> }),
+  totals: (rows) => ({ cost: <CostCell usd={rows.reduce((a, r) => a + r.cost_usd, 0)} /> }),
 };
 const levelGrouping: ClientGrouping<LiveSession> = {
   ...grouping,
@@ -56,13 +56,13 @@ export function LivePage({ dataVersion, params }: Omit<PageProps, "since">) {
   const facets = [
     { id: "status", label: "Status", icon: STATUS_ICON.live, options: facetOptions(SESSION_STATUSES.map((v) => ({ value: v, label: STATUS_LABEL[v], icon: STATUS_ICON[v], tone: STATUS_TONE[v] })), result?.counts.status), selected: state.filters.status ?? [], onChange: set("status") },
     { id: "level", label: "Context", icon: LEVEL_ICON.ok, options: facetOptions(LEVELS.map((v) => ({ value: v, label: LEVEL_NAME[v], icon: LEVEL_ICON[v], tone: LEVEL_TONE[v] })), result?.counts.level), selected: state.filters.level ?? [], onChange: set("level") },
-    { id: "family", label: "Model", icon: FAMILY_ICON.opus, options: facetOptions(FAMILIES.map((v) => ({ value: v, label: FAMILY_LABEL[v], icon: FAMILY_ICON[v] })), result?.counts.family), selected: state.filters.family ?? [], onChange: set("family") },
+    { id: "family", label: "Model", icon: UI_ICON.model, options: facetOptions(FAMILIES.map((v) => ({ value: v, label: FAMILY_LABEL[v], icon: FAMILY_ICON[v] })), result?.counts.family), selected: state.filters.family ?? [], onChange: set("family") },
   ];
   const n = data?.length ?? 0;
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="Live" icon={NAV_ICON.live} description={error ? undefined : `${fmtInt(n)} active ${n === 1 ? "session" : "sessions"}, updated as new activity syncs`} />
+      <PageHeader title="Live" icon={NAV_ICON.live} description={`Active in the last ${SESSION_STATUS_MIN.idle} minutes`} />
       <ClientTable
         label="Live sessions"
         noun="sessions"
@@ -73,6 +73,7 @@ export function LivePage({ dataVersion, params }: Omit<PageProps, "since">) {
         searchPlaceholder="Search title, id or project…"
         grouping={state.group === GROUP_LEVEL ? levelGrouping : grouping}
         result={result}
+        summary={error ? undefined : `${plural(n, "active session")}`}
         rowKey={(s) => s.id}
         rowHref={(s) => hashHref(`/sessions/${encodeURIComponent(s.id)}`)}
         loading={loading}

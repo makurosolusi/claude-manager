@@ -14,14 +14,16 @@ export function pageWindow(page: number, last: number): (number | "gap")[] {
 // 44px tap target below sm, 32px from sm up.
 const BTN = "max-sm:size-11";
 
-/** "Showing x–y of z", page buttons and a rows-per-page select; always shown when total > 0. */
-export function TablePagination(p: { page: number; pageSize: number; total: number; onPage(n: number): void; onPageSize(n: number): void; sizes?: readonly number[]; label: string }) {
+/** "Showing x–y of z", page buttons and a rows-per-page select; a single page shows only "n <noun>", and the select only when it could change something. */
+export function TablePagination(p: { page: number; pageSize: number; total: number; onPage(n: number): void; onPageSize(n: number): void; sizes?: readonly number[]; label: string; noun?: string }) {
   const last = Math.max(1, Math.ceil(p.total / p.pageSize));
   const page = Math.min(p.page, last);
   useEffect(() => {
     if (p.total > 0 && p.page > last) p.onPage(last); // data shrank under the current page
   }, [p.total, p.page, last]);
   if (p.total <= 0) return null;
+  const sizes = p.sizes ?? PAGE_SIZES;
+  if (last === 1) return <p className="pt-3 text-sm text-muted-foreground tabular-nums">{fmtInt(p.total)} {p.noun ?? "rows"}</p>;
   const from = (page - 1) * p.pageSize + 1;
   const to = Math.min(page * p.pageSize, p.total);
   const go = (n: number, label: string, Icon: typeof ChevronLeft, off: boolean) => (
@@ -59,6 +61,7 @@ export function TablePagination(p: { page: number; pageSize: number; total: numb
         {go(page + 1, "Next page", ChevronRight, page >= last)}
         {go(last, "Last page", ChevronsRight, page >= last)}
       </div>
+      {sizes.length > 1 && p.total > Math.min(...sizes) ? (
       <label className="flex items-center gap-2">
         Rows per page
         <select
@@ -66,9 +69,10 @@ export function TablePagination(p: { page: number; pageSize: number; total: numb
           onChange={(e) => p.onPageSize(Number(e.target.value))}
           className="h-8 rounded-md border bg-background px-2 text-foreground outline-hidden focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
-          {(p.sizes ?? PAGE_SIZES).map((n) => <option key={n} value={n}>{n}</option>)}
+          {sizes.map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
       </label>
+      ) : <span />}
     </nav>
   );
 }

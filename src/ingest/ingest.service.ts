@@ -45,14 +45,15 @@ const SQL = {
     bad_lines = CASE WHEN $reset THEN excluded.bad_lines ELSE files.bad_lines + excluded.bad_lines END`,
   // Token fields take the latest streaming copy; session/agent keep the first file that saw the message
   // (resumed/forked transcripts copy old messages, which must not move their attribution).
-  request: `INSERT INTO requests (message_id, request_id, session_id, agent_id, ts, model, effort, speed, geo, input, cache_5m, cache_1h,
+  request: `INSERT INTO requests (message_id, request_id, session_id, agent_id, ts, model, requested_model, effort, speed, geo, input, cache_5m, cache_1h,
       cache_read, output, thinking, web_search, cost_usd, pricing_version, stop_reason, is_sidechain)
-    VALUES ($message_id, $request_id, $session_id, $agent_id, $ts, $model, $effort, $speed, $geo, $input, $cache_5m, $cache_1h,
+    VALUES ($message_id, $request_id, $session_id, $agent_id, $ts, $model, $requested_model, $effort, $speed, $geo, $input, $cache_5m, $cache_1h,
       $cache_read, $output, $thinking, $web_search, $cost_usd, $pricing_version, $stop_reason, $is_sidechain)
     ON CONFLICT(message_id) DO UPDATE SET input = excluded.input, cache_5m = excluded.cache_5m, cache_1h = excluded.cache_1h,
       cache_read = excluded.cache_read, output = excluded.output, thinking = excluded.thinking, web_search = excluded.web_search,
       cost_usd = excluded.cost_usd, pricing_version = excluded.pricing_version,
-      stop_reason = COALESCE(excluded.stop_reason, requests.stop_reason)`,
+      stop_reason = COALESCE(excluded.stop_reason, requests.stop_reason),
+      requested_model = COALESCE(excluded.requested_model, requests.requested_model)`,
   tool: `INSERT OR IGNORE INTO tool_calls (tool_use_id, message_id, session_id, agent_id, ts, name, subagent_type, model)
     VALUES ($tool_use_id, $message_id, $session_id, $agent_id, $ts, $name, $subagent_type, $model)`,
   prompt: `INSERT OR IGNORE INTO prompts (uuid, prompt_id, session_id, agent_id, ts, source, text)

@@ -3,12 +3,12 @@ import { fmtDuration } from "@/lib/format.ts";
 /** Tool icons shown in a request row before the "+N" overflow. */
 export const TOOL_ICONS_MAX = 3;
 
-const pad2 = (n: number) => String(n).padStart(2, "0");
+const clock = new Intl.DateTimeFormat("en-US", { timeStyle: "medium" });
 
-/** Local wall-clock time "HH:mm:ss" (24h) for an ISO timestamp, "—" when missing or invalid. */
+/** Local 12h wall-clock time ("11:05:59 PM") for an ISO timestamp, "—" when missing or invalid. */
 export function fmtClock(iso: string | null | undefined): string {
   const d = new Date(iso ?? "");
-  return Number.isNaN(d.getTime()) ? "—" : `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+  return Number.isNaN(d.getTime()) ? "—" : clock.format(d);
 }
 
 /** Elapsed time between two ISO timestamps ("42m"), "—" when either is missing or invalid. */

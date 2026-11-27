@@ -26,8 +26,8 @@ export interface UsageRow {
   unpriced: number;
 }
 
-/** Window totals plus the number of distinct sessions that made requests in it. */
-export type Totals = Omit<UsageRow, "key"> & { sessions: number };
+/** Window totals plus the number of distinct sessions that made requests in it and how many requests were served by another model than requested. */
+export type Totals = Omit<UsageRow, "key"> & { sessions: number; rerouted: number };
 
 /** Estimated cost and request count for one model on one day. */
 export interface DayModelRow {
@@ -57,7 +57,19 @@ export const listParam = (v?: readonly string[]): string | null => (v?.length ? 
 
 /** Model family of a SQL model-id expression; mirrors `modelFamily()` in the web bundle. */
 export const FAMILY_SQL = (col: string) =>
-  `CASE WHEN instr(lower(${col}), 'opus') > 0 THEN 'opus' WHEN instr(lower(${col}), 'sonnet') > 0 THEN 'sonnet' WHEN instr(lower(${col}), 'haiku') > 0 THEN 'haiku' ELSE 'other' END`;
+  `CASE WHEN instr(lower(${col}), 'opus') > 0 THEN 'opus' WHEN instr(lower(${col}), 'sonnet') > 0 THEN 'sonnet' WHEN instr(lower(${col}), 'haiku') > 0 THEN 'haiku' WHEN instr(lower(${col}), 'fable') > 0 THEN 'fable' ELSE 'other' END`;
+
+/** Mirrors `normalizeModel()` in the web bundle: trim, lowercase, drop a trailing `[1m]`, then a trailing `-YYYYMMDD`. */
+export const NORMALIZE_SQL = (col: string) => {
+  const lowered = `lower(trim(${col}))`;
+  const noWindow = `CASE WHEN substr(${lowered}, -4) = '[1m]' THEN substr(${lowered}, 1, length(${lowered}) - 4) ELSE ${lowered} END`;
+  return `CASE WHEN (${noWindow}) GLOB '*-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]' THEN substr(${noWindow}, 1, length(${noWindow}) - 9) ELSE ${noWindow} END`;
+};
+
+/** True (1) when a request was served by another model than it asked for; unknown requested model (NULL) is never rerouted. */
+export const REROUTED_SQL = `(r.requested_model IS NOT NULL AND ${NORMALIZE_SQL("r.requested_model")} != ${NORMALIZE_SQL("r.model")})`;
+/** Rerouted request count over a group of `r` rows; 0 when the group has none (LEFT JOIN-safe). */
+export const REROUTED_COUNT = `COALESCE(SUM(${REROUTED_SQL}), 0) AS rerouted`;
 
 /** SQL bindings for `WHERE`. */
 export const filterParams = (f: StatsFilter): Params => ({
@@ -88,15 +100,16 @@ export function totals(db: Database, f: StatsFilter): Totals {
     .query<Totals, Params>(
       `SELECT COUNT(*) AS requests, COALESCE(SUM(r.input), 0) AS input, COALESCE(SUM(r.cache_5m + r.cache_1h), 0) AS cache_write,
         COALESCE(SUM(r.cache_read), 0) AS cache_read, COALESCE(SUM(r.output), 0) AS output, COALESCE(SUM(r.cost_usd), 0) AS cost_usd,
-        COALESCE(SUM(r.cost_usd IS NULL), 0) AS unpriced, COUNT(DISTINCT r.session_id) AS sessions
+        COALESCE(SUM(r.cost_usd IS NULL), 0) AS unpriced, COUNT(DISTINCT r.session_id) AS sessions,
+        ${REROUTED_COUNT}
       FROM requests r LEFT JOIN sessions s ON s.id = r.session_id WHERE ${WHERE}`,
     )
     .get(filterParams(f))!;
 }
 
-/** Whole-window totals in the shape `stats` prints (no session count, so its output stays unchanged). */
+/** Whole-window totals in the shape `stats` prints (no session or rerouted count, so its output stays unchanged). */
 export function usageTotal(db: Database, f: StatsFilter): Omit<UsageRow, "key"> {
-  const { sessions: _, ...usage } = totals(db, f);
+  const { sessions: _s, rerouted: _r, ...usage } = totals(db, f);
   return usage;
 }
 

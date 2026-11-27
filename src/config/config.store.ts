@@ -1,4 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { CliError } from "../cli.error.ts";
 import { appDir } from "../app.paths.ts";
 import { readJson, writeJson } from "../storage/json.file.ts";
 
@@ -44,8 +46,7 @@ export interface Config {
 
 export const configPath = () => join(appDir(), "config.json");
 
-export async function loadConfig(): Promise<Config> {
-  const saved = (await readJson<Partial<Config>>(configPath())) ?? {};
+function withDefaults(saved: Partial<Config>): Config {
   return {
     tiers: { ...DEFAULT_TIER_MODELS, ...saved.tiers },
     roleModels: saved.roleModels ?? {},
@@ -54,6 +55,21 @@ export async function loadConfig(): Promise<Config> {
     storePromptText: saved.storePromptText ?? true,
     dashboardPort: saved.dashboardPort,
   };
+}
+
+export async function loadConfig(): Promise<Config> {
+  return withDefaults((await readJson<Partial<Config>>(configPath())) ?? {});
+}
+
+/** Blocking `loadConfig` for the dashboard's per-request meta (the file is tiny); a malformed file throws a CliError. */
+export function loadConfigSync(): Config {
+  const path = configPath();
+  if (!existsSync(path)) return withDefaults({});
+  try {
+    return withDefaults(JSON.parse(readFileSync(path, "utf8")) as Partial<Config>);
+  } catch (err) {
+    throw new CliError(`invalid JSON in ${path}: ${(err as Error).message}`);
+  }
 }
 
 export const saveConfig = (config: Config) => writeJson(configPath(), config);

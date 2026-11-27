@@ -3,6 +3,7 @@ import type { ProjectRow } from "../../server/dashboard.types.ts";
 import { CostCell } from "@/components/cost.cell.tsx";
 import type { Column } from "@/components/data.table.tsx";
 import { RelativeTime } from "@/components/relative.time.tsx";
+import { ShareBar } from "@/components/share.bar.tsx";
 import { SessionStatusBadge } from "@/components/status.badge.tsx";
 import { TokenCell } from "@/components/token.cell.tsx";
 import { TONE_CLASSES } from "@/lib/color.tokens.ts";
@@ -16,7 +17,6 @@ export const PROJECT_HIDEABLE = [
   { id: "cache", label: "Cache hit" }, { id: "share", label: "Share" }, { id: "last", label: "Last active" },
 ];
 const CACHE_TIP = `Cache hit: ${CACHE_GOOD * 100}%+ good, ${CACHE_POOR * 100}%+ fair, below that poor`;
-const PCT_FULL = 100;
 
 /** Cache-hit ratio as tone-coloured text (the number is the second cue). */
 export function CacheText({ ratio }: { ratio: number }) {
@@ -41,21 +41,11 @@ export function projectColumns(totalCost: number, now: number): Column<ProjectRo
     { id: "requests", header: "Requests", cell: (r) => fmtInt(r.requests), align: "right", sortKey: "requests", width: "w-24", hideBelow: "md" },
     { id: "tokens", header: "Tokens", cell: (r) => <TokenCell usage={r} />, align: "right", sortKey: "tokens", width: "w-20", hideBelow: "sm" },
     { id: "cache", header: "Cache hit", cell: (r) => <CacheText ratio={cacheHitRate(r)} />, align: "right", width: "w-20", hideBelow: "lg" },
-    { id: "cost", header: "Cost (est.)", cell: (r) => <CostCell usd={r.cost_usd} unpriced={r.unpriced} heat="aggregate" />, align: "right", sortKey: "cost", width: "w-28" },
+    { id: "cost", header: "Cost (est.)", cell: (r) => <CostCell usd={r.cost_usd} unpriced={r.unpriced} />, align: "right", sortKey: "cost", width: "w-28" },
     {
       id: "share",
       header: "Share",
-      cell: (r) => {
-        const share = totalCost > 0 ? (r.cost_usd / totalCost) * PCT_FULL : 0;
-        return (
-          <span className="flex items-center justify-end gap-2" title={`${share.toFixed(1)}% of listed cost`}>
-            <span aria-hidden className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
-              <span className="block h-full rounded-full bg-foreground/50" style={{ width: `${share}%` }} />
-            </span>
-            <span className="w-10 text-xs text-muted-foreground tabular-nums">{share.toFixed(0)}%</span>
-          </span>
-        );
-      },
+      cell: (r) => <ShareBar share={totalCost > 0 ? r.cost_usd / totalCost : 0} />,
       align: "right",
       width: "w-36",
       hideBelow: "md",

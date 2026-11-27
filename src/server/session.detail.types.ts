@@ -7,6 +7,8 @@ export type RequestGroupBy = (typeof REQUEST_GROUPS)[number];
 /** Sort keys accepted by /api/sessions/:id/requests?sort=. */
 export const REQUEST_SORTS = ["ts", "cost", "tokens", "context"] as const;
 export type RequestSort = (typeof REQUEST_SORTS)[number];
+/** Values of the `rerouted` request filter/facet. */
+export const REROUTED_VALUES = ["yes", "no"] as const;
 /** Stop-reason filter value that matches requests whose stop_reason is NULL. */
 export const STOP_NONE = "none";
 
@@ -15,6 +17,10 @@ export interface RequestRow extends Omit<Usage, "requests" | "unpriced"> {
   message_id: string;
   ts: string;
   model: string;
+  /** Model the client asked for; null when the transcript did not say. */
+  requested_model: string | null;
+  /** Served model differs from the requested one (after normalisation). */
+  rerouted: boolean;
   agent_id: string | null;
   role: string;
   stop_reason: string | null;
@@ -23,10 +29,10 @@ export interface RequestRow extends Omit<Usage, "requests" | "unpriced"> {
 }
 
 /** Repeatable filters (an undefined list means "no filter on that dimension") plus the free-text `q` search. */
-export interface RequestFilter { family?: string[]; agent?: string[]; stop?: string[]; tool?: string[]; q?: string }
+export interface RequestFilter { family?: string[]; agent?: string[]; stop?: string[]; tool?: string[]; rerouted?: string[]; q?: string }
 export type RequestDimension = Exclude<keyof RequestFilter, "q">;
 export interface RequestQuery { sort: RequestSort; dir: "asc" | "desc" }
-export interface RequestFacets { family: FacetCount[]; agent: FacetCount[]; stop: FacetCount[]; tool: FacetCount[] }
+export interface RequestFacets { family: FacetCount[]; agent: FacetCount[]; stop: FacetCount[]; tool: FacetCount[]; rerouted: FacetCount[] }
 export type RequestsResponse = Page<RequestRow> & { facets?: RequestFacets };
 export interface RequestGroups { by: RequestGroupBy; groups: GroupRow[]; total_groups: number }
 export interface ToolCount { name: string; calls: number }

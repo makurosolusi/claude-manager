@@ -94,3 +94,12 @@ test("prefs round-trip and ignore junk", () => {
   expect(loadHiddenCols("roles")).toEqual([]);
   expect(loadDensity()).toBe("compact");
 });
+
+test("unique facet counts tally distinct keys, not rows", () => {
+  const r = runClientTable(rows, base, { ...opts, unique: { family: (x) => x.role } });
+  expect(r.counts.family!.get("opus")).toBe(2);
+  expect(r.counts.family!.get("sonnet")).toBe(1);
+  const single = runClientTable([rows[0]!, { ...rows[0]!, name: "dup" }], base, { ...opts, unique: { family: (x) => x.role } });
+  expect(single.counts.family!.get("opus")).toBe(1);
+  expect(runClientTable(rows, base, opts).counts.family!.get("opus")).toBe(2);
+});

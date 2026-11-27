@@ -3,9 +3,9 @@ import { parseArgs } from "node:util";
 import { CliError } from "../cli.error.ts";
 import { loadConfig } from "../config/config.store.ts";
 import { openDb } from "../db/db.schema.ts";
-import { resolveRoles } from "../roles/roles.registry.ts";
 import { sync, type SyncResult } from "../ingest/ingest.service.ts";
 import { DEFAULT_DASHBOARD_PORT, handleApi, SYNC_INTERVAL_MS, type MetaProvider } from "../server/dashboard.api.ts";
+import { liveMeta } from "../server/dashboard.meta.ts";
 import type { SyncMeta } from "../server/dashboard.types.ts";
 import index from "../web/index.html";
 import type { Command } from "./command.types.ts";
@@ -80,8 +80,7 @@ Options:
     const config = await loadConfig();
     const port = values.port ? parsePort(values.port) : (config.dashboardPort ?? DEFAULT_DASHBOARD_PORT);
     const state: SyncMeta = { synced_at: null, changed_at: null, error: null, interval_ms: SYNC_INTERVAL_MS };
-    const roles = resolveRoles(config).map((r) => ({ name: r.name, tier: r.tier, source: r.source }));
-    const meta: MetaProvider = () => ({ ...state, tiers: config.tiers, roles });
+    const meta = liveMeta(state);
 
     const db = openDb();
     const server = await sync(db)

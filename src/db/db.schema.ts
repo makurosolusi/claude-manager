@@ -3,8 +3,11 @@ import { chmodSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { dbPath } from "../app.paths.ts";
 
+/** One migration step: SQL, or code when it needs a conditional SQLite cannot express (no ADD COLUMN IF NOT EXISTS). */
+type Migration = string | ((db: Database) => void);
+
 // Append-only: entry i migrates user_version i -> i+1. Never edit a shipped entry.
-const MIGRATIONS = [
+const MIGRATIONS: Migration[] = [
   `
   CREATE TABLE files (
     path TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime_ms INTEGER NOT NULL, ino INTEGER NOT NULL,
@@ -50,6 +53,14 @@ const MIGRATIONS = [
   CREATE INDEX IF NOT EXISTS agents_session ON agents(session_id);
   CREATE INDEX IF NOT EXISTS tool_calls_session ON tool_calls(session_id, name);
   `,
+  (db) => {
+    // v0.2.1: a gateway can serve another model than the one asked for; `requested_model` (NULL = unknown, never guessed) lets the dashboard flag it.
+    const has = db.query("SELECT 1 FROM pragma_table_info('requests') WHERE name = 'requested_model'").get();
+    if (!has) db.run("ALTER TABLE requests ADD COLUMN requested_model TEXT");
+    // Backfill: ingest is incremental by offset, so old lines are never re-read. A bogus inode makes the next sync treat every
+    // file as replaced and re-read it from 0 (inserts are idempotent; the upsert only fills a NULL requested_model).
+    db.run("UPDATE files SET ino = -1");
+  },
 ];
 
 /** Opens (and migrates) the analytics DB; file is owner-only since it may hold prompt text. */
@@ -66,7 +77,9 @@ export function openDb(path = dbPath()): Database {
   }
   for (let v = current; v < MIGRATIONS.length; v++) {
     db.transaction(() => {
-      db.run(MIGRATIONS[v]!);
+      const step = MIGRATIONS[v]!;
+      if (typeof step === "string") db.run(step);
+      else step(db);
       db.run(`PRAGMA user_version = ${v + 1}`);
     })();
   }

@@ -32,8 +32,21 @@ interface ClientTableProps<T> {
   rowHref: (r: T) => string;
   sort?: { key: string; dir: "asc" | "desc" };
   loading: boolean;
+  stale?: boolean;
   error?: Error;
   onRetry: () => void;
+}
+
+/** The one "no match" empty state: icon, sentence and a Reset filters button. */
+export function NoMatchState({ noun, onReset }: { noun: string; onReset: () => void }) {
+  const NoMatch = UI_ICON.noMatch;
+  return (
+    <span className="inline-flex flex-col items-center gap-2">
+      <NoMatch aria-hidden className="size-5" />
+      No {noun} match these filters.
+      <Button size="xs" variant="outline" onClick={onReset}>Reset filters</Button>
+    </span>
+  );
 }
 
 /** Toolbar + DataTable + pagination for a table that sorts, filters, groups and pages in the browser. */
@@ -53,14 +66,7 @@ export function ClientTable<T>(p: ClientTableProps<T>) {
       }))
     : undefined;
   const filtering = state.q !== "" || Object.values(state.filters).some((v) => v.length);
-  const NoMatch = UI_ICON.noMatch;
-  const empty = filtering ? (
-    <span className="inline-flex flex-col items-center gap-2">
-      <NoMatch aria-hidden className="size-5" />
-      No {p.noun} match these filters.
-      <Button size="xs" variant="outline" onClick={view.reset}>Reset filters</Button>
-    </span>
-  ) : p.empty;
+  const empty = filtering ? <NoMatchState noun={p.noun} onReset={view.reset} /> : p.empty;
 
   return (
     <div className="flex flex-col gap-3">
@@ -84,6 +90,7 @@ export function ClientTable<T>(p: ClientTableProps<T>) {
         density={view.density}
         hidden={view.hidden}
         loading={p.loading}
+        stale={p.stale}
         error={p.error}
         onRetry={p.onRetry}
         empty={empty}
@@ -91,6 +98,7 @@ export function ClientTable<T>(p: ClientTableProps<T>) {
       {result && !p.error && !grouped && (
         <TablePagination
           label={p.label}
+          noun={p.noun}
           page={state.page}
           pageSize={state.size}
           total={result.filtered.length}

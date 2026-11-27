@@ -15,7 +15,7 @@ const TONE_TEXT: Record<ToneKey, string> = {
 const SEARCH_MIN_OPTIONS = 8;
 const MAX_LABELS = 2;
 
-export interface FacetOption { value: string; label: string; icon?: LucideIcon; tone?: ToneKey; count: number }
+export interface FacetOption { value: string; label: string; icon?: LucideIcon; tone?: ToneKey; count: number; /** Tooltip explaining the option. */ hint?: string }
 export interface FacetDef { id: string; label: string; icon: LucideIcon; options: FacetOption[]; selected: string[]; onChange(next: string[]): void }
 
 /** Dashed-outline facet button with a checkbox popover (optional search, counts, "Clear filter"). */
@@ -74,7 +74,7 @@ export function FacetFilter({ facet }: { facet: FacetDef }) {
           const OptIcon = o.icon;
           return (
             <li key={o.value}>
-              <label className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-sm px-2 text-sm hover:bg-accent sm:min-h-8", o.count === 0 && !on && "opacity-50")}>
+              <label title={o.hint} className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-sm px-2 text-sm hover:bg-accent sm:min-h-8", o.count === 0 && !on && "opacity-50")}>
                 <input type="checkbox" checked={on} onChange={() => toggle(o.value)} className="size-4 accent-primary" />
                 {OptIcon && <OptIcon aria-hidden className={cn("size-4", TONE_TEXT[o.tone ?? "neutral"])} />}
                 <span className="flex-1 truncate">{o.label}</span>

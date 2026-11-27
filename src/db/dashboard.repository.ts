@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import type { AgentNode, Page, ProjectRow, RoleRow, SessionRow, TimelineItem } from "../server/dashboard.types.ts";
-import { filterParams, KEY, WHERE, type Params, type StatsFilter } from "./stats.repository.ts";
+import { filterParams, KEY, REROUTED_COUNT, WHERE, type Params, type StatsFilter } from "./stats.repository.ts";
 
 /** Page window: 1-based page number and its size. */
 export type PageQuery = { page: number; pageSize: number };
@@ -15,7 +15,7 @@ const CONTEXT = "r.input + r.cache_read + r.cache_5m + r.cache_1h";
 const FROM_REQUESTS = "FROM requests r LEFT JOIN agents a ON a.id = r.agent_id LEFT JOIN sessions s ON s.id = r.session_id";
 /** Session rows with whole-session totals; append a WHERE and `GROUP BY s.id`. */
 export const SESSION_GROUPED = `SELECT s.id, s.title, s.project_cwd, s.git_branch, s.main_agent, s.first_ts, s.last_ts,
-  (SELECT COUNT(*) FROM agents ag WHERE ag.session_id = s.id) AS agents, COUNT(DISTINCT r.model) AS models, ${USAGE}
+  (SELECT COUNT(*) FROM agents ag WHERE ag.session_id = s.id) AS agents, COUNT(DISTINCT r.model) AS models, ${USAGE}, ${REROUTED_COUNT}
   FROM sessions s LEFT JOIN requests r ON r.session_id = s.id`;
 // Most main-agent requests wins; sessions with no main requests fall back to the most requests overall.
 export const primaryModel = (idCol: string) => `(SELECT m.model FROM requests m WHERE m.session_id = ${idCol} GROUP BY m.model
@@ -89,7 +89,7 @@ export function timelinePage(db: Database, sessionId: string, p: PageQuery): Pag
 
 /** Usage per (role, model) in the filter window, most expensive first. */
 export function rolesPage(db: Database, f: StatsFilter, p: PageQuery): Page<RoleRow> {
-  const grouped = `SELECT ${KEY.role} AS role, r.model AS model, ${USAGE} ${FROM_REQUESTS} WHERE ${WHERE} GROUP BY role, model`;
+  const grouped = `SELECT ${KEY.role} AS role, r.model AS model, ${USAGE}, ${REROUTED_COUNT} ${FROM_REQUESTS} WHERE ${WHERE} GROUP BY role, model`;
   return paged<RoleRow>(
     db,
     p,

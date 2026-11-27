@@ -1,14 +1,17 @@
 import type { RoleRow, Usage } from "../../server/dashboard.types.ts";
-import { NEUTRAL_ROLES, type RoleMeta } from "./color.tokens.ts";
+import type { RoleMeta } from "./color.tokens.ts";
 import { TIER_ORDER, tierOf, type Tier, type TierKey, type Tiers } from "./model.tier.ts";
+import { cacheHitRate, fmtPct } from "./format.ts";
 import { groupBy } from "./table.client.ts";
 
-/** Where a role comes from: shipped preset, user-defined, or the built-in main/subagent. */
-export type RoleKind = "preset" | "custom" | "built-in";
+/** Where a role comes from: shipped preset, made with `roles add`, or external (Claude Code built-in, plugin or ~/.claude/agents). */
+export type RoleKind = "preset" | "custom" | "external";
+/** Kinds in display order. */
+export const ROLE_KINDS: readonly RoleKind[] = ["preset", "custom", "external"];
 /** A role × model row with the tier its model was billed under. */
 export interface TieredRow extends RoleRow { tier: TierKey }
 /** Usage summed over one key (a model, a role or a tier), its tier, and its share of the overall cost (0..1). */
-export interface AggRow extends Usage { key: string; tier: TierKey; count: number; share: number }
+export interface AggRow extends Usage { key: string; tier: TierKey; count: number; share: number; rerouted: number }
 
 const USAGE_KEYS = ["requests", "input", "output", "cache_read", "cache_write", "cost_usd", "unpriced"] as const;
 
@@ -19,15 +22,26 @@ export function sumUsage(rows: readonly Usage[]): Usage {
   return out;
 }
 
+/** Rerouted requests summed over any role rows. */
+export const sumRerouted = (rows: readonly { rerouted: number }[]): number => rows.reduce((n, r) => n + r.rerouted, 0);
+
 /** Stamps each row with `tierOf(model, tiers)` so tier totals match Overview "Cost by tier". */
 export const withTier = (rows: readonly RoleRow[], tiers?: Partial<Tiers>): TieredRow[] =>
   rows.map((r) => ({ ...r, tier: tierOf(r.model, tiers) }));
 
-/** Kind of a role: main/subagent are built-in; the roster says preset vs custom; unknown names count as custom. */
+/** Kind of a role, from the `meta.roles` roster only (never the name): anything not in the roster is external. */
 export function roleKind(role: string, roles?: readonly RoleMeta[]): RoleKind {
-  if (NEUTRAL_ROLES.includes(role)) return "built-in";
-  return roles?.find((r) => r.name === role)?.source ?? "custom";
+  return roles?.find((r) => r.name === role)?.source ?? "external";
 }
+
+/** Cache-hit subtotal of grouped rows, token-weighted (sums the parts before dividing); "—" with no requests. */
+export function cacheHitLabel(u: Usage): string {
+  return u.requests ? fmtPct(cacheHitRate(u)) : "—";
+}
+
+/** Group keys ordered by TIER_ORDER (unknown keys last). */
+export const byTierOrder = <T extends { key: string }>(gs: T[]): T[] =>
+  [...gs].sort((a, b) => TIER_ORDER.indexOf(a.key as TierKey) - TIER_ORDER.indexOf(b.key as TierKey));
 
 /** The role's configured tier when it differs from the tier this row was billed under; undefined when equal or unknown. */
 export function configuredTierMismatch(role: string, rowTier: TierKey, roles?: readonly RoleMeta[]): Tier | undefined {
@@ -42,7 +56,7 @@ export function aggregateBy(rows: readonly TieredRow[], key: (r: TieredRow) => s
   return groupBy([...rows], key)
     .map(({ key: k, rows: rs }) => {
       const u = sumUsage(rs);
-      return { key: k, tier: tierFor(k, rs), count: rs.length, share: share(u.cost_usd, total), ...u };
+      return { key: k, tier: tierFor(k, rs), count: rs.length, share: share(u.cost_usd, total), rerouted: sumRerouted(rs), ...u };
     })
     .sort((a, b) => b.cost_usd - a.cost_usd);
 }
@@ -63,6 +77,6 @@ export function tierSubtotals(rows: readonly TieredRow[], total = sumUsage(rows)
     const rs = by.get(t);
     if (!rs) return [];
     const u = sumUsage(rs);
-    return [{ key: t, tier: t, count: rs.length, share: share(u.cost_usd, total), ...u }];
+    return [{ key: t, tier: t, count: rs.length, share: share(u.cost_usd, total), rerouted: sumRerouted(rs), ...u }];
   });
 }

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ArrowDown, ArrowRight, ArrowUp, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn.ts";
+import { fmtDeltaPct } from "@/lib/format.ts";
 import { TONE_CLASSES, type ToneKey } from "@/lib/color.tokens.ts";
 
 /** Change vs the previous period; `value` null = no baseline. Shown in neutral grey (color is reserved for warnings). */
@@ -8,6 +9,12 @@ export interface KpiDelta {
   value: number | null;
   unit: "pct" | "pt";
   periodLabel: string;
+  /** Previous-period value as text, shown instead of a % when the % would be noise ("$8.23"). */
+  prevLabel?: string;
+  /** Direction of the change when only `prevLabel` is shown. */
+  trend?: "up" | "down";
+  /** Previous period had nothing: "New this period". */
+  isNew?: boolean;
 }
 
 /** Props of a headline KPI panel. */
@@ -24,12 +31,14 @@ export interface KpiCardProps {
 /** Deltas whose magnitude rounds below this read as "no change". */
 const DELTA_EPSILON = 0.05;
 
-function DeltaLine({ value, unit, periodLabel }: KpiDelta) {
-  if (value === null) return <p className="text-xs text-fg-subtle">No prior data</p>;
-  const flat = Math.abs(value) < DELTA_EPSILON;
-  const Icon = flat ? ArrowRight : value > 0 ? ArrowUp : ArrowDown;
-  const word = flat ? "unchanged" : value > 0 ? "up" : "down";
-  const amount = `${flat ? "0.0" : Math.abs(value).toFixed(1)}${unit === "pct" ? "%" : " pt"}`;
+function DeltaLine({ value, unit, periodLabel, prevLabel, trend, isNew }: KpiDelta) {
+  if (isNew) return <p className="text-xs text-muted-foreground">New this period</p>;
+  if (value === null && !prevLabel) return <p className="text-xs text-fg-subtle">No prior data</p>;
+  const flat = value !== null && Math.abs(value) < DELTA_EPSILON;
+  const dir = value === null ? trend : flat ? undefined : value > 0 ? "up" : "down";
+  const Icon = dir === "up" ? ArrowUp : dir === "down" ? ArrowDown : ArrowRight;
+  const word = dir ?? "unchanged";
+  const amount = value === null ? `from ${prevLabel}` : unit === "pct" ? (flat ? "0.0%" : fmtDeltaPct(value)) : `${flat ? "0.0" : Math.abs(value).toFixed(1)} pt`;
   return (
     <p className="flex items-center gap-1 text-xs whitespace-nowrap">
       <span className="inline-flex items-center gap-0.5 font-medium text-muted-foreground tabular-nums">
@@ -37,7 +46,7 @@ function DeltaLine({ value, unit, periodLabel }: KpiDelta) {
         <span className="sr-only">{word} </span>
         {amount}
       </span>
-      <span className="text-fg-subtle">vs prev {periodLabel}</span>
+      <span className="text-fg-subtle">{value === null ? "prev" : "vs prev"} {periodLabel}</span>
     </p>
   );
 }

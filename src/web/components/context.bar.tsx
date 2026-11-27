@@ -5,7 +5,7 @@ import { fmtTokens } from "@/lib/format.ts";
 import { LEVEL_ICON } from "@/lib/icon.map.ts";
 import { LEVEL_TONE } from "@/lib/status.level.ts";
 
-/** Meter of context window USED (not left): tone fill (success/warning/danger), level icon, labeled "142k / 200k · 71%". */
+/** Meter of context window USED (not left): tone fill and icon (success/warning/danger), % in plain ink, labeled "142k / 200k · 71%". */
 export function ContextBar({ used, window, size = "sm" }: { used: number; window: number; size?: "sm" | "md" }) {
   const pct = window > 0 ? Math.round((used / window) * 100) : 0;
   const level = contextLevel(pct);
@@ -26,7 +26,7 @@ export function ContextBar({ used, window, size = "sm" }: { used: number; window
       </div>
       <span className="flex shrink-0 items-center gap-1 text-xs whitespace-nowrap text-muted-foreground tabular-nums">
         <Icon aria-hidden className={cn("size-3.5", tone.text)} />
-        {fmtTokens(used)} / {fmtTokens(window)} · <span className={cn("font-medium", tone.text)}>{pct}%</span>
+        {fmtTokens(used)} / {fmtTokens(window)} · <span className="font-medium text-foreground">{pct}%</span>
       </span>
     </div>
   );
