@@ -15,8 +15,8 @@ import { Tooltip } from "@/components/ui/tooltip.tsx";
 import { CostCell } from "@/components/cost.cell.tsx";
 import { useApi } from "@/lib/api.client.ts";
 import { fmtInt, fmtModel, fmtTokens } from "@/lib/format.ts";
-import { FAMILY_ICON, KPI_ICON, NAV_ICON, TIER_ICON } from "@/lib/icon.map.ts";
-import { TIER_ORDER, modelFamily } from "@/lib/model.tier.ts";
+import { CUSTOM_ROLE_ICON, FAMILY_ICON, KPI_ICON, NAV_ICON, ROLE_ICON, TIER_ICON } from "@/lib/icon.map.ts";
+import { FAMILY_LABEL, TIER_ORDER, modelFamily, type ModelFamily } from "@/lib/model.tier.ts";
 import type { Range } from "@/lib/range.ts";
 import { configuredTierMismatch, roleKind, sumUsage, withTier, type TieredRow } from "@/lib/roles.aggregate.ts";
 import { runClientTable, groupBy } from "@/lib/table.client.ts";
@@ -31,6 +31,8 @@ const TABLE_ID = "roles";
 const DEFAULT_GROUP = "tier";
 const RANGE_LABEL: Record<Range, string> = { "24h": "Last 24 hours", "7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days", all: "All time" };
 const KINDS = ["preset", "custom", "built-in"];
+const KIND_ICON = { preset: NAV_ICON.roles, custom: CUSTOM_ROLE_ICON, "built-in": ROLE_ICON.main! };
+const cap = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
 const SPEC: TableSpec = {
   sorts: ["cost", "requests", "tokens", "role", "model"], defaultSort: "cost", defaultDir: "desc",
   groups: [DEFAULT_GROUP, "role", "family", NO_GROUP], facets: { tier: TIER_ORDER, family: FAMILIES, kind: KINDS },
@@ -82,7 +84,7 @@ export function RolesPage({ since, range, dataVersion, params, tiers, roles }: P
   ];
   const labelOf = (k: string, r: TieredRow) =>
     group === "tier" ? <span className="inline-flex items-center gap-2"><TierBadge tier={r.tier} tiers={tiers} />{r.tier !== "other" && tiers?.[r.tier] && <span className="font-mono text-xs text-muted-foreground">{fmtModel(tiers[r.tier])}</span>}</span>
-    : group === "role" ? <RoleBadge role={k} roles={roles} /> : <span className="capitalize">{k}</span>;
+    : group === "role" ? <RoleBadge role={k} roles={roles} /> : <span>{FAMILY_LABEL[k as ModelFamily] ?? cap(k)}</span>;
   const specs: GroupSpec<TieredRow>[] | undefined = group === NO_GROUP ? undefined : groupBy(t.filtered, GROUP_KEY[group]!)
     .sort((a, b) => group === "tier" ? TIER_ORDER.indexOf(a.rows[0]!.tier) - TIER_ORDER.indexOf(b.rows[0]!.tier) : sumUsage(b.rows).cost_usd - sumUsage(a.rows).cost_usd)
     .map((g) => {
@@ -98,26 +100,27 @@ export function RolesPage({ since, range, dataVersion, params, tiers, roles }: P
     id, label, icon, selected: state.filters[id] ?? [], onChange: (v: string[]) => go({ filters: { ...state.filters, [id]: v } }),
     options: opts.map((o) => ({ ...o, count: t.counts[id]?.get(o.value) ?? 0 })),
   });
+  const dirty = state.q !== "" || Object.values(state.filters).some((f) => f.length) || group !== DEFAULT_GROUP;
   const reset = () => go({ q: "", filters: {}, group: DEFAULT_GROUP });
   const models = new Set(rows.map((r) => r.model)).size;
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="Roles" description={`${RANGE_LABEL[range]} · ${new Set(rows.map((r) => r.role)).size} roles · ${models} models`} />
+      <PageHeader icon={NAV_ICON.roles} title="Roles" description={`${RANGE_LABEL[range]} · ${new Set(rows.map((r) => r.role)).size} roles · ${models} models`} />
       <TableToolbar
         search={{ value: state.q, onChange: (q) => go({ q }), placeholder: "Search role or model", label: "Search roles" }}
         facets={[
-          facet("tier", "Tier", Layers, TIER_ORDER.map((v) => ({ value: v, label: v, icon: TIER_ICON[v] }))),
-          facet("family", "Model", FAMILY_ICON.opus, FAMILIES.map((v) => ({ value: v, label: v, icon: FAMILY_ICON[v] }))),
-          facet("kind", "Kind", NAV_ICON.roles, KINDS.map((v) => ({ value: v, label: v }))),
+          facet("tier", "Tier", Layers, TIER_ORDER.map((v) => ({ value: v, label: cap(v), icon: TIER_ICON[v] }))),
+          facet("family", "Model", FAMILY_ICON.opus, FAMILIES.map((v) => ({ value: v, label: FAMILY_LABEL[v], icon: FAMILY_ICON[v] }))),
+          facet("kind", "Kind", NAV_ICON.roles, KINDS.map((v) => ({ value: v, label: cap(v), icon: KIND_ICON[v as keyof typeof KIND_ICON] }))),
         ]}
-        group={{ value: group, options: [{ value: NO_GROUP, label: "No grouping" }, { value: "tier", label: "Tier" }, { value: "role", label: "Role" }, { value: "family", label: "Model family" }], onChange: (g) => go({ group: g }) }}
+        group={{ value: group, options: [{ value: DEFAULT_GROUP, label: "Tier" }, { value: "role", label: "Role" }, { value: "family", label: "Model family" }, { value: NO_GROUP, label: "No grouping" }], onChange: (g) => go({ group: g }) }}
         view={{
           columns: columns.map((c) => ({ id: c.id, label: String(c.header), visible: !hidden.includes(c.id) })),
           onToggle: toggleCol,
           density, onDensity: setDensity,
         }}
-        onReset={reset}
+        onReset={dirty ? reset : undefined}
         summary={data && data.total > data.items.length ? `Showing the first ${fmtInt(data.items.length)} of ${fmtInt(data.total)} role × model rows.` : undefined}
       />
       <DataTable
@@ -128,7 +131,7 @@ export function RolesPage({ since, range, dataVersion, params, tiers, roles }: P
       />
       {group === NO_GROUP && <TablePagination label="Roles" page={state.page} pageSize={state.size} total={t.total} sizes={PAGE_SIZES} onPage={(page) => go({ page })} onPageSize={(size) => go({ size })} />}
       {data && (
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
           <ByModelTable rows={rows} tiers={tiers} />
           <ByRoleTable rows={rows} tiers={tiers} roles={roles} />
         </div>

@@ -19,7 +19,7 @@ const Dash = () => <span className="text-fg-subtle">—</span>;
 /** The ten Sessions columns (§5.1); `now` drives status, `roles` the custom-role colours. */
 export function sessionColumns(now: number, roles?: readonly RoleMeta[], hrefOf?: (r: SessionRow) => string): Column<SessionRow>[] {
   return [
-    { id: "status", header: <span className="sr-only">Status</span>, cell: (r) => <SessionStatusBadge lastTs={r.last_ts} now={now} iconOnly />, width: "w-8", hideBelow: "sm" },
+    { id: "status", header: <span className="sr-only">Status</span>, cell: (r) => <SessionStatusBadge lastTs={r.last_ts} now={now} iconOnly />, width: "w-12", hideBelow: "sm" },
     { id: "session", header: "Session", cell: (r) => <SessionCell id={r.id} title={r.title} projectCwd={r.project_cwd} href={hrefOf?.(r)} lastTs={r.last_ts} now={now} /> },
     { id: "model", header: "Model", cell: (r) => (r.model ? <ModelBadge model={r.model} extra={r.models > 1 ? `+${r.models - 1}` : undefined} /> : <Dash />), width: "w-44", hideBelow: "md" },
     { id: "role", header: "Role", cell: (r) => <RoleBadge role={r.main_agent ?? DEFAULT_ROLE} roles={roles} />, width: "w-32", hideBelow: "lg" },

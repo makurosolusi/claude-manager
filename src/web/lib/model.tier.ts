@@ -13,6 +13,9 @@ export const TIER_ORDER: readonly TierKey[] = ["think", "work", "basic", "other"
 
 const FAMILY_TIER: Record<Exclude<ModelFamily, "other">, Tier> = { opus: "think", sonnet: "work", haiku: "basic" };
 
+/** Display name per family, shared by chart, legend and tables. */
+export const FAMILY_LABEL: Record<ModelFamily, string> = { opus: "Opus", sonnet: "Sonnet", haiku: "Haiku", other: "Other" };
+
 /** Chart/dot color per family (CSS var, theme-aware); one mapping so chart, legend and tables agree. */
 export const FAMILY_COLOR: Record<ModelFamily, string> = {
   opus: "var(--model-opus)",

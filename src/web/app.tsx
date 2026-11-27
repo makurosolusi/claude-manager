@@ -62,14 +62,14 @@ export function App() {
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
-        {/* <640: row 1 = logo · sync · theme, row 2 = nav (full width, scrolls without a scrollbar), row 3 = range.
-            Sharing row 2 with the range picker squeezed the nav until links clipped behind it. ≥640: one h-12 row. */}
-        <div className={cn(CONTAINER, "flex flex-wrap items-center gap-x-4 gap-y-2 py-2 sm:h-12 sm:flex-nowrap sm:py-0")}>
+        {/* <640 (~105px tall): row 1 = logo · sync dot · theme, row 2 = nav (scrolls, right-edge fade) + native range select.
+            ≥640: one h-12 row. */}
+        <div className={cn(CONTAINER, "flex flex-wrap items-center gap-x-4 gap-y-1 py-1 sm:h-12 sm:flex-nowrap sm:py-0")}>
           <a href={hashHref("/", { range: rangeParam(range) })} className="order-1 flex shrink-0 items-center gap-2 rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring">
             <span aria-hidden className="size-2.5 rounded-[2px] bg-brand" />
             <span className="font-mono text-[13px] font-semibold">claude-manager</span>
           </a>
-          <nav aria-label="Main" className="order-5 -mx-1 flex min-w-0 basis-full gap-0.5 overflow-x-auto px-1 [scrollbar-width:none] sm:order-2 sm:basis-auto sm:flex-1 [&::-webkit-scrollbar]:hidden">
+          <nav aria-label="Main" className="order-5 -mx-1 flex min-w-0 flex-1 basis-0 gap-0.5 overflow-x-auto px-1 pr-6 [mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] [scrollbar-width:none] sm:order-2 sm:[mask-image:none] sm:pr-1 [&::-webkit-scrollbar]:hidden">
             {NAV.map((n) => {
               const active = n.match(path);
               return (

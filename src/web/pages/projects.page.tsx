@@ -11,7 +11,7 @@ import { useApi } from "@/lib/api.client.ts";
 import { fmtInt, fmtTokens } from "@/lib/format.ts";
 import { hashHref } from "@/lib/hash.route.ts";
 import { FolderTree, Inbox } from "lucide-react";
-import { STATUS_ICON } from "@/lib/icon.map.ts";
+import { NAV_ICON, STATUS_ICON } from "@/lib/icon.map.ts";
 import { NOW_TICK_MS, useNow } from "@/lib/now.ts";
 import { GROUP_PARENT, PROJECTS_FETCH_LIMIT, PROJECTS_PATH, PROJECTS_SPEC, parentOf, projectTableOptions, projectTotals } from "@/lib/projects.table.ts";
 import { DEFAULT_RANGE } from "@/lib/range.ts";
@@ -60,7 +60,7 @@ export function ProjectsPage({ since, range, dataVersion, params }: PageProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="Projects" description="Usage per working directory. Click a project to see its sessions." />
+      <PageHeader title="Projects" icon={NAV_ICON.projects} description="Usage per working directory. Click a project to see its sessions." />
       <ClientTable
         label="Projects"
         noun="projects"

@@ -6,11 +6,24 @@ const LABEL: Record<Range, string> = { "24h": "24h", "7d": "7d", "30d": "30d", "
 /** Segmented time-range control; always rendered, `disabled` on pages not filtered by time (no layout shift). */
 export function RangePicker({ value, onChange, disabled }: { value: Range; onChange: (r: Range) => void; disabled?: boolean }) {
   return (
+    <>
+      <select
+        aria-label="Time range"
+        value={value}
+        disabled={disabled}
+        title={disabled ? "Not filtered by time range" : undefined}
+        onChange={(e) => onChange(e.target.value as Range)}
+        className="h-11 rounded-md border bg-background px-2 text-xs font-medium text-foreground outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 sm:hidden"
+      >
+        {(Object.keys(RANGES) as Range[]).map((r) => (
+          <option key={r} value={r}>{LABEL[r]}</option>
+        ))}
+      </select>
     <div
       role="group"
       aria-label="Time range"
       title={disabled ? "Not filtered by time range" : undefined}
-      className={cn("inline-flex shrink-0 rounded-md border p-0.5", disabled && "opacity-50")}
+      className={cn("hidden shrink-0 rounded-md border p-0.5 sm:inline-flex", disabled && "opacity-50")}
     >
       {(Object.keys(RANGES) as Range[]).map((r) => (
         <button
@@ -28,5 +41,6 @@ export function RangePicker({ value, onChange, disabled }: { value: Range; onCha
         </button>
       ))}
     </div>
+    </>
   );
 }

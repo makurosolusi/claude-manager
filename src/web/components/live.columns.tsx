@@ -34,7 +34,7 @@ function ContextCell({ s }: { s: LiveSession }) {
 /** Live sessions table columns; `now` drives the status badge. */
 export function liveColumns(now: number): Column<LiveSession>[] {
   return [
-    { id: "session", header: "Session", cell: (s) => <SessionCell id={s.id} title={s.title} projectCwd={s.project_cwd} /> },
+    { id: "session", header: "Session", cell: (s) => <SessionCell id={s.id} title={s.title} projectCwd={s.project_cwd} lastTs={s.last_ts} now={now} /> },
     { id: "status", header: "Status", cell: (s) => <SessionStatusBadge lastTs={s.last_ts} now={now} />, width: "w-24", hideBelow: "sm" },
     { id: "model", header: "Model", cell: (s) => <ModelBadge model={s.model} />, width: "w-40", hideBelow: "md" },
     { id: "context", header: "Context used", cell: (s) => <ContextCell s={s} />, align: "right", sortKey: "context", width: "sm:w-80" },

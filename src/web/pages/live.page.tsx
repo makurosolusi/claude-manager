@@ -10,8 +10,9 @@ import { PageHeader } from "@/components/page.header.tsx";
 import { useApi } from "@/lib/api.client.ts";
 import { fmtInt, fmtProject } from "@/lib/format.ts";
 import { hashHref } from "@/lib/hash.route.ts";
-import { FAMILY_ICON, LEVEL_ICON, STATUS_ICON } from "@/lib/icon.map.ts";
+import { FAMILY_ICON, LEVEL_ICON, NAV_ICON, STATUS_ICON } from "@/lib/icon.map.ts";
 import { GROUP_LEVEL, GROUP_PROJECT, LEVEL_LABEL, LIVE_PATH, LIVE_SPEC, levelOf, liveTableOptions } from "@/lib/live.table.ts";
+import { FAMILY_LABEL } from "@/lib/model.tier.ts";
 import { NOW_TICK_MS, useNow } from "@/lib/now.ts";
 import { STATUS_TONE, LEVEL_TONE } from "@/lib/status.level.ts";
 import { runClientTable } from "@/lib/table.client.ts";
@@ -20,6 +21,7 @@ import { facetOptions, useTableView } from "@/lib/use.table.view.ts";
 import type { ContextLevel } from "@/lib/context.level.ts";
 
 const STATUS_LABEL = { live: "Live", idle: "Idle", ended: "Ended" } as const;
+const LEVEL_NAME = { ok: "OK", warn: "Warning", danger: "Critical" } as const;
 const LEVELS: ContextLevel[] = ["ok", "warn", "danger"];
 const LEVEL_ORDER = Object.fromEntries(LEVELS.map((l, i) => [l, i]));
 
@@ -53,14 +55,14 @@ export function LivePage({ dataVersion, params }: Omit<PageProps, "since">) {
 
   const facets = [
     { id: "status", label: "Status", icon: STATUS_ICON.live, options: facetOptions(SESSION_STATUSES.map((v) => ({ value: v, label: STATUS_LABEL[v], icon: STATUS_ICON[v], tone: STATUS_TONE[v] })), result?.counts.status), selected: state.filters.status ?? [], onChange: set("status") },
-    { id: "level", label: "Context", icon: LEVEL_ICON.ok, options: facetOptions(LEVELS.map((v) => ({ value: v, label: LEVEL_LABEL[v], icon: LEVEL_ICON[v], tone: LEVEL_TONE[v] })), result?.counts.level), selected: state.filters.level ?? [], onChange: set("level") },
-    { id: "family", label: "Model", icon: FAMILY_ICON.opus, options: facetOptions(FAMILIES.map((v) => ({ value: v, label: v, icon: FAMILY_ICON[v] })), result?.counts.family), selected: state.filters.family ?? [], onChange: set("family") },
+    { id: "level", label: "Context", icon: LEVEL_ICON.ok, options: facetOptions(LEVELS.map((v) => ({ value: v, label: LEVEL_NAME[v], icon: LEVEL_ICON[v], tone: LEVEL_TONE[v] })), result?.counts.level), selected: state.filters.level ?? [], onChange: set("level") },
+    { id: "family", label: "Model", icon: FAMILY_ICON.opus, options: facetOptions(FAMILIES.map((v) => ({ value: v, label: FAMILY_LABEL[v], icon: FAMILY_ICON[v] })), result?.counts.family), selected: state.filters.family ?? [], onChange: set("family") },
   ];
   const n = data?.length ?? 0;
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="Live" description={error ? undefined : `${fmtInt(n)} active ${n === 1 ? "session" : "sessions"}, updated as new activity syncs`} />
+      <PageHeader title="Live" icon={NAV_ICON.live} description={error ? undefined : `${fmtInt(n)} active ${n === 1 ? "session" : "sessions"}, updated as new activity syncs`} />
       <ClientTable
         label="Live sessions"
         noun="sessions"

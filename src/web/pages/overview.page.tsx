@@ -18,6 +18,7 @@ import { useApi } from "@/lib/api.client.ts";
 import { cacheHitRate, fmtDelta, fmtInt, fmtPct, fmtProject, fmtUsd } from "@/lib/format.ts";
 import { hashHref } from "@/lib/hash.route.ts";
 import { DEFAULT_RANGE, type Range } from "@/lib/range.ts";
+import { SECOND_TICK_MS, useNow } from "@/lib/now.ts";
 import { costByTier } from "@/lib/tier.cost.ts";
 
 /** Rows in the Top projects / Top sessions lists. */
@@ -57,6 +58,7 @@ const Skeleton = ({ className }: { className: string }) => <div aria-hidden clas
 /** Overview dashboard: 4 KPIs with deltas, stacked daily cost by model family, top projects/sessions, cost by tier. */
 export function OverviewPage({ since, range, dataVersion, tiers }: PageProps) {
   const [retry, setRetry] = useState(0);
+  const now = useNow(SECOND_TICK_MS);
   const tick = dataVersion + retry;
   const onRetry = () => setRetry((n) => n + 1);
   const ov = useApi<Overview>("/api/overview", { since }, tick);
@@ -113,7 +115,7 @@ export function OverviewPage({ since, range, dataVersion, tiers }: PageProps) {
     { id: "session", header: "Session", cell: (r) => (
         <span className="flex min-w-0 items-center gap-2">
           {r.model && <ModelDot model={r.model} />}
-          <span className="min-w-0 flex-1"><SessionCell id={r.id} title={r.title} projectCwd={r.project_cwd} /></span>
+          <span className="min-w-0 flex-1"><SessionCell id={r.id} title={r.title} projectCwd={r.project_cwd} lastTs={r.last_ts} now={now} /></span>
         </span>
       ),
     },

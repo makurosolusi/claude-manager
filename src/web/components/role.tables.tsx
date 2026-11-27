@@ -23,23 +23,24 @@ const SORTS = { name: (r: AggRow) => r.key, requests: (r: AggRow) => r.requests,
 export function ShareBar({ share }: { share: number }) {
   return (
     <span className="inline-flex items-center justify-end gap-2">
-      <span aria-hidden className="h-1.5 w-16 overflow-hidden rounded-full bg-foreground/10">
+      <span aria-hidden className="h-1.5 w-10 sm:w-12 overflow-hidden rounded-full bg-foreground/10">
         <span className="block h-full rounded-full bg-foreground/50" style={{ width: `${share * 100}%` }} />
       </span>
-      <span className="w-12 tabular-nums">{fmtPct(share)}</span>
+      <span className="w-10 tabular-nums">{fmtPct(share)}</span>
     </span>
   );
 }
 
-/** Requests, Tokens, Cache hit, Cost (est.) and Share columns shared by all three role tables; below sm only Cost stays. */
-export function usageColumns<T extends Usage>(share: (r: T) => number): Column<T>[] {
-  return [
+/** Requests, Tokens, Cache hit, Cost (est.) and Share columns shared by the role tables; `only` keeps a subset (half-width tables), below sm only Cost stays. */
+export function usageColumns<T extends Usage>(share: (r: T) => number, only?: string[]): Column<T>[] {
+  const all: Column<T>[] = [
     { id: "requests", header: "Requests", cell: (r) => fmtInt(r.requests), align: "right", sortKey: "requests", width: "w-20", hideBelow: "sm" },
     { id: "tokens", header: "Tokens", cell: (r) => <TokenCell usage={r} />, align: "right", sortKey: "tokens", width: "w-20", hideBelow: "sm" },
     { id: "cache", header: "Cache hit", cell: (r) => (r.requests ? fmtPct(cacheHitRate(r)) : "—"), align: "right", width: "w-20", hideBelow: "lg" },
     { id: "cost", header: "Cost (est.)", cell: (r) => <CostCell usd={r.cost_usd} unpriced={r.unpriced} heat="aggregate" />, align: "right", sortKey: "cost", width: "w-24" },
-    { id: "share", header: "Share", cell: (r) => <ShareBar share={share(r)} />, align: "right", sortKey: "share", width: "w-36", hideBelow: "md" },
+    { id: "share", header: "Share", cell: (r) => <ShareBar share={share(r)} />, align: "right", sortKey: "share", width: "w-32", hideBelow: "md" },
   ];
+  return only ? all.filter((c) => only.includes(c.id)) : all;
 }
 
 interface AggTableProps {
@@ -48,10 +49,12 @@ interface AggTableProps {
   lead: Column<AggRow>[];
   tiers?: Partial<Tiers>;
   grouped?: boolean;
+  /** Usage column ids kept; the tables sit half-width at lg so not all five fit beside the name. */
+  keep: string[];
 }
 
 /** Searchable, sortable, paginated table of aggregated rows; `grouped` clusters the page by tier with full-set subtotals. */
-function AggTable({ label, rows, lead, tiers, grouped }: AggTableProps) {
+function AggTable({ label, rows, lead, tiers, grouped, keep }: AggTableProps) {
   const [s, setS] = useState({ q: "", sort: "cost", dir: "desc" as Sort["dir"], page: 1, size: AGG_PAGE_SIZE, filters: {} });
   const [closed, setClosed] = useState<string[]>([]);
   const r = runClientTable(rows, s, { text: (x) => x.key, facets: {}, sort: SORTS });
@@ -76,7 +79,7 @@ function AggTable({ label, rows, lead, tiers, grouped }: AggTableProps) {
       </div>
       <DataTable
         label={label} rows={r.page} groups={groups} rowKey={(x) => x.key} sort={{ key: s.sort, dir: s.dir }}
-        columns={[...lead, ...usageColumns<AggRow>((x) => x.share)]}
+        columns={[...lead, ...usageColumns<AggRow>((x) => x.share, keep)]}
         onSort={(n) => patch({ sort: n.key, dir: n.dir })}
         empty={s.q ? `No ${label.toLowerCase()} match "${s.q}".` : "No usage in this range."}
       />
@@ -90,15 +93,15 @@ const nameCol = (header: string, cell: (r: AggRow) => ReactNode): Column<AggRow>
 /** By model: one row per model, grouped by tier. */
 export function ByModelTable({ rows, tiers }: { rows: TieredRow[]; tiers?: Partial<Tiers> }) {
   const lead = [nameCol("Model", (r) => <ModelBadge model={r.key} />), { id: "tier", header: "Tier", cell: (r: AggRow) => <TierBadge tier={r.tier} tiers={tiers} />, width: "w-24", hideBelow: "md" as const }];
-  return <AggTable label="By model" rows={byModel(rows)} lead={lead} tiers={tiers} grouped />;
+  return <AggTable label="By model" rows={byModel(rows)} lead={lead} tiers={tiers} grouped keep={["tokens", "cost", "share"]} />;
 }
 
 /** By role: one row per role with its kind and tier. */
 export function ByRoleTable({ rows, tiers, roles }: { rows: TieredRow[]; tiers?: Partial<Tiers>; roles?: readonly RoleMeta[] }) {
   const lead = [
     nameCol("Role", (r) => <RoleBadge role={r.key} roles={roles} />),
-    { id: "kind", header: "Kind", cell: (r: AggRow) => <span className="text-muted-foreground">{roleKind(r.key, roles)}</span>, width: "w-20", hideBelow: "lg" as const },
+    { id: "kind", header: "Kind", cell: (r: AggRow) => <span className="text-muted-foreground">{roleKind(r.key, roles)}</span>, width: "w-16", hideBelow: "lg" as const },
     { id: "tier", header: "Tier", cell: (r: AggRow) => <TierBadge tier={r.tier} tiers={tiers} />, width: "w-24", hideBelow: "md" as const },
   ];
-  return <AggTable label="By role" rows={byRole(rows, roles)} lead={lead} tiers={tiers} />;
+  return <AggTable label="By role" rows={byRole(rows, roles)} lead={lead} tiers={tiers} keep={["requests", "cost", "share"]} />;
 }

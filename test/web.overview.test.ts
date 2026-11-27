@@ -3,7 +3,7 @@ import type { DayModelRow, Totals, UsageRow } from "../src/server/dashboard.type
 import { costByTier } from "../src/web/lib/tier.cost.ts";
 import { pivotCostByDay } from "../src/web/components/cost.chart.tsx";
 import { overviewDeltas } from "../src/web/pages/overview.page.tsx";
-import { FAMILY_COLOR, type Tiers } from "../src/web/lib/model.tier.ts";
+import { FAMILY_COLOR, FAMILY_LABEL, type Tiers } from "../src/web/lib/model.tier.ts";
 
 // test-only fixtures
 const row = (key: string, cost_usd: number, requests = 10): UsageRow => ({ key, cost_usd, requests, input: 100, output: 50, cache_read: 300, cache_write: 100, unpriced: 0 });
@@ -81,4 +81,9 @@ test("pivotCostByDay: per-day family sums equal raw totals for every day", () =>
   const totals = points.map((p) => series.reduce((s, x) => s + (p[x.key] as number), 0));
   expect(totals).toEqual([0.75, 1.5]);
   expect(series.map((s) => s.key)).toEqual(["sonnet", "haiku", "other"]);
+});
+
+test("FAMILY_LABEL names every family", () => {
+  expect(Object.keys(FAMILY_LABEL).sort()).toEqual(Object.keys(FAMILY_COLOR).sort());
+  expect(FAMILY_LABEL).toEqual({ opus: "Opus", sonnet: "Sonnet", haiku: "Haiku", other: "Other" });
 });

@@ -3,7 +3,7 @@ import type { DayModelRow } from "../../server/dashboard.types.ts";
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart.tsx";
 import { fmtModel, fmtUsd } from "@/lib/format.ts";
 import { FAMILY_ICON } from "@/lib/icon.map.ts";
-import { FAMILY_COLOR, modelFamily, type ModelFamily } from "@/lib/model.tier.ts";
+import { FAMILY_COLOR, FAMILY_LABEL, modelFamily, type ModelFamily } from "@/lib/model.tier.ts";
 
 const DAY_MS = 86_400_000;
 const X_TICK_GAP_PX = 40;
@@ -45,7 +45,6 @@ export function pivotCostByDay(rows: DayModelRow[], startDay: string, endDay: st
 
 const dayLabel = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const fmtDay = (day: string) => dayLabel.format(new Date(`${day}T00:00:00Z`));
-const familyLabel = (f: ModelFamily) => f[0]!.toUpperCase() + f.slice(1);
 
 /** Legend for the chart header: family icon + name in text ink, colour as a secondary mark. */
 export function CostLegend({ series }: { series: Series[] }) {
@@ -57,7 +56,7 @@ export function CostLegend({ series }: { series: Series[] }) {
           <li key={s.key} className="flex items-center gap-1.5">
             <span aria-hidden className="size-2 rounded-[2px]" style={{ background: s.color }} />
             <Icon aria-hidden className="size-3.5" />
-            <span>{familyLabel(s.key)}</span>
+            <span>{FAMILY_LABEL[s.key]}</span>
           </li>
         );
       })}
@@ -81,7 +80,7 @@ function DayTooltip({ active, label, payload, models }: TipProps & { models: Day
           <div key={f} className="grid gap-0.5">
             <div className="flex items-center gap-2">
               <span aria-hidden className="size-2 rounded-[2px]" style={{ background: p.color }} />
-              <span className="flex-1">{familyLabel(f)}</span>
+              <span className="flex-1">{FAMILY_LABEL[f]}</span>
               <span className="tabular-nums">{fmtUsd(Number(p.value))}</span>
             </div>
             {detail.map(([m, usd]) => (
@@ -103,7 +102,7 @@ function DayTooltip({ active, label, payload, models }: TipProps & { models: Day
 
 /** Stacked daily cost bars, one series per model family; no animation. */
 export function CostChart({ series, points, models }: { series: Series[]; points: DayPoint[]; models: DayModels }) {
-  const config = Object.fromEntries(series.map((s) => [s.key, { label: familyLabel(s.key), color: s.color }])) satisfies ChartConfig;
+  const config = Object.fromEntries(series.map((s) => [s.key, { label: FAMILY_LABEL[s.key], color: s.color }])) satisfies ChartConfig;
   return (
     <ChartContainer config={config} className="aspect-auto h-56 w-full">
       <BarChart data={points} margin={{ left: 0, right: 0, top: 4 }}>
