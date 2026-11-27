@@ -1,64 +1,82 @@
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
+import type { PageProps } from "@/lib/page.props.ts";
+import { Radio } from "lucide-react";
 import type { LiveSession } from "../../server/dashboard.types.ts";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card.tsx";
-import { Badge } from "@/components/ui/badge.tsx";
-import { Progress } from "@/components/ui/progress.tsx";
-import { StatusView } from "@/components/status.view.tsx";
-import { Cost } from "@/components/cost.label.tsx";
+import { FAMILIES, SESSION_STATUSES, SESSION_STATUS_MIN } from "../../server/dashboard.types.ts";
+import { ClientTable, type ClientGrouping } from "@/components/client.table.tsx";
+import { CostCell } from "@/components/cost.cell.tsx";
+import { LIVE_HIDEABLE, liveColumns } from "@/components/live.columns.tsx";
+import { PageHeader } from "@/components/page.header.tsx";
 import { useApi } from "@/lib/api.client.ts";
-import { fmtTime, fmtTokens, shortPath } from "@/lib/format.ts";
+import { fmtInt, fmtProject } from "@/lib/format.ts";
 import { hashHref } from "@/lib/hash.route.ts";
+import { FAMILY_ICON, LEVEL_ICON, STATUS_ICON } from "@/lib/icon.map.ts";
+import { GROUP_LEVEL, GROUP_PROJECT, LEVEL_LABEL, LIVE_PATH, LIVE_SPEC, levelOf, liveTableOptions } from "@/lib/live.table.ts";
+import { NOW_TICK_MS, useNow } from "@/lib/now.ts";
+import { STATUS_TONE, LEVEL_TONE } from "@/lib/status.level.ts";
+import { runClientTable } from "@/lib/table.client.ts";
+import { NO_GROUP } from "@/lib/table.query.ts";
+import { facetOptions, useTableView } from "@/lib/use.table.view.ts";
+import type { ContextLevel } from "@/lib/context.level.ts";
 
-/** How often the Live page re-polls /api/live. */
-export const LIVE_REFRESH_MS = 5_000;
-/** Below this share of context left, the bar turns red. */
-const LOW_CONTEXT_PCT = 20;
+const STATUS_LABEL = { live: "Live", idle: "Idle", ended: "Ended" } as const;
+const LEVELS: ContextLevel[] = ["ok", "warn", "danger"];
+const LEVEL_ORDER = Object.fromEntries(LEVELS.map((l, i) => [l, i]));
 
-/** Active sessions with remaining context, auto-refreshed. */
-export function LivePage() {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick((n) => n + 1), LIVE_REFRESH_MS);
-    return () => clearInterval(t);
-  }, []);
-  const state = useApi<LiveSession[]>("/api/live", {}, tick);
+const grouping: ClientGrouping<LiveSession> = {
+  options: [{ value: NO_GROUP, label: "No grouping" }, { value: GROUP_PROJECT, label: "Project" }, { value: GROUP_LEVEL, label: "Context level" }],
+  // Groups follow the active grouping; the table only calls these when one is selected.
+  of: (s) => ({ key: s.project_cwd ?? "", label: <span className="font-mono text-xs">{fmtProject(s.project_cwd)}</span> }),
+  totals: (rows) => ({ cost: <CostCell usd={rows.reduce((a, r) => a + r.cost_usd, 0)} heat="aggregate" /> }),
+};
+const levelGrouping: ClientGrouping<LiveSession> = {
+  ...grouping,
+  of: (s) => {
+    const level = levelOf(s);
+    const Icon = LEVEL_ICON[level];
+    return { key: `${LEVEL_ORDER[level]}-${level}`, label: <span className="inline-flex items-center gap-2"><Icon aria-hidden className="size-4" />{LEVEL_LABEL[level]} context</span> };
+  },
+};
+
+/** Active sessions (last 15 minutes) as a table: status, context meter and cost; refreshes only with the shell's `dataVersion`. */
+export function LivePage({ dataVersion, params }: Omit<PageProps, "since">) {
+  const [retry, setRetry] = useState(0);
+  const view = useTableView({ id: "live", path: LIVE_PATH, params, spec: LIVE_SPEC, hideable: LIVE_HIDEABLE });
+  const { data, error, loading } = useApi<LiveSession[]>("/api/live", {}, dataVersion + retry);
+  const now = useNow(NOW_TICK_MS);
+  const { state } = view;
+
+  const opts = useMemo(() => liveTableOptions(now), [now]);
+  const result = useMemo(() => (data ? runClientTable(data, state, opts) : undefined), [data, opts, JSON.stringify(state)]);
+  const columns = useMemo(() => liveColumns(now), [now]);
+  const set = (id: string) => (next: string[]) => view.go({ filters: { ...state.filters, [id]: next } });
+
+  const facets = [
+    { id: "status", label: "Status", icon: STATUS_ICON.live, options: facetOptions(SESSION_STATUSES.map((v) => ({ value: v, label: STATUS_LABEL[v], icon: STATUS_ICON[v], tone: STATUS_TONE[v] })), result?.counts.status), selected: state.filters.status ?? [], onChange: set("status") },
+    { id: "level", label: "Context", icon: LEVEL_ICON.ok, options: facetOptions(LEVELS.map((v) => ({ value: v, label: LEVEL_LABEL[v], icon: LEVEL_ICON[v], tone: LEVEL_TONE[v] })), result?.counts.level), selected: state.filters.level ?? [], onChange: set("level") },
+    { id: "family", label: "Model", icon: FAMILY_ICON.opus, options: facetOptions(FAMILIES.map((v) => ({ value: v, label: v, icon: FAMILY_ICON[v] })), result?.counts.family), selected: state.filters.family ?? [], onChange: set("family") },
+  ];
+  const n = data?.length ?? 0;
+
   return (
-    <>
-      <p className="text-sm text-muted-foreground">Refreshes every {LIVE_REFRESH_MS / 1000}s.</p>
-      <StatusView state={state} isEmpty={(d) => d.length === 0} emptyText="No active sessions right now.">
-        {(d) => (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {d.map((s) => (
-              <a key={s.id} href={hashHref(`/sessions/${encodeURIComponent(s.id)}`)} className="rounded-xl focus-visible:ring-2 focus-visible:ring-ring">
-                <Card className="h-full gap-3 py-4 hover:bg-accent/50">
-                  <CardHeader className="px-4">
-                    <CardTitle className="truncate" title={s.title ?? s.id}>
-                      {s.title ?? s.id}
-                    </CardTitle>
-                    <CardDescription className="flex flex-wrap items-center gap-2">
-                      <span title={s.project_cwd ?? ""}>{shortPath(s.project_cwd)}</span>
-                      <Badge variant="secondary">{s.model}</Badge>
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-2 px-4 text-sm">
-                    <div className="flex justify-between">
-                      <span>{Math.round(s.context_left_pct)}% context left</span>
-                      <span className="text-muted-foreground">
-                        {fmtTokens(s.context_used)} / {fmtTokens(s.context_window)}
-                      </span>
-                    </div>
-                    <Progress value={s.context_left_pct} indicatorClassName={s.context_left_pct < LOW_CONTEXT_PCT ? "bg-destructive" : undefined} />
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>{fmtTime(s.last_ts)}</span>
-                      <Cost usd={s.cost_usd} />
-                    </div>
-                  </CardContent>
-                </Card>
-              </a>
-            ))}
-          </div>
-        )}
-      </StatusView>
-    </>
+    <div className="flex flex-col gap-4">
+      <PageHeader title="Live" description={error ? undefined : `${fmtInt(n)} active ${n === 1 ? "session" : "sessions"}, updated as new activity syncs`} />
+      <ClientTable
+        label="Live sessions"
+        noun="sessions"
+        empty={<span className="inline-flex flex-col items-center gap-2"><Radio aria-hidden className="size-5" />No active sessions in the last {SESSION_STATUS_MIN.idle} minutes.</span>}
+        view={view}
+        columns={columns}
+        facets={facets}
+        searchPlaceholder="Search title, id or project…"
+        grouping={state.group === GROUP_LEVEL ? levelGrouping : grouping}
+        result={result}
+        rowKey={(s) => s.id}
+        rowHref={(s) => hashHref(`/sessions/${encodeURIComponent(s.id)}`)}
+        loading={loading}
+        error={error && new Error(`Couldn't load live sessions. ${error.message}`)}
+        onRetry={() => setRetry((x) => x + 1)}
+      />
+    </div>
   );
 }
