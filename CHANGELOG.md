@@ -25,8 +25,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--since`, `--project`, `--limit` and `--json`. Prices can be overridden in
   `~/.claude-manager/pricing.json`.
 - `dashboard` serves a read-only local web dashboard of usage, estimated cost and context use on
-  127.0.0.1 (default port 5757, `--port` or `dashboardPort` to change), refreshing every 5s.
+  127.0.0.1 (default port 5757, `--port` or `dashboardPort` to change). It runs in production mode,
+  with no dev overlay.
+- Dashboard look: light and dark themes that follow the OS, plus a toggle.
+- Dashboard overview: four KPIs with deltas against the previous period, a daily cost chart stacked
+  by model, top projects and sessions, and cost per tier.
+- Dashboard sessions: sort, search and project filter are stored in the URL, so views can be shared.
+  The page refreshes by itself when new data arrives and shows a "Synced Ns ago" indicator.
 - Single-binary releases for macOS and Linux (x64, arm64) with `SHA256SUMS`, an `install.sh`
   installer, and an experimental Windows build.
 - `update` replaces the binary with the latest release after verifying its checksum;
   `update --check` only reports whether one is available.
+
+### Changed
+
+- Dashboard errors are clearer and offer a Retry button. Keyboard focus is visible and the layout
+  works on mobile.

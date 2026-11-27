@@ -5,7 +5,7 @@
 set -eu
 
 # TODO(release): set real owner/repo before first release (pending user)
-DEFAULT_REPO="OWNER/claude-manager"
+DEFAULT_REPO="makurosolusi/claude-manager"
 REPO="${CLAUDE_MANAGER_REPO:-$DEFAULT_REPO}"
 DOWNLOAD_BASE="${CLAUDE_MANAGER_RELEASE_DOWNLOAD:-https://github.com}"
 VERSION="${CLAUDE_MANAGER_VERSION:-latest}"

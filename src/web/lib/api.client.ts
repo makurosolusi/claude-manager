@@ -11,7 +11,15 @@ export async function getJson<T>(path: string, query: Query = {}, signal?: Abort
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(query)) if (v !== undefined && v !== "") params.set(k, String(v));
   const url = params.size ? `${path}?${params}` : path;
-  const res = await fetch(url, { signal });
+  let res: Response;
+  try {
+    res = await fetch(url, { signal });
+  } catch (err) {
+    // Aborts are expected (superseded request); rethrow untouched so callers can still recognise them.
+    if (signal?.aborted) throw err;
+    // Network failures arrive as a bare "Failed to fetch"; name the endpoint so the UI error is actionable.
+    throw new Error(`GET ${path} failed: network error (${(err as Error).message})`, { cause: err });
+  }
   if (!res.ok) {
     // A non-JSON error body (e.g. proxy page) falls back to statusText; the request still throws below.
     const body = (await res.json().catch(() => null)) as ApiError | null;
