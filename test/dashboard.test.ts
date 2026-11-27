@@ -6,6 +6,7 @@ import { openDb } from "../src/db/db.schema.ts";
 import { sync } from "../src/ingest/ingest.service.ts";
 import { contextWindow, DEFAULT_CONTEXT_WINDOW, LONG_CONTEXT_WINDOW } from "../src/server/context.window.ts";
 import { DEFAULT_TIER_MODELS } from "../src/config/config.store.ts";
+import { PRESET_ROLES } from "../src/roles/roles.presets.ts";
 import { handleApi, overview, SYNC_INTERVAL_MS } from "../src/server/dashboard.api.ts";
 import type { DashboardMeta, LiveSession, Overview, Page, ProjectRow, RoleRow, SessionDetail, SessionRow, TimelineItem } from "../src/server/dashboard.types.ts";
 import { useTempHome } from "./test.home.ts";
@@ -111,7 +112,7 @@ describe("dashboard api", () => {
   });
 
   test("project filter narrows the overview", async () => {
-    const o = await get<Overview>("/api/overview?project=web");
+    const o = await get<Overview>("/api/overview?project=%2Fwork%2Fweb");
     expect(o.total.requests).toBe(3);
   });
 
@@ -210,7 +211,7 @@ describe("dashboard api: overview deltas and charts", () => {
 
   test("total counts distinct sessions", async () => {
     expect((await get<Overview>("/api/overview")).total.sessions).toBe(3);
-    expect((await get<Overview>("/api/overview?project=app")).total.sessions).toBe(1);
+    expect((await get<Overview>("/api/overview?project=%2Fwork%2Fapp")).total.sessions).toBe(1);
   });
 
   test("byDayModel splits byDay by model without losing cost or requests", async () => {
@@ -247,7 +248,7 @@ describe("dashboard api: session sort, search and model", () => {
     expect(await ids("bbbbbbbb")).toEqual([LIVE_200K]);
     expect(await ids("/WORK/WEB")).toEqual([LIVE_200K, LIVE_1M]);
     expect(await ids("  ")).toHaveLength(3);
-    const p = await get<Page<SessionRow>>("/api/sessions?q=work&project=app");
+    const p = await get<Page<SessionRow>>("/api/sessions?q=work&project=%2Fwork%2Fapp");
     expect(p).toMatchObject({ total: 1, items: [{ id: OLD }] });
   });
 
@@ -261,7 +262,7 @@ describe("dashboard api: session sort, search and model", () => {
 
 describe("dashboard api: meta", () => {
   test("without a provider reports never synced and the default tiers", async () => {
-    expect(await get<DashboardMeta>("/api/meta")).toEqual({ synced_at: null, changed_at: null, error: null, interval_ms: SYNC_INTERVAL_MS, tiers: DEFAULT_TIER_MODELS });
+    expect(await get<DashboardMeta>("/api/meta")).toEqual({ synced_at: null, changed_at: null, error: null, interval_ms: SYNC_INTERVAL_MS, tiers: DEFAULT_TIER_MODELS, roles: PRESET_ROLES.map((r) => ({ name: r.name, tier: r.tier, source: "preset" })) });
   });
 
   test("returns the provider's sync state and configured tiers", async () => {
@@ -271,6 +272,7 @@ describe("dashboard api: meta", () => {
       error: "disk full",
       interval_ms: 1000,
       tiers: { think: "claude-opus-test", work: "claude-sonnet-test", basic: "claude-haiku-test" }, // test-only
+      roles: [{ name: "coder", tier: "work", source: "preset" }, { name: "qa", tier: "basic", source: "custom" }],
     };
     const res = handleApi(new Request(`${BASE}/api/meta`), db, undefined, () => meta)!;
     expect(res.status).toBe(200);

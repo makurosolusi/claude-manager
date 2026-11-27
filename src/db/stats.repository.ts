@@ -10,6 +10,8 @@ export interface StatsFilter {
   until?: string;
   /** Substring of the session's project cwd. */
   project?: string;
+  /** Exact project cwd values (dashboard); ANDed with `project`. */
+  projects?: string[];
 }
 
 export interface UsageRow {
@@ -35,7 +37,8 @@ export interface DayModelRow {
   requests: number;
 }
 
-type Params = Record<string, string | number | null>;
+/** SQL named-parameter bag. */
+export type Params = Record<string, string | number | null>;
 
 // Role of a request: the subagent's type, else the session's main agent (`claude --agent X`), else plain main.
 export const KEY: Record<GroupBy, string> = {
@@ -46,10 +49,23 @@ export const KEY: Record<GroupBy, string> = {
 };
 
 /** Request filter for StatsFilter; expects `r` = requests, `s` = sessions. Bind with `filterParams`. */
-export const WHERE = "r.ts >= $since AND ($until IS NULL OR r.ts < $until) AND ($project IS NULL OR instr(s.project_cwd, $project) > 0)";
+export const WHERE = `r.ts >= $since AND ($until IS NULL OR r.ts < $until) AND ($project IS NULL OR instr(s.project_cwd, $project) > 0)
+  AND ($projects IS NULL OR s.project_cwd IN (SELECT value FROM json_each($projects)))`;
+
+/** Binds a string list for `json_each($x)`; null = no filter. */
+export const listParam = (v?: readonly string[]): string | null => (v?.length ? JSON.stringify(v) : null);
+
+/** Model family of a SQL model-id expression; mirrors `modelFamily()` in the web bundle. */
+export const FAMILY_SQL = (col: string) =>
+  `CASE WHEN instr(lower(${col}), 'opus') > 0 THEN 'opus' WHEN instr(lower(${col}), 'sonnet') > 0 THEN 'sonnet' WHEN instr(lower(${col}), 'haiku') > 0 THEN 'haiku' ELSE 'other' END`;
 
 /** SQL bindings for `WHERE`. */
-export const filterParams = (f: StatsFilter): Params => ({ since: f.since, until: f.until ?? null, project: f.project ?? null });
+export const filterParams = (f: StatsFilter): Params => ({
+  since: f.since,
+  until: f.until ?? null,
+  project: f.project ?? null,
+  projects: listParam(f.projects),
+});
 
 const FROM = "FROM requests r LEFT JOIN agents a ON a.id = r.agent_id LEFT JOIN sessions s ON s.id = r.session_id";
 
