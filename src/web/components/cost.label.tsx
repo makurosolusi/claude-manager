@@ -1,7 +1,8 @@
+import { COST_NOTE } from "@/components/cost.cell.tsx";
 import { fmtUsd } from "@/lib/format.ts";
 
-/** Disclaimer attached to every cost figure. */
-export const COST_NOTE = "Estimated at public API list prices. This is not your subscription bill.";
+// COST_NOTE moved to cost.cell.tsx (PLAN/05 §3.1); re-exported so old importers keep compiling until wave 2 (then delete this file, §7).
+export { COST_NOTE };
 
 /** USD amount tagged "est." with the estimate disclaimer as a tooltip. */
 export function Cost({ usd }: { usd: number }) {

@@ -13,12 +13,18 @@ export const TIER_ORDER: readonly TierKey[] = ["think", "work", "basic", "other"
 
 const FAMILY_TIER: Record<Exclude<ModelFamily, "other">, Tier> = { opus: "think", sonnet: "work", haiku: "basic" };
 
-/** Chart/dot color per family; one mapping so chart, legend and tables agree. */
+/** Chart/dot color per family (CSS var, theme-aware); one mapping so chart, legend and tables agree. */
 export const FAMILY_COLOR: Record<ModelFamily, string> = {
-  opus: "var(--chart-1)",
-  sonnet: "var(--chart-2)",
-  haiku: "var(--chart-3)",
-  other: "var(--chart-4)",
+  opus: "var(--model-opus)",
+  sonnet: "var(--model-sonnet)",
+  haiku: "var(--model-haiku)",
+  other: "var(--model-other)",
+};
+
+/** Family whose colour a tier wears: the family of the model configured for it; "other" for the catch-all tier. */
+export const tierFamily = (tier: TierKey, tiers?: Partial<Tiers>): ModelFamily => {
+  const model = tier === "other" ? undefined : tiers?.[tier];
+  return model ? modelFamily(model) : tier === "think" ? "opus" : tier === "work" ? "sonnet" : tier === "basic" ? "haiku" : "other";
 };
 
 /** Lowercased model id without the `[1m]` context suffix or a trailing `-YYYYMMDD` date. */
