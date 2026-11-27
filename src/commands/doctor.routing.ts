@@ -3,7 +3,8 @@ import { TIER_ENV, TIERS } from "../config/config.store.ts";
 import type { InstallRecord } from "../install/install.manifest.ts";
 import { parseSettings, readText } from "../install/install.target.ts";
 
-export type RoutingCheck = { ok: boolean | "warn"; label: string };
+/** `role` is set only on per-agent checks (shadowing); global checks leave it undefined. */
+export type RoutingCheck = { ok: boolean | "warn"; label: string; role?: string };
 
 const TRUTHY = /^(1|true|yes|on)$/i;
 
@@ -39,6 +40,7 @@ export async function checkRouting(
     if (!owned.has(path) && (await Bun.file(path).exists())) {
       out.push({
         ok: "warn",
+        role: name,
         label: `${path} shadows the installed "${name}" role (project scope wins). Remove it or run "claude-manager install --scope project"`,
       });
     }
