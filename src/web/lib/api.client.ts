@@ -44,35 +44,43 @@ export interface ApiState<T> {
   loading: boolean;
 }
 
-/** Fetches `path` whenever it, `query`, or `tick` changes; keeps the previous data while reloading. A `null` path skips the fetch. */
+/** What to show for a fetched result: kept only while it belongs to the resource (path + query) now requested; a tick refresh keeps it. */
+export function visibleFor<S extends { key: string }>(state: S, key: string): S | undefined {
+  return state.key === key ? state : undefined;
+}
+
+/** Fetches `path` whenever it, `query`, or `tick` changes; keeps the previous data while reloading the same resource, drops it when the path or query changes. A `null` path skips the fetch. */
 export function useApi<T>(path: string | null, query: Query = {}, tick = 0): ApiState<T> {
-  const [state, setState] = useState<ApiState<T>>({ data: undefined, error: undefined, loading: path !== null });
-  const key = JSON.stringify(query);
+  const key = path === null ? "" : withQuery(path, query);
+  const [state, setState] = useState<ApiState<T> & { key: string }>({ key, data: undefined, error: undefined, loading: path !== null });
   useEffect(() => {
     if (path === null) {
       setState((s) => (s.loading ? { ...s, loading: false } : s));
       return;
     }
     const ctrl = new AbortController();
-    setState((s) => ({ ...s, loading: true }));
+    setState((s) => ({ ...(s.key === key ? s : { key, data: undefined, error: undefined }), loading: true }));
     getJson<T>(path, query, ctrl.signal).then(
-      (data) => setState({ data, error: undefined, loading: false }),
+      (data) => setState({ key, data, error: undefined, loading: false }),
       (error: unknown) => {
         if (ctrl.signal.aborted) return; // superseded by a newer request; its result will land instead
-        setState((s) => ({ ...s, error: error instanceof Error ? error : new Error(String(error)), loading: false }));
+        setState((s) => ({ ...(s.key === key ? s : { key, data: undefined }), error: error instanceof Error ? error : new Error(String(error)), loading: false }));
       },
     );
     return () => ctrl.abort();
-  }, [path, key, tick]);
-  return state;
+  }, [key, tick]);
+  // The effect runs after the render that changed the key; hide the old resource's data in that render too.
+  const cur = visibleFor(state, key);
+  return cur ?? { data: undefined, error: undefined, loading: path !== null };
 }
 
-/** Fetches every full URL (results keyed by URL; an Error value marks a failed one, a missing key is still loading). Old results stay while refetching. */
+/** Fetches every full URL (results keyed by URL; an Error value marks a failed one, a missing key is still loading). Results of URLs no longer requested are dropped; the rest stay while refetching. */
 export function useApiMany<T>(urls: readonly string[], tick = 0): Record<string, T | Error> {
   const [res, setRes] = useState<Record<string, T | Error>>({});
   const sig = urls.join("\n");
   useEffect(() => {
     const ctrl = new AbortController();
+    setRes((r) => Object.fromEntries(Object.entries(r).filter(([u]) => urls.includes(u))));
     for (const u of urls) {
       getJson<T>(u, {}, ctrl.signal).then(
         (v) => setRes((r) => ({ ...r, [u]: v })),
@@ -83,5 +91,5 @@ export function useApiMany<T>(urls: readonly string[], tick = 0): Record<string,
     }
     return () => ctrl.abort();
   }, [sig, tick]);
-  return res;
+  return Object.fromEntries(urls.filter((u) => u in res).map((u) => [u, res[u]!]));
 }
