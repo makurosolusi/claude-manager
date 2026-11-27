@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { COST_NOTE } from "@/components/cost.cell.tsx";
 import { RangePicker } from "@/components/range.picker.tsx";
 import { SyncIndicator } from "@/components/sync.indicator.tsx";
@@ -33,6 +33,23 @@ const NAV = [
 /** URL value for a range; the default is omitted so clean URLs stay clean. */
 const rangeParam = (r: Range) => (r === DEFAULT_RANGE ? undefined : r);
 
+/** True while a nav strip still has content scrolled out of view to its right; drives the mobile fade hint. */
+function useMoreRight() {
+  const ref = useRef<HTMLElement>(null);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setMore(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => { el.removeEventListener("scroll", update); ro.disconnect(); };
+  }, []);
+  return { ref, more };
+}
+
 /** Sync status with its own 1s clock, so "Synced Ns ago" ticks between polls without re-rendering the whole shell. */
 function HeaderSync({ meta }: { meta: SyncMeta | undefined }) {
   return <SyncIndicator meta={meta} now={useNow(SECOND_TICK_MS)} />;
@@ -41,6 +58,7 @@ function HeaderSync({ meta }: { meta: SyncMeta | undefined }) {
 /** Dashboard shell: sticky header (nav, sync status, URL-backed range, theme), page switch, footer. */
 export function App() {
   const route = useHashRoute();
+  const nav = useMoreRight();
   const { path, params } = route;
   const { meta, error, dataVersion } = useSyncMeta();
   const range = parseRange(params.get("range"));
@@ -62,14 +80,14 @@ export function App() {
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
-        {/* <640 (~105px tall): row 1 = logo · sync dot · theme, row 2 = nav (scrolls, right-edge fade) + native range select.
+        {/* <640 (~105px tall): row 1 = logo · sync dot · theme, row 2 = nav (scrolls; right-edge fade while more links are out of view) + native range select.
             ≥640: one h-12 row. */}
         <div className={cn(CONTAINER, "flex flex-wrap items-center gap-x-4 gap-y-1 py-1 sm:h-12 sm:flex-nowrap sm:py-0")}>
           <a href={hashHref("/", { range: rangeParam(range) })} className="order-1 flex shrink-0 items-center gap-2 rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring">
             <span aria-hidden className="size-2.5 rounded-[2px] bg-brand" />
             <span className="font-mono text-[13px] font-semibold">claude-manager</span>
           </a>
-          <nav aria-label="Main" className="order-5 -mx-1 flex min-w-0 flex-1 basis-0 gap-0.5 overflow-x-auto px-1 pr-6 [mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] [scrollbar-width:none] sm:order-2 sm:[mask-image:none] sm:pr-1 [&::-webkit-scrollbar]:hidden">
+          <nav ref={nav.ref} aria-label="Main" className={cn("order-5 -mx-1 flex min-w-0 flex-1 basis-0 gap-0.5 overflow-x-auto px-1 [scrollbar-width:none] sm:order-2 [&::-webkit-scrollbar]:hidden", nav.more && "max-sm:[mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)]")}>
             {NAV.map((n) => {
               const active = n.match(path);
               return (
