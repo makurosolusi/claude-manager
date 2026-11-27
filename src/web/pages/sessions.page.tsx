@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { PageProps } from "@/lib/page.props.ts";
-import type { Page, SessionGroups, SessionRow, SessionsResponse } from "../../server/dashboard.types.ts";
+import { FAMILIES, type Page, type SessionGroups, type SessionRow, type SessionsResponse } from "../../server/dashboard.types.ts";
+import { NoMatchState } from "@/components/client.table.tsx";
 import { DataTable } from "@/components/data.table.tsx";
 import type { FacetDef, FacetOption } from "@/components/facet.filter.tsx";
 import { PageHeader } from "@/components/page.header.tsx";
@@ -20,11 +21,12 @@ import { sessionColumns } from "./sessions.columns.tsx";
 import { groupSpecs } from "./sessions.groups.tsx";
 
 const TABLE_ID = "sessions";
-const RANGE_LABEL: Record<Range, string> = { "24h": "Last 24 hours", "7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days", all: "All time" };
+export const RANGE_LABEL: Record<Range, string> = { "24h": "Last 24 hours", "7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days", all: "All time" };
 const GROUP_OPTIONS = [{ value: NO_GROUP, label: "No grouping" }, { value: "project", label: "Project" }, { value: "family", label: "Model family" }, { value: "status", label: "Status" }];
+const GROUP_NOUN: Record<string, string> = { project: "projects", family: "families", status: "statuses" };
 const FACET_LABEL = { project: "Project", family: "Model", role: "Role", status: "Status" } as const;
-const FACET_ICON = { project: UI_ICON.project, family: FAMILY_ICON.opus, role: UI_ICON.filter, status: STATUS_ICON.live };
-const FIXED_FACETS: Record<string, readonly string[]> = { family: ["opus", "sonnet", "haiku", "other"], status: ["live", "idle", "ended"] };
+const FACET_ICON = { project: UI_ICON.project, family: UI_ICON.model, role: NAV_ICON.roles, status: STATUS_ICON.live };
+const FIXED_FACETS: Record<string, readonly string[]> = { family: FAMILIES, status: ["live", "idle", "ended"] };
 
 function facetOptions(id: (typeof SESSION_FACET_IDS)[number], counts: { value: string; count: number }[] = []): FacetOption[] {
   const byValue = new Map(counts.map((c) => [c.value, c.count]));
@@ -50,11 +52,11 @@ export function SessionsPage({ since, range, dataVersion, params, roles }: PageP
   useEffect(() => setOpen([]), [state.group]);
 
   // Grouped: the list call only supplies facets + total, so ask for one row.
-  const list = useApi<SessionsResponse>(sessionsApiPath(since, state, { facets: true, size: grouped ? 1 : undefined }), {}, dataVersion + retry);
-  const groupsPath = grouped ? sessionsApiPath(since, state, { groups: true }) : undefined;
+  const list = useApi<SessionsResponse>(sessionsApiPath(since, state, { facets: true, size: grouped ? 1 : undefined, range }), {}, dataVersion + retry);
+  const groupsPath = grouped ? sessionsApiPath(since, state, { groups: true, range }) : undefined;
   const openRefs: GroupRef[] = open.map((key) => ({ by: state.group, key }));
   const groupsApi = useApi<SessionGroups>(groupsPath ?? null, {}, dataVersion + retry);
-  const results = useApiMany<Page<SessionRow>>(openRefs.map((only) => sessionsApiPath(since, state, { only, size: GROUP_PREVIEW_ROWS })), dataVersion + retry);
+  const results = useApiMany<Page<SessionRow>>(openRefs.map((only) => sessionsApiPath(since, state, { only, size: GROUP_PREVIEW_ROWS, range })), dataVersion + retry);
 
   const columns = useMemo(() => sessionColumns(now, roles, (r) => `#${SESSIONS_PATH}/${encodeURIComponent(r.id)}`), [now, roles]);
   const facets: FacetDef[] = SESSION_FACET_IDS.map((id) => ({
@@ -69,13 +71,13 @@ export function SessionsPage({ since, range, dataVersion, params, roles }: PageP
   const pageGroups = groupList?.slice((state.page - 1) * state.size, state.page * state.size);
   const filtered = !!state.q || Object.values(state.filters).some((v) => v.length);
   const specs = pageGroups && groupSpecs(pageGroups, {
-    state, since, open, results, toggle: (k) => setOpen((o) => (o.includes(k) ? o.filter((x) => x !== k) : [...o, k])),
+    state, since, range, open, results, toggle: (k) => setOpen((o) => (o.includes(k) ? o.filter((x) => x !== k) : [...o, k])),
     showAll: ({ by, key }) => go({ group: NO_GROUP, filters: { ...state.filters, [by]: [key] } }),
   });
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="Sessions" icon={NAV_ICON.sessions} />
+      <PageHeader title="Sessions" icon={NAV_ICON.sessions} description={RANGE_LABEL[range]} />
       <TableToolbar
         search={{ value: state.q, onChange: (q) => go({ q }), placeholder: "Search title, id or project…", label: "Search sessions" }}
         facets={facets}
@@ -85,16 +87,16 @@ export function SessionsPage({ since, range, dataVersion, params, roles }: PageP
           onToggle: toggleCol, density, onDensity: setDensity,
         }}
         onReset={reset}
-        summary={<span className="tabular-nums">{sessionsCountLabel(list.data?.total, !!list.error)} · {RANGE_LABEL[range]}</span>}
+        summary={<span className="tabular-nums">{sessionsCountLabel(list.data?.total, !!list.error)}</span>}
       />
       <DataTable
         label="Sessions" rows={grouped ? undefined : list.data?.items} groups={grouped ? specs : undefined} columns={columns} hidden={hidden} density={density}
         rowKey={(r) => r.id} rowHref={(r) => `#${SESSIONS_PATH}/${encodeURIComponent(r.id)}`}
         sort={{ key: state.sort, dir: state.dir }} onSort={(s) => go({ sort: s.key, dir: s.dir })}
-        loading={grouped ? groupsApi.loading : list.loading} error={error && new Error(`Couldn't load sessions. ${error.message}`)} onRetry={() => setRetry((n) => n + 1)}
-        empty={filtered ? <span className="inline-flex items-center gap-2">No sessions match these filters.<button type="button" onClick={reset} className="underline underline-offset-2">Reset filters</button></span> : "No sessions in this range."}
+        loading={grouped ? groupsApi.loading : list.loading} stale={grouped ? groupsApi.stale : list.stale} error={error && new Error(`Couldn't load sessions. ${error.message}`)} onRetry={() => setRetry((n) => n + 1)}
+        empty={filtered ? <NoMatchState noun="sessions" onReset={reset} /> : "No sessions in this range."}
       />
-      {!error && <TablePagination label="Sessions" page={state.page} pageSize={state.size} total={total ?? 0} onPage={(page) => go({ page })} onPageSize={(size) => go({ size })} />}
+      {!error && <TablePagination label="Sessions" noun={grouped ? GROUP_NOUN[state.group] : "sessions"} page={state.page} pageSize={state.size} total={total ?? 0} onPage={(page) => go({ page })} onPageSize={(size) => go({ size })} />}
     </div>
   );
 }

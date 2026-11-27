@@ -23,8 +23,8 @@ function ContextCell({ s }: { s: LiveSession }) {
   return (
     <>
       <span className="block w-64 max-sm:hidden"><ContextBar used={s.context_used} window={s.context_window} size="sm" /></span>
-      <span className={cn("inline-flex items-center justify-end gap-1 font-medium sm:hidden", tone.text)}>
-        <Icon aria-hidden className="size-3.5" />
+      <span className={"inline-flex items-center justify-end gap-1 font-medium text-foreground sm:hidden"}>
+        <Icon aria-hidden className={cn("size-3.5", tone.text)} />
         {usedPct(s)}%
       </span>
     </>
@@ -38,7 +38,7 @@ export function liveColumns(now: number): Column<LiveSession>[] {
     { id: "status", header: "Status", cell: (s) => <SessionStatusBadge lastTs={s.last_ts} now={now} />, width: "w-24", hideBelow: "sm" },
     { id: "model", header: "Model", cell: (s) => <ModelBadge model={s.model} />, width: "w-40", hideBelow: "md" },
     { id: "context", header: <><span className="max-sm:hidden">Context used</span><span className="sm:hidden">Used</span></>, cell: (s) => <ContextCell s={s} />, align: "right", sortKey: "context", width: "sm:w-80" },
-    { id: "cost", header: <><span className="max-sm:hidden">Cost (est.)</span><span className="sm:hidden">Cost</span></>, cell: (s) => <CostCell usd={s.cost_usd} heat="session" />, align: "right", sortKey: "cost", width: "w-20 sm:w-24" },
+    { id: "cost", header: <><span className="max-sm:hidden">Cost (est.)</span><span className="sm:hidden">Cost</span></>, cell: (s) => <CostCell usd={s.cost_usd} />, align: "right", sortKey: "cost", width: "w-20 sm:w-24" },
     { id: "last", header: "Last active", cell: (s) => <RelativeTime iso={s.last_ts} />, align: "right", sortKey: "last", width: "w-24", hideBelow: "sm" },
   ];
 }

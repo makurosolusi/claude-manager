@@ -33,16 +33,16 @@ export function SessionCell({ id, title, projectCwd, href, lastTs, now }: Sessio
     <span className={twoLines ? "flex min-w-0 flex-col max-sm:gap-0.5 max-sm:py-2 sm:block" : "block min-w-0"}>
       <span className="flex min-w-0 items-baseline gap-2">
         {href ? (
-          <a href={href} title={name || id} className="min-w-0 flex-1 truncate rounded-sm outline-hidden hover:underline focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring">
+          <a href={href} title={name || id} className="min-w-0 truncate rounded-sm outline-hidden hover:underline focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring">
             {label}
           </a>
         ) : (
-          <span title={name || id} className="min-w-0 flex-1 truncate">
+          <span title={name || id} className="min-w-0 truncate">
             {label}
           </span>
         )}
         {projectCwd && (
-          <span className="min-w-0 max-w-[18ch] truncate font-mono max-sm:hidden text-xs text-fg-subtle" title={projectCwd}>
+          <span className="max-w-[18ch] shrink-0 truncate font-mono max-sm:hidden text-xs text-fg-subtle" title={projectCwd}>
             {fmtProject(projectCwd)}
           </span>
         )}

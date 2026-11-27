@@ -23,8 +23,9 @@ export const SESSIONS_SPEC: TableSpec = {
 export interface GroupRef { by: string; key: string }
 
 /** `/api/sessions[/groups]` URL for the table state; `only` narrows the list to one group's rows. */
-export function sessionsApiPath(since: string, s: TableState, o: { groups?: boolean; facets?: boolean; size?: number; only?: GroupRef } = {}): string {
-  const q: Query = { since, q: s.q || undefined };
+export function sessionsApiPath(since: string, s: TableState, o: { groups?: boolean; facets?: boolean; size?: number; only?: GroupRef; range?: Range } = {}): string {
+  // `range` is ignored by the server; it makes a range change a new resource for useApi while a sliding `since` stays a refresh.
+  const q: Query = { since, range: o.range, q: s.q || undefined };
   for (const id of SESSION_FACET_IDS) q[id] = o.only?.by === id ? [o.only.key] : (s.filters[id] ?? []);
   if (o.groups) return withQuery("/api/sessions/groups", { ...q, by: s.group });
   return withQuery("/api/sessions", { ...q, sort: s.sort, dir: s.dir, page: o.only ? 1 : s.page, pageSize: o.size ?? s.size, facets: o.facets ? 1 : undefined });

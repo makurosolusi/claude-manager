@@ -23,11 +23,11 @@ export function sessionColumns(now: number, roles?: readonly RoleMeta[], hrefOf?
     { id: "session", header: "Session", primary: true, cell: (r) => <SessionCell id={r.id} title={r.title} projectCwd={r.project_cwd} href={hrefOf?.(r)} lastTs={r.last_ts} now={now} /> },
     { id: "model", header: "Model", cell: (r) => (r.model ? <ModelBadge model={r.model} extra={r.models > 1 ? `+${r.models - 1}` : undefined} /> : <Dash />), width: "w-44", hideBelow: "md" },
     { id: "role", header: "Role", cell: (r) => <RoleBadge role={r.main_agent ?? DEFAULT_ROLE} roles={roles} />, width: "w-32", hideBelow: "lg" },
-    { id: "agents", header: "Agents", cell: (r) => (r.agents ? fmtInt(r.agents) : <Dash />), align: "right", sortKey: "agents", width: "w-16", hideBelow: "md" },
+    { id: "agents", header: "Agents", cell: (r) => <span className={cn(!r.agents && "text-fg-subtle")}>{fmtInt(r.agents)}</span>, align: "right", sortKey: "agents", width: "w-16", hideBelow: "md" },
     { id: "requests", header: "Requests", cell: (r) => fmtInt(r.requests), align: "right", sortKey: "requests", width: "w-20", hideBelow: "md" },
     { id: "tokens", header: "Tokens", cell: (r) => <TokenCell usage={r} />, align: "right", sortKey: "tokens", width: "w-20", hideBelow: "sm" },
-    { id: "cache", header: "Cache", cell: (r) => <span className={cn("tabular-nums", TONE_CLASSES[cacheLevel(cacheHitRate(r))].text)}>{fmtPct(cacheHitRate(r))}</span>, align: "right", width: "w-20", hideBelow: "lg" },
-    { id: "cost", header: "Cost (est.)", cell: (r) => <CostCell usd={r.cost_usd} unpriced={r.unpriced} heat="session" />, align: "right", sortKey: "cost", width: "w-28", hideable: false },
+    { id: "cache", header: "Cache hit", cell: (r) => <span className={cn("tabular-nums", TONE_CLASSES[cacheLevel(cacheHitRate(r))].text)}>{fmtPct(cacheHitRate(r))}</span>, align: "right", width: "w-20", hideBelow: "lg" },
+    { id: "cost", header: "Cost (est.)", cell: (r) => <CostCell usd={r.cost_usd} unpriced={r.unpriced} />, align: "right", sortKey: "cost", width: "w-28", hideable: false },
     { id: "last", header: "Last active", cell: (r) => <RelativeTime iso={r.last_ts} />, align: "right", sortKey: "last", width: "w-28", hideBelow: "sm" },
   ];
 }

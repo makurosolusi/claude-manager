@@ -63,3 +63,10 @@ test("count label hides a stale total on error", () => {
   expect(sessionsCountLabel(1, false)).toBe("1 session");
   expect(sessionsCountLabel(1234, false)).toBe("1,234 sessions");
 });
+
+test("group subtotals carry a token-weighted cache hit", async () => {
+  const { groupSpecs } = await import("../src/web/pages/sessions.groups.tsx");
+  const g = { key: "/w/a", count: 2, last_ts: null, input: 10, output: 5, cache_read: 980, cache_write: 10, cost_usd: 1, unpriced: 0 };
+  const [spec] = groupSpecs([g] as never, { state: { ...base, group: "project" }, since: SINCE, open: [], results: {}, toggle() {}, showAll() {} });
+  expect(spec!.totals.cache).toBe("98.0%");
+});

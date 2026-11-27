@@ -41,7 +41,7 @@ export function projectColumns(totalCost: number, now: number): Column<ProjectRo
     { id: "requests", header: "Requests", cell: (r) => fmtInt(r.requests), align: "right", sortKey: "requests", width: "w-24", hideBelow: "md" },
     { id: "tokens", header: "Tokens", cell: (r) => <TokenCell usage={r} />, align: "right", sortKey: "tokens", width: "w-20", hideBelow: "sm" },
     { id: "cache", header: "Cache hit", cell: (r) => <CacheText ratio={cacheHitRate(r)} />, align: "right", width: "w-20", hideBelow: "lg" },
-    { id: "cost", header: "Cost (est.)", cell: (r) => <CostCell usd={r.cost_usd} unpriced={r.unpriced} heat="aggregate" />, align: "right", sortKey: "cost", width: "w-28" },
+    { id: "cost", header: "Cost (est.)", cell: (r) => <CostCell usd={r.cost_usd} unpriced={r.unpriced} />, align: "right", sortKey: "cost", width: "w-28" },
     {
       id: "share",
       header: "Share",

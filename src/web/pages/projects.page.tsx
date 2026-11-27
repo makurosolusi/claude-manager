@@ -5,6 +5,7 @@ import { SESSION_STATUSES } from "../../server/dashboard.types.ts";
 import { CacheText, PROJECT_HIDEABLE, projectColumns } from "@/components/projects.columns.tsx";
 import { ClientTable, type ClientGrouping } from "@/components/client.table.tsx";
 import { CostCell } from "@/components/cost.cell.tsx";
+import { RANGE_LABEL } from "@/pages/sessions.page.tsx";
 import { PageHeader } from "@/components/page.header.tsx";
 import { RelativeTime } from "@/components/relative.time.tsx";
 import { useApi } from "@/lib/api.client.ts";
@@ -30,7 +31,7 @@ const grouping: ClientGrouping<ProjectRow> = {
   },
   totals: (rows) => {
     const t = projectTotals(rows);
-    return { sessions: fmtInt(t.sessions), requests: fmtInt(t.requests), tokens: fmtTokens(t.tokens), cache: <CacheText ratio={t.cache} />, cost: <CostCell usd={t.cost} heat="aggregate" />, last: <RelativeTime iso={t.last} /> };
+    return { sessions: fmtInt(t.sessions), requests: fmtInt(t.requests), tokens: fmtTokens(t.tokens), cache: <CacheText ratio={t.cache} />, cost: <CostCell usd={t.cost} />, last: <RelativeTime iso={t.last} /> };
   },
 };
 
@@ -38,7 +39,7 @@ const grouping: ClientGrouping<ProjectRow> = {
 export function ProjectsPage({ since, range, dataVersion, params }: PageProps) {
   const [retry, setRetry] = useState(0);
   const view = useTableView({ id: "projects", path: PROJECTS_PATH, params, spec: PROJECTS_SPEC, hideable: PROJECT_HIDEABLE });
-  const { data, error, loading } = useApi<Page<ProjectRow>>("/api/projects", { since, page: 1, pageSize: PROJECTS_FETCH_LIMIT }, dataVersion + retry);
+  const { data, error, loading, stale } = useApi<Page<ProjectRow>>("/api/projects", { since, range, page: 1, pageSize: PROJECTS_FETCH_LIMIT }, dataVersion + retry);
   const now = useNow(NOW_TICK_MS);
   const { state } = view;
 
@@ -60,7 +61,7 @@ export function ProjectsPage({ since, range, dataVersion, params }: PageProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="Projects" icon={NAV_ICON.projects} description="Usage per working directory. Click a project to see its sessions." />
+      <PageHeader title="Projects" icon={NAV_ICON.projects} description={RANGE_LABEL[range]} />
       <ClientTable
         label="Projects"
         noun="projects"
@@ -75,6 +76,7 @@ export function ProjectsPage({ since, range, dataVersion, params }: PageProps) {
         rowKey={(r) => r.project}
         rowHref={(r) => hashHref("/sessions", { project: r.project, range: range === DEFAULT_RANGE ? undefined : range })}
         loading={loading}
+        stale={stale}
         error={error && new Error(`Couldn't load projects. ${error.message}`)}
         onRetry={() => setRetry((n) => n + 1)}
       />
