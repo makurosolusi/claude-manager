@@ -36,6 +36,8 @@ export interface Config {
   roleModels: Record<string, string>;
   customRoles: Record<string, CustomRole>;
   disabledRoles: string[];
+  /** Keep user prompt text in the local DB (false = metadata only). */
+  storePromptText: boolean;
 }
 
 export const configPath = () => join(appDir(), "config.json");
@@ -47,6 +49,7 @@ export async function loadConfig(): Promise<Config> {
     roleModels: saved.roleModels ?? {},
     customRoles: saved.customRoles ?? {},
     disabledRoles: saved.disabledRoles ?? [],
+    storePromptText: saved.storePromptText ?? true,
   };
 }
 
