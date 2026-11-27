@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type { AgentNode } from "../src/server/dashboard.types.ts";
 import { getJson } from "../src/web/lib/api.client.ts";
 import { flattenAgentTree } from "../src/web/lib/agent.tree.ts";
-import { fmtTime, fmtTokens, fmtUsd, shortPath } from "../src/web/lib/format.ts";
+import { fmtTime, fmtTokens, fmtUsd } from "../src/web/lib/format.ts";
 import { hashHref, parseHash, withParams } from "../src/web/lib/hash.route.ts";
 import { META_POLL_FALLBACK_MS, trackVersion, withPollError } from "../src/web/lib/sync.meta.ts";
 import { sinceFor } from "../src/web/lib/range.ts";
@@ -24,8 +24,6 @@ test("formatters", () => {
   expect(fmtUsd(0)).toBe("$0.00");
   expect(fmtTime(null)).toBe("—");
   expect(fmtTime("not a date")).toBe("—");
-  expect(shortPath("/Users/me/code/app/")).toBe("app");
-  expect(shortPath(null)).toBe("—");
 });
 
 test("sinceFor converts ranges to ISO bounds", () => {
