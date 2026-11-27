@@ -1,9 +1,10 @@
 import { useMemo } from "react";
-import { COST_NOTE } from "@/components/cost.label.tsx";
+import { COST_NOTE } from "@/components/cost.cell.tsx";
 import { RangePicker } from "@/components/range.picker.tsx";
 import { SyncIndicator } from "@/components/sync.indicator.tsx";
 import { ThemeToggle } from "@/components/theme.toggle.tsx";
 import { cn } from "@/lib/cn.ts";
+import { NAV_ICON } from "@/lib/icon.map.ts";
 import { hashHref, useHashRoute, withParams } from "@/lib/hash.route.ts";
 import { SECOND_TICK_MS, useNow } from "@/lib/now.ts";
 import { DEFAULT_RANGE, parseRange, sinceFor, type Range } from "@/lib/range.ts";
@@ -22,11 +23,11 @@ const CONTAINER = "mx-auto w-full max-w-[1280px] px-4 sm:px-6";
 const LOCAL_NOTE = "Local only · 127.0.0.1";
 
 const NAV = [
-  { path: "/", label: "Overview", match: (p: string) => p === "/" },
-  { path: "/projects", label: "Projects", match: (p: string) => p.startsWith("/projects") },
-  { path: "/sessions", label: "Sessions", match: (p: string) => p.startsWith("/sessions") },
-  { path: "/roles", label: "Roles", match: (p: string) => p.startsWith("/roles") },
-  { path: "/live", label: "Live", match: (p: string) => p.startsWith("/live") },
+  { path: "/", label: "Overview", icon: NAV_ICON.overview, match: (p: string) => p === "/" },
+  { path: "/projects", label: "Projects", icon: NAV_ICON.projects, match: (p: string) => p.startsWith("/projects") },
+  { path: "/sessions", label: "Sessions", icon: NAV_ICON.sessions, match: (p: string) => p.startsWith("/sessions") },
+  { path: "/roles", label: "Roles", icon: NAV_ICON.roles, match: (p: string) => p.startsWith("/roles") },
+  { path: "/live", label: "Live", icon: NAV_ICON.live, match: (p: string) => p.startsWith("/live") },
 ];
 
 /** URL value for a range; the default is omitted so clean URLs stay clean. */
@@ -45,16 +46,17 @@ export function App() {
   const range = parseRange(params.get("range"));
   // dataVersion moves the window forward when new data lands, so "last 24h" stays current.
   const since = useMemo(() => sinceFor(range), [range, dataVersion]);
+  const { tiers, roles } = meta ?? {};
   const sessionId = path.match(/^\/sessions\/(.+)$/)?.[1];
   const timeless = !!sessionId || path.startsWith("/live");
 
   let page;
-  if (sessionId) page = <SessionDetailPage id={decodeURIComponent(sessionId)} />;
-  else if (path === "/projects") page = <ProjectsPage since={since} />;
-  else if (path === "/sessions") page = <SessionsPage since={since} range={range} dataVersion={dataVersion} params={params} />;
-  else if (path === "/roles") page = <RolesPage since={since} />;
-  else if (path === "/live") page = <LivePage />;
-  else if (path === "/") page = <OverviewPage since={since} range={range} dataVersion={dataVersion} tiers={meta?.tiers} />;
+  if (sessionId) page = <SessionDetailPage id={decodeURIComponent(sessionId)} since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
+  else if (path === "/projects") page = <ProjectsPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
+  else if (path === "/sessions") page = <SessionsPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
+  else if (path === "/roles") page = <RolesPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
+  else if (path === "/live") page = <LivePage range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
+  else if (path === "/") page = <OverviewPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
   else page = <p className="text-sm text-muted-foreground">Page not found.</p>;
 
   return (
@@ -76,10 +78,11 @@ export function App() {
                   href={hashHref(n.path, { range: rangeParam(range) })}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "rounded-md px-2.5 py-1 text-[13px] whitespace-nowrap outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
+                    "inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-[13px] whitespace-nowrap outline-hidden sm:min-h-0 sm:px-2.5 sm:py-1 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
                     active ? "bg-surface-hover text-foreground" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
+                  <n.icon aria-hidden className="hidden size-3.5 min-[360px]:block" />
                   {n.label}
                 </a>
               );
