@@ -3,10 +3,11 @@
 // Shape follows src/ingest/ingest.parser.ts and the fixtures in test/dashboard.test.ts.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { LONG_TITLE, MODEL, type ModelKey, PROJECTS, PROMPTS, ROLE_MODEL, TITLES, TOOLS } from "./seed.demo.data.ts";
 
 const SEED = 0x5eed;
 const DAYS = 30;
-const SESSIONS = 40;
+const SESSIONS = 124;
 /** Sessions in the 30 days before the window, so "vs previous period" deltas have data. */
 const PREV_SESSIONS = 8;
 const MIN = 60_000;
@@ -34,37 +35,7 @@ const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)]!;
 const hex = (n: number) => Array.from({ length: n }, () => Math.floor(rand() * 16).toString(16)).join("");
 const uuid = () => `${hex(8)}-${hex(4)}-4${hex(3)}-a${hex(3)}-${hex(12)}`;
 
-const MODEL = { opus: "claude-opus-4-7", sonnet: "claude-sonnet-4-5", haiku: "claude-haiku-4-5" } as const;
-type ModelKey = keyof typeof MODEL;
-/** Role → tier model, as in src/roles/roles.presets.ts (think=opus, work=sonnet, basic=haiku). */
-const ROLE_MODEL: Record<string, ModelKey> = { architect: "opus", researcher: "haiku", coder: "sonnet", reviewer: "sonnet", writer: "haiku" };
-
-// Two projects share the basename "web" on purpose: the UI must not rely on basename alone.
-const PROJECTS = [
-  { cwd: "/Users/dev/code/acme/api", branch: ["main", "feat/billing-v2", "fix/rate-limit"], weight: 5 },
-  { cwd: "/Users/dev/code/acme/web", branch: ["main", "feat/onboarding"], weight: 4 },
-  { cwd: "/Users/dev/code/side/web", branch: ["main"], weight: 2 },
-  { cwd: "/Users/dev/code/acme/infra-terraform", branch: ["main", "chore/upgrade-provider"], weight: 2 },
-  { cwd: "/Users/dev/code/oss/bun-sqlite-kit", branch: ["main"], weight: 2 },
-  { cwd: "/Users/dev/notes/research-llm-evals", branch: ["main"], weight: 1 },
-  { cwd: "/Users/dev/code/acme/mobile-app", branch: ["develop", "feat/push"], weight: 2 },
-  { cwd: "/Users/dev/code/claude-manager", branch: ["main", "feature/m5-ui-polish"], weight: 3 },
-];
-const TITLES = [
-  "Add Stripe webhook retry with idempotency keys", "Fix flaky login e2e test", "Refactor session store to Redis",
-  "Migrate Terraform AWS provider to v6", "Investigate p95 latency spike on /search", "Write onboarding checklist component",
-  "Add SQLite WAL checkpoint tuning", "Review PR #482 rate limiter", "Draft CHANGELOG for 2.3.0", "Implement push notification opt-in",
-  "Explain eval harness scoring drift", "Split dashboard repository into modules", "Add pagination to /api/projects",
-  "Debug CORS preflight on staging", "Port settings page to React 19", "Tighten CSP headers",
-];
-const PROMPTS = [
-  "Look at the failing test and find the root cause before changing anything.", "Implement this and add a test.",
-  "Can you review the diff for correctness bugs?", "Summarize what changed since yesterday.",
-  "Plan the migration: files to touch, risks, order of work.", "Make the error message include the session id.",
-  "Run the test suite and fix what breaks.", "Rename the module and update every import.",
-];
-
-interface Spec { sid: string; project: (typeof PROJECTS)[number]; start: number; model: ModelKey; turns: number; titled: boolean; manager: boolean; ctxStart: number; ctxGrowth: number }
+interface Spec { sid: string; project: (typeof PROJECTS)[number]; start: number; model: ModelKey; turns: number; titled: boolean; title?: string; manager: boolean; ctxStart: number; ctxGrowth: number }
 
 let seq = 0;
 const lines = new Map<string, string[]>();
@@ -85,9 +56,20 @@ function usage(context: number, fresh = false) {
   const input = int(3, 40);
   return { input_tokens: input, cache_read_input_tokens: Math.max(0, context - write - input), cache_creation_input_tokens: write, output_tokens: int(150, 2800) };
 }
+/** Final replies: mostly end_turn, with a tail of max_tokens / stop_sequence / refusal. */
+function endReason(): string {
+  const r = rand();
+  return r < 0.05 ? "max_tokens" : r < 0.09 ? "stop_sequence" : r < 0.1 ? "refusal" : "end_turn";
+}
+/** Tool-call block: a random non-Agent tool 70% of the time (else a plain reply). */
+const toolBlock = () => {
+  if (rand() > 0.7) return [];
+  const t = pick(TOOLS);
+  return [{ type: "tool_use", id: `toolu_${hex(20)}`, name: t.name, input: t.input }];
+};
 const assistant = (model: string, u: Record<string, number>, content: unknown[] = []) => {
   const id = `msg_${hex(20)}`;
-  return { type: "assistant", requestId: `req_${hex(16)}`, message: { id, model, usage: u, content, stop_reason: content.length ? "tool_use" : "end_turn" } };
+  return { type: "assistant", requestId: `req_${hex(16)}`, message: { id, model, usage: u, content, stop_reason: content.length ? "tool_use" : endReason() } };
 };
 const prompt = (text: string) => ({ type: "user", promptSource: "typed", message: { role: "user", content: text } });
 
@@ -105,7 +87,7 @@ function subagent(s: Spec, ts: number, branch: string, role: string, toolUseId: 
     t += int(8, 60) * 1000;
     const nest = role === "coder" && depth === 1 && i === steps - 1 && rand() < 0.5;
     const tu = `toolu_${hex(20)}`;
-    emit(path, { ...base(s, t, branch), ...sc, ...assistant(model, usage(ctx, i === 0), nest ? [{ type: "tool_use", id: tu, name: "Agent", input: { subagent_type: "reviewer" } }] : []) });
+    emit(path, { ...base(s, t, branch), ...sc, ...assistant(model, usage(ctx, i === 0), nest ? [{ type: "tool_use", id: tu, name: "Agent", input: { subagent_type: "reviewer" } }] : toolBlock()) });
     if (nest) t += subagent(s, t + 1000, branch, "reviewer", tu, 2);
     ctx += int(2_000, 9_000);
   }
@@ -127,14 +109,14 @@ function session(s: Spec): number {
       t += int(5, 90) * 1000;
       const spawnRole = s.manager && c === 0 && rand() < 0.6 ? pick(Object.keys(ROLE_MODEL)) : null;
       const tu = `toolu_${hex(20)}`;
-      const content = spawnRole ? [{ type: "tool_use", id: tu, name: "Agent", input: { subagent_type: spawnRole } }] : [];
+      const content = spawnRole ? [{ type: "tool_use", id: tu, name: "Agent", input: { subagent_type: spawnRole } }] : toolBlock();
       emit(path, { ...base(s, t, branch), ...assistant(MODEL[s.model], usage(ctx, turn === 0 && c === 0), content) });
       if (spawnRole) t += subagent(s, t + 1000, branch, spawnRole, tu, 1);
       ctx += s.ctxGrowth;
     }
     t += int(1, 12) * MIN;
   }
-  if (s.titled) emit(path, { type: "ai-title", sessionId: s.sid, aiTitle: pick(TITLES) });
+  if (s.titled) emit(path, { type: "ai-title", sessionId: s.sid, aiTitle: s.title ?? pick(TITLES) });
   return t;
 }
 
@@ -143,7 +125,7 @@ const now = Date.now();
 function spec(start: number, over: Partial<Spec> = {}): Spec {
   const model: ModelKey = rand() < 0.45 ? "opus" : rand() < 0.75 ? "sonnet" : "haiku";
   return {
-    sid: uuid(), project: pick(weighted), start, model, turns: int(2, 9), titled: rand() < 0.7, manager: rand() < 0.3,
+    sid: uuid(), project: pick(weighted), start, model, turns: int(2, 9), titled: rand() < 0.85, manager: rand() < 0.35,
     ctxStart: int(14_000, 28_000), ctxGrowth: int(1_500, 6_000), ...over,
   };
 }
@@ -151,15 +133,18 @@ function spec(start: number, over: Partial<Spec> = {}): Spec {
 const specs: Spec[] = [];
 for (let i = 0; i < SESSIONS; i++) specs.push(spec(now - DAYS * DAY + Math.floor(rand() * (DAYS - 1) * DAY)));
 for (let i = 0; i < PREV_SESSIONS; i++) specs.push(spec(now - 2 * DAYS * DAY + Math.floor(rand() * (DAYS - 1) * DAY)));
+Object.assign(specs[0]!, { titled: true, title: LONG_TITLE });
+for (const s of specs.slice(1, 6)) s.titled = false; // a few untitled sessions
 for (const s of specs) {
   // Keep 200k-window models under their window so the context estimate stays at 200k (see context.window.ts).
   if (s.model !== "opus") s.ctxGrowth = Math.min(s.ctxGrowth, Math.floor((WINDOW_200K * 0.8 - s.ctxStart) / (s.turns * 4)));
   session(s);
 }
 
-// Two live sessions (last request minutes ago): one nearly out of context (~92% of 200k), one comfortable.
+// Live (<5 min since last request), idle (5-15 min) and context-level cases. Ages are relative to `now` and kept
+// well inside each band so the status still holds a few minutes after seeding.
 const LIVE_STEP_MIN = 10;
-function live(over: Partial<Spec>, lastAgoMin: number, finalContext: number) {
+function live(over: Partial<Spec>, lastAgoMin: number, finalContext: number, titled = true) {
   const s = spec(0, over);
   const path = fileFor(s.project.cwd, s.sid);
   const branch = s.project.branch[0]!;
@@ -167,12 +152,21 @@ function live(over: Partial<Spec>, lastAgoMin: number, finalContext: number) {
   fractions.forEach((f, i) => {
     const reply = now - (lastAgoMin + (fractions.length - 1 - i) * LIVE_STEP_MIN) * MIN; // last reply = lastAgoMin ago
     emit(path, { ...base(s, reply - 30_000, branch), ...prompt(pick(PROMPTS)) });
-    emit(path, { ...base(s, reply, branch), ...assistant(MODEL[s.model], usage(Math.round(finalContext * f), i === 0)) });
+    emit(path, { ...base(s, reply, branch), ...assistant(MODEL[s.model], usage(Math.round(finalContext * f), i === 0), toolBlock()) });
   });
-  emit(path, { type: "ai-title", sessionId: s.sid, aiTitle: pick(TITLES) });
+  if (titled) emit(path, { type: "ai-title", sessionId: s.sid, aiTitle: pick(TITLES) });
 }
-live({ model: "sonnet", project: PROJECTS[0] }, 2, Math.round(WINDOW_200K * 0.92));
-live({ model: "haiku", project: PROJECTS[7] }, 6, 64_000);
+const P = (i: number) => PROJECTS[i]!;
+// Live: danger (92%), warn (78%), ok (32%) on 200k-window models.
+live({ model: "sonnet", project: P(0) }, 0.5, Math.round(WINDOW_200K * 0.92));
+live({ model: "haiku", project: P(7) }, 1.5, Math.round(WINDOW_200K * 0.78));
+live({ model: "sonnet", project: P(1) }, 3, 64_000);
+live({ model: "opus", project: P(4) }, 4, 180_000, false); // 1M window: still comfortable
+// Idle: 5-15 min.
+live({ model: "sonnet", project: P(2) }, 7, Math.round(WINDOW_200K * 0.9));
+live({ model: "haiku", project: P(6) }, 10, Math.round(WINDOW_200K * 0.72));
+live({ model: "opus", project: P(3) }, 12, 120_000);
+const LIVE_COUNT = 7;
 
 for (const [path, ls] of lines) {
   mkdirSync(dirname(path), { recursive: true });
@@ -180,4 +174,4 @@ for (const [path, ls] of lines) {
 }
 for (const [path, meta] of metas) writeFileSync(path, JSON.stringify(meta));
 const agents = metas.size;
-console.log(`seed.demo: ${specs.length + 2} sessions, ${agents} subagents, ${PROJECTS.length} projects → ${projectsDir}`);
+console.log(`seed.demo: ${specs.length + LIVE_COUNT} sessions, ${agents} subagents, ${PROJECTS.length} projects → ${projectsDir}`);
