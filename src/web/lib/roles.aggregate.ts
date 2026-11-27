@@ -1,0 +1,68 @@
+import type { RoleRow, Usage } from "../../server/dashboard.types.ts";
+import { NEUTRAL_ROLES, type RoleMeta } from "./color.tokens.ts";
+import { TIER_ORDER, tierOf, type Tier, type TierKey, type Tiers } from "./model.tier.ts";
+import { groupBy } from "./table.client.ts";
+
+/** Where a role comes from: shipped preset, user-defined, or the built-in main/subagent. */
+export type RoleKind = "preset" | "custom" | "built-in";
+/** A role × model row with the tier its model was billed under. */
+export interface TieredRow extends RoleRow { tier: TierKey }
+/** Usage summed over one key (a model, a role or a tier), its tier, and its share of the overall cost (0..1). */
+export interface AggRow extends Usage { key: string; tier: TierKey; count: number; share: number }
+
+const USAGE_KEYS = ["requests", "input", "output", "cache_read", "cache_write", "cost_usd", "unpriced"] as const;
+
+/** Adds up the usage fields of any rows. */
+export function sumUsage(rows: readonly Usage[]): Usage {
+  const out: Usage = { requests: 0, input: 0, output: 0, cache_read: 0, cache_write: 0, cost_usd: 0, unpriced: 0 };
+  for (const r of rows) for (const k of USAGE_KEYS) out[k] += r[k];
+  return out;
+}
+
+/** Stamps each row with `tierOf(model, tiers)` so tier totals match Overview "Cost by tier". */
+export const withTier = (rows: readonly RoleRow[], tiers?: Partial<Tiers>): TieredRow[] =>
+  rows.map((r) => ({ ...r, tier: tierOf(r.model, tiers) }));
+
+/** Kind of a role: main/subagent are built-in; the roster says preset vs custom; unknown names count as custom. */
+export function roleKind(role: string, roles?: readonly RoleMeta[]): RoleKind {
+  if (NEUTRAL_ROLES.includes(role)) return "built-in";
+  return roles?.find((r) => r.name === role)?.source ?? "custom";
+}
+
+/** The role's configured tier when it differs from the tier this row was billed under; undefined when equal or unknown. */
+export function configuredTierMismatch(role: string, rowTier: TierKey, roles?: readonly RoleMeta[]): Tier | undefined {
+  const configured = roles?.find((r) => r.name === role)?.tier;
+  return configured && configured !== rowTier ? configured : undefined;
+}
+
+const share = (usd: number, total: number) => (total > 0 ? usd / total : 0);
+
+/** Groups rows by key and sums them; `tierFor` picks each group's tier; sorted by cost desc; shares are of `total` (default: all rows). */
+export function aggregateBy(rows: readonly TieredRow[], key: (r: TieredRow) => string, tierFor: (key: string, rows: TieredRow[]) => TierKey, total = sumUsage(rows).cost_usd): AggRow[] {
+  return groupBy([...rows], key)
+    .map(({ key: k, rows: rs }) => {
+      const u = sumUsage(rs);
+      return { key: k, tier: tierFor(k, rs), count: rs.length, share: share(u.cost_usd, total), ...u };
+    })
+    .sort((a, b) => b.cost_usd - a.cost_usd);
+}
+
+/** One row per model; a model has exactly one tier. */
+export const byModel = (rows: readonly TieredRow[]) => aggregateBy(rows, (r) => r.model, (_, rs) => rs[0]!.tier);
+
+/** One row per role; its tier is the configured one, else the tier of its costliest model row. */
+export function byRole(rows: readonly TieredRow[], roles?: readonly RoleMeta[]): AggRow[] {
+  const top = (rs: TieredRow[]) => rs.reduce((a, b) => (b.cost_usd > a.cost_usd ? b : a)).tier;
+  return aggregateBy(rows, (r) => r.role, (k, rs) => roles?.find((r) => r.name === k)?.tier ?? top(rs));
+}
+
+/** Per-tier subtotals in TIER_ORDER (empty tiers skipped); their costs add up to the overall total. */
+export function tierSubtotals(rows: readonly TieredRow[], total = sumUsage(rows).cost_usd): AggRow[] {
+  const by = new Map(groupBy([...rows], (r) => r.tier).map((g) => [g.key, g.rows]));
+  return TIER_ORDER.flatMap((t) => {
+    const rs = by.get(t);
+    if (!rs) return [];
+    const u = sumUsage(rs);
+    return [{ key: t, tier: t, count: rs.length, share: share(u.cost_usd, total), ...u }];
+  });
+}
