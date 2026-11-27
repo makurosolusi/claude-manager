@@ -7,8 +7,7 @@ import { FAMILY_COLOR, FAMILY_LABEL, modelFamily, type ModelFamily } from "@/lib
 
 const DAY_MS = 86_400_000;
 const X_TICK_GAP_PX = 40;
-/** Series follow FAMILIES order, bottom to top; a family only becomes a series when it has cost in range. */
-/** A drawn series: one model family (key = family), its fill colour. */
+/** A drawn series: one model family (key = family), its fill colour; series follow FAMILIES order, bottom to top. */
 export interface Series { key: ModelFamily; color: string }
 /** One day bucket: `day` (YYYY-MM-DD, UTC) plus cost per family key. */
 export type DayPoint = { day: string } & Record<string, number | string>;
