@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import * as detail from "../db/session.detail.repository.ts";
 import { sessionAgents, sessionById } from "../db/dashboard.repository.ts";
 import { contextWindow } from "./context.window.ts";
-import { HTTP, HttpError, pageQuery } from "./dashboard.params.ts";
+import { HTTP, HttpError, MAX_QUERY_CHARS, pageQuery } from "./dashboard.params.ts";
 import { FAMILIES, REQUEST_GROUPS, type ApiError } from "./dashboard.types.ts";
 import {
   REQUEST_SORTS, type RequestDimension, type RequestFilter, type RequestGroupBy, type RequestGroups, type RequestQuery,
@@ -21,7 +21,7 @@ const oneOf = <T extends string>(name: string, values: readonly T[], raw: string
   return raw as T;
 };
 
-/** Repeatable filter params, each list capped by count and length; family values must be known families. */
+/** Repeatable filter params (each list capped by count and length; family values must be known families) plus the `q` search. */
 function filters(url: URL): RequestFilter {
   const f: RequestFilter = {};
   for (const name of ["family", "agent", "stop", "tool"] as const satisfies RequestDimension[]) {
@@ -34,6 +34,9 @@ function filters(url: URL): RequestFilter {
     }
     f[name] = values;
   }
+  const q = url.searchParams.get("q")?.trim();
+  if (q && q.length > MAX_QUERY_CHARS) throw bad(`invalid q: use at most ${MAX_QUERY_CHARS} characters`);
+  if (q) f.q = q;
   return f;
 }
 

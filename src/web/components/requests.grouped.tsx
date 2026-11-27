@@ -43,8 +43,8 @@ export function GroupedRequests({ sessionId, state, go, columns, hidden, density
   const dim = state.group as RequestDim;
   const [retry, setRetry] = useState(0);
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
-  const api = useApi<RequestGroups>(requestsPath(sessionId, true), { ...state.filters, by: dim }, retry + tick);
-  const urlOf = (key: string) => withQuery(requestsPath(sessionId), { ...state.filters, [dim]: [key], sort: state.sort, dir: state.dir, page: 1, pageSize: GROUP_PREVIEW_ROWS });
+  const api = useApi<RequestGroups>(requestsPath(sessionId, true), { ...state.filters, q: state.q, by: dim }, retry + tick);
+  const urlOf = (key: string) => withQuery(requestsPath(sessionId), { ...state.filters, q: state.q, [dim]: [key], sort: state.sort, dir: state.dir, page: 1, pageSize: GROUP_PREVIEW_ROWS });
   const previews = useApiMany<Page<RequestRow>>([...open].map(urlOf), retry + tick);
   const toggle = (key: string) => setOpen((o) => { const n = new Set(o); if (!n.delete(key)) n.add(key); return n; });
   const showAll = (key: string) => go({ group: "none", filters: { ...state.filters, [dim]: [key] } });

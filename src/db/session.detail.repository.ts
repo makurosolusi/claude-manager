@@ -32,6 +32,10 @@ const DIM_WHERE: Record<RequestDimension, string> = {
   tool: `($tool IS NULL OR EXISTS (SELECT 1 FROM tool_calls tc WHERE tc.message_id = r.message_id
     AND tc.name IN (SELECT value FROM json_each($tool))))`,
 };
+// Free-text search: case-insensitive substring over model, agent/role key, stop reason or any tool name of the request.
+const Q_WHERE = `($q IS NULL OR instr(lower(r.model), lower($q)) > 0 OR instr(lower(${DIM_SQL.agent}), lower($q)) > 0
+  OR instr(lower(COALESCE(r.stop_reason, '')), lower($q)) > 0
+  OR EXISTS (SELECT 1 FROM tool_calls tq WHERE tq.message_id = r.message_id AND instr(lower(tq.name), lower($q)) > 0))`;
 const DIMENSIONS = Object.keys(DIM_WHERE) as RequestDimension[];
 const GROUP_SQL: Record<RequestGroupBy, string> = { agent: DIM_SQL.agent, family: DIM_SQL.family, stop: DIM_SQL.stop };
 // Unqualified names resolve to the page subquery's output columns, so one map serves inner and outer ORDER BY.
@@ -39,11 +43,12 @@ const SORT_SQL: Record<RequestSort, string> = { ts: "ts", cost: "cost_usd", toke
 
 /** WHERE for one session's requests with every filter except `exclude` (faceting skips a dimension's own filter). */
 const where = (exclude?: RequestDimension) =>
-  ["r.session_id = $id", ...DIMENSIONS.filter((d) => d !== exclude).map((d) => DIM_WHERE[d])].join(" AND ");
+  ["r.session_id = $id", Q_WHERE, ...DIMENSIONS.filter((d) => d !== exclude).map((d) => DIM_WHERE[d])].join(" AND ");
 
 const listParam = (v: string[] | undefined) => (v?.length ? JSON.stringify(v) : null);
 const bindings = (id: string, f: RequestFilter, exclude?: RequestDimension): Params => ({
   id,
+  q: f.q || null,
   ...Object.fromEntries(DIMENSIONS.filter((d) => d !== exclude).map((d) => [d, listParam(f[d])])),
 });
 

@@ -22,9 +22,9 @@ export interface RequestRow extends Omit<Usage, "requests" | "unpriced"> {
   context: number;
 }
 
-/** Repeatable filters; an undefined list means "no filter on that dimension". */
-export interface RequestFilter { family?: string[]; agent?: string[]; stop?: string[]; tool?: string[] }
-export type RequestDimension = keyof RequestFilter;
+/** Repeatable filters (an undefined list means "no filter on that dimension") plus the free-text `q` search. */
+export interface RequestFilter { family?: string[]; agent?: string[]; stop?: string[]; tool?: string[]; q?: string }
+export type RequestDimension = Exclude<keyof RequestFilter, "q">;
 export interface RequestQuery { sort: RequestSort; dir: "asc" | "desc" }
 export interface RequestFacets { family: FacetCount[]; agent: FacetCount[]; stop: FacetCount[]; tool: FacetCount[] }
 export type RequestsResponse = Page<RequestRow> & { facets?: RequestFacets };

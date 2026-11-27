@@ -31,11 +31,11 @@ export function RequestsTable({ sessionId, roles, tick = 0 }: { sessionId: strin
   // Grouped mode still needs facet counts and the total: ask the flat endpoint for a single row.
   const flat = useApi<RequestsResponse>(
     requestsPath(sessionId),
-    { ...state.filters, sort: state.sort, dir: state.dir, page: grouped ? 1 : state.page, pageSize: grouped ? 1 : state.size, facets: 1 },
+    { ...state.filters, q: state.q, sort: state.sort, dir: state.dir, page: grouped ? 1 : state.page, pageSize: grouped ? 1 : state.size, facets: 1 },
     retry + tick,
   );
-  const filtered = Object.values(state.filters).some((v) => v.length > 0);
-  const reset = () => go({ filters: {}, group: NO_GROUP });
+  const filtered = state.q !== "" || Object.values(state.filters).some((v) => v.length > 0);
+  const reset = () => go({ q: "", filters: {}, group: NO_GROUP });
   const empty = filtered ? (
     <span className="inline-flex flex-wrap items-center justify-center gap-2">
       No requests match these filters.
@@ -47,6 +47,7 @@ export function RequestsTable({ sessionId, roles, tick = 0 }: { sessionId: strin
   return (
     <div className="flex flex-col gap-3">
       <TableToolbar
+        search={{ value: state.q, onChange: (q) => go({ q }), placeholder: "Search model, agent, tool or stop reason…", label: "Search requests" }}
         facets={requestFacets(flat.data?.facets, state, (filters) => go({ filters }))}
         group={{ value: state.group, options: GROUP_OPTIONS, onChange: (group) => go({ group }) }}
         view={{
@@ -59,7 +60,7 @@ export function RequestsTable({ sessionId, roles, tick = 0 }: { sessionId: strin
         summary={total === undefined ? "Loading…" : `${fmtInt(total)} ${total === 1 ? "request" : "requests"}`}
       />
       {grouped ? (
-        <GroupedRequests key={`${state.group}|${state.sort}|${state.dir}|${JSON.stringify(state.filters)}`} sessionId={sessionId} state={state} go={go} columns={columns} hidden={hidden} density={density} empty={empty} roles={roles} tick={tick} />
+        <GroupedRequests key={`${state.group}|${state.sort}|${state.dir}|${state.q}|${JSON.stringify(state.filters)}`} sessionId={sessionId} state={state} go={go} columns={columns} hidden={hidden} density={density} empty={empty} roles={roles} tick={tick} />
       ) : (
         <>
           <DataTable<RequestRow>

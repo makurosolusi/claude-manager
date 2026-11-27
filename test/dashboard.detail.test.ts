@@ -113,6 +113,31 @@ describe("session detail", () => {
     expect(ids(await list("family=opus&tool=Read&stop=end_turn"))).toEqual(["m1"]);
   });
 
+  test("q matches model, agent key, stop reason or tool name, case-insensitively", async () => {
+    expect(ids(await list("q=HAIKU&sort=ts&dir=asc"))).toEqual(["m4"]);
+    expect(ids(await list("q=coder&sort=ts&dir=asc"))).toEqual(["m3", "m4"]);
+    expect(ids(await list("q=tool_use"))).toEqual(["m2"]);
+    const t = await list("q=read&sort=ts&dir=asc"); // tool Read (m1 has two tools: still one row)
+    expect(ids(t)).toEqual(["m1", "m4"]);
+    expect(t.total).toBe(2);
+    expect(ids(await list("q=nothing-matches"))).toEqual([]);
+  });
+
+  test("q combines with filters, facets and groups", async () => {
+    expect(ids(await list("q=bash&family=opus&sort=ts&dir=asc"))).toEqual(["m1", "m2"]);
+    expect(ids(await list("q=bash&stop=tool_use"))).toEqual(["m2"]);
+    const f = (await list("facets=1&q=bash")).facets!;
+    expect(f.family).toEqual([{ value: "opus", count: 2 }]);
+    const g = await get<RequestGroups>(`/api/sessions/${SID}/requests/groups?by=family&q=bash`);
+    expect(g.groups.map((x) => [x.key, x.count])).toEqual([["opus", 2]]);
+  });
+
+  test("q longer than the cap is a 400", async () => {
+    const res = call(`/api/sessions/${SID}/requests?q=${"x".repeat(201)}`);
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain("invalid q");
+  });
+
   test("facet counts ignore their own filter but honour the others", async () => {
     const all = (await list("facets=1")).facets!;
     expect(all.family).toEqual([{ value: "opus", count: 3 }, { value: "haiku", count: 1 }, { value: "other", count: 1 }, { value: "sonnet", count: 1 }]);

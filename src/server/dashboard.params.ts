@@ -9,7 +9,8 @@ import { bad, enumParam, HTTP, HttpError, listParam } from "./filter.params.ts";
 const DEFAULT_SINCE = "30d";
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
-const MAX_QUERY_CHARS = 200;
+/** Max length of a `q` search param. */
+export const MAX_QUERY_CHARS = 200;
 const SORT_DIRS = ["asc", "desc"] as const;
 
 export { bad, HTTP, HttpError };
