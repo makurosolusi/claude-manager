@@ -1,5 +1,4 @@
-// TODO(release): set real owner/repo before first release (pending user)
-export const DEFAULT_RELEASE_REPO = "OWNER/claude-manager";
+export const DEFAULT_RELEASE_REPO = "makurosolusi/claude-manager";
 
 /** GitHub "owner/repo" that publishes releases; CLAUDE_MANAGER_REPO overrides. */
 export const RELEASE_REPO = process.env.CLAUDE_MANAGER_REPO || DEFAULT_RELEASE_REPO;
