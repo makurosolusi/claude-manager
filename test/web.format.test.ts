@@ -94,7 +94,7 @@ test("nextSort: new column desc, same column toggles", () => {
 });
 
 test("syncState: connecting, ok, stalled, failed", () => {
-  const meta = { synced_at: ago(10 * S), changed_at: null, error: null, interval_ms: 5 * S };
+  const meta = { synced_at: ago(10 * S), changed_at: null, error: null, warnings: [], interval_ms: 5 * S };
   expect(syncState(undefined, NOW)).toBe("connecting");
   expect(syncState(meta, NOW)).toBe("ok");
   expect(syncState({ ...meta, synced_at: ago(16 * S) }, NOW)).toBe("stalled");

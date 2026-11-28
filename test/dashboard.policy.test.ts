@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { run } from "../src/cli.ts";
 import { configPath } from "../src/config/config.store.ts";
 import { openDb } from "../src/db/db.schema.ts";
-import { policyAuditPath } from "../src/ingest/policy.audit.ingest.ts";
+import { ingestPolicyAudit, policyAuditPath } from "../src/ingest/policy.audit.ingest.ts";
 import { policySnapshotPath } from "../src/policy/policy.paths.ts";
 import { OWNER_ASK_RULES, SECRET_DENY_RULES } from "../src/policy/policy.presets.ts";
 import { handleRequest } from "../src/server/dashboard.api.ts";
@@ -295,13 +295,22 @@ describe("GET /api/policy/audit", () => {
   const line = (i: number, role: string, decision: string, tool = "Bash") =>
     JSON.stringify({ ts: new Date(Date.now() - i * 60_000).toISOString(), session_id: `s${i}`, agent_id: "a1", role, tool, cap: "shell", decision, rule: `role:${role}.shell`, mode: "default" });
 
-  beforeEach(() => {
+  // The API no longer ingests on demand (the dashboard sync loop does), so ingest here as a sync tick would.
+  beforeEach(async () => {
     mkdirSync(ctx.app, { recursive: true });
     const lines = [...Array.from({ length: 5 }, (_, i) => line(i, "coder", "allow")), line(5, "coder", "deny", "Edit"), line(6, "reviewer", "ask")];
     appendFileSync(policyAuditPath(), `${lines.join("\n")}\n`);
+    await ingestPolicyAudit(db);
   });
 
-  test("ingests on read, paginates newest first, facets count every row, never returns agent_id", async () => {
+  test("does not ingest on read: lines appended after the last sync wait for the next tick", async () => {
+    appendFileSync(policyAuditPath(), `${line(9, "coder", "allow")}\n`);
+    expect((await get<AuditResponse>("/api/policy/audit")).body.total).toBe(7);
+    await ingestPolicyAudit(db);
+    expect((await get<AuditResponse>("/api/policy/audit")).body.total).toBe(8);
+  });
+
+  test("paginates newest first, facets count every row, never returns agent_id", async () => {
     const { res, body } = await get<AuditResponse>("/api/policy/audit?size=3&page=2", RO);
     expect(res.status).toBe(200);
     expect(body.total).toBe(7);
@@ -309,6 +318,8 @@ describe("GET /api/policy/audit", () => {
     expect(body.size).toBe(3);
     expect(body.items.map((r) => r.session_id)).toEqual(["s3", "s4", "s5"]);
     expect(body.items[0]).not.toHaveProperty("agent_id");
+    expect(body.items.every((r) => /^[0-9a-f]+$/.test(r.id))).toBe(true);
+    expect(new Set(body.items.map((r) => r.id)).size).toBe(3);
     expect(body.facets.role).toEqual([{ value: "coder", count: 6 }, { value: "reviewer", count: 1 }]);
     expect(body.facets.decision).toContainEqual({ value: "deny", count: 1 });
   });
@@ -319,6 +330,10 @@ describe("GET /api/policy/audit", () => {
     expect(coderDeny.size).toBe(50);
     expect((await get<AuditResponse>("/api/policy/audit?tool=Bash")).body.total).toBe(6);
     expect((await get<AuditResponse>("/api/policy/audit?q=reviewer")).body.total).toBe(1);
+    const cap = (await get<AuditResponse>("/api/policy/audit?cap=shell&cap=edit")).body;
+    expect(cap.total).toBe(7);
+    expect((await get<AuditResponse>("/api/policy/audit?cap=edit")).body.total).toBe(0);
+    expect(cap.facets.capability).toEqual([{ value: "shell", count: 7 }]);
     expect((await get()).body.audit_summary).toContainEqual({ role: "coder", decision: "allow", count: 5 });
   });
 

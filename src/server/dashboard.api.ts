@@ -28,7 +28,7 @@ const MINUTE_MS = 60_000;
 /** Supplies /api/meta; without one the endpoint reports "never synced" and the default tier models. */
 export type MetaProvider = () => DashboardMeta;
 
-const NO_META: MetaProvider = () => ({ synced_at: null, changed_at: null, error: null, interval_ms: SYNC_INTERVAL_MS, tiers: DEFAULT_TIER_MODELS, roles: PRESET_ROLES.map((r) => ({ name: r.name, tier: r.tier, source: r.source })) });
+const NO_META: MetaProvider = () => ({ synced_at: null, changed_at: null, error: null, warnings: [], interval_ms: SYNC_INTERVAL_MS, tiers: DEFAULT_TIER_MODELS, roles: PRESET_ROLES.map((r) => ({ name: r.name, tier: r.tier, source: r.source })) });
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const fail = (status: number, error: string) => json({ error } satisfies ApiError, status);

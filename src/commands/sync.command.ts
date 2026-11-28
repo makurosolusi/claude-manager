@@ -9,6 +9,7 @@ export function formatSync(r: SyncResult): string {
   ];
   if (r.badLines) lines.push(`warning: ${r.badLines} unparseable lines skipped`);
   if (r.unpriced.length) lines.push(`warning: no rates for ${r.unpriced.join(", ")} (cost shown as 0); add them to ${pricingPath()}`);
+  for (const w of r.warnings) lines.push(`warning: ${w}`);
   return lines.join("\n");
 }
 

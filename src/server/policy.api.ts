@@ -6,7 +6,7 @@ import { parseSince } from "../commands/stats.command.ts";
 import { StaleConfigError } from "../config/config.apply.ts";
 import { type Config, loadConfig } from "../config/config.store.ts";
 import { auditPage, auditSummary } from "../db/policy.repository.ts";
-import { ingestPolicyAudit, POLICY_AUDIT_DAYS } from "../ingest/policy.audit.ingest.ts";
+import { POLICY_AUDIT_DAYS } from "../ingest/policy.audit.ingest.ts";
 import { loadManifest, type Manifest } from "../install/install.manifest.ts";
 import { parseSettings, readText } from "../install/install.target.ts";
 import { currentEtag } from "../policy/policy.apply.ts";
@@ -63,10 +63,9 @@ async function status(config: Config, manifest: Manifest): Promise<{ status: Pol
 
 const since30d = () => parseSince(`${POLICY_AUDIT_DAYS}d`);
 
-/** Full GET /api/policy body from fresh config, manifest and audit (ingested first, so counts are current). */
+/** Full GET /api/policy body from fresh config and manifest; audit counts are whatever the dashboard sync loop last ingested (no ingest here: it would share a connection with sync's open transaction). */
 export async function policyResponse(db: Database): Promise<PolicyResponse> {
   const [config, manifest] = await Promise.all([loadConfig(), loadManifest()]);
-  await ingestPolicyAudit(db);
   const rec = manifest.policy;
   const hook = (rec?.hook?.group as HookGroup | undefined)?.hooks?.[0];
   return {
@@ -88,7 +87,7 @@ function size(url: URL): number {
   return +raw;
 }
 
-async function audit(db: Database, url: URL): Promise<AuditResponse> {
+function audit(db: Database, url: URL): AuditResponse {
   const page = url.searchParams.get("page") ?? "1";
   if (!/^\d+$/.test(page) || +page < 1) throw bad(`invalid page "${page}": use an integer from 1`);
   const q = url.searchParams.get("q")?.trim() || undefined;
@@ -99,9 +98,8 @@ async function audit(db: Database, url: URL): Promise<AuditResponse> {
   } catch (err) {
     throw bad(reason(err).replace("--since", "since"));
   }
-  const filter = { q, since, roles: listParam(url, "role"), decisions: listParam(url, "decision"), tools: listParam(url, "tool") };
+  const filter = { q, since, roles: listParam(url, "role"), decisions: listParam(url, "decision"), tools: listParam(url, "tool"), caps: listParam(url, "cap") };
   const pq = { page: +page, pageSize: size(url) };
-  await ingestPolicyAudit(db);
   const { items, total, facets } = auditPage(db, filter, pq);
   return { items: items.map(({ agent_id: _a, ...row }) => row), total, page: pq.page, size: pq.pageSize, facets };
 }
@@ -111,7 +109,7 @@ export async function routePolicyRead(db: Database, url: URL): Promise<Response>
   const path = trim(url.pathname);
   try {
     if (path === "/api/policy") return Response.json(await policyResponse(db));
-    if (path === "/api/policy/audit") return Response.json(await audit(db, url));
+    if (path === "/api/policy/audit") return Response.json(audit(db, url));
     return fail(STATUS.notFound, `unknown endpoint ${path}`);
   } catch (err) {
     return errorResponse(err, `GET ${path}`);

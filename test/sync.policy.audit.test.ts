@@ -2,6 +2,9 @@ import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { openDb } from "../src/db/db.schema.ts";
+import { formatSync } from "../src/commands/sync.command.ts";
+import { recordSync } from "../src/commands/dashboard.command.ts";
+import type { SyncMeta } from "../src/server/dashboard.types.ts";
 import { sync } from "../src/ingest/ingest.service.ts";
 import { policyAuditPath } from "../src/ingest/policy.audit.ingest.ts";
 import { useTempHome } from "./test.home.ts";
@@ -36,4 +39,18 @@ test("a broken audit file doesn't fail sync: the cause is a warning and transcri
   expect(r.warnings).toHaveLength(1);
   expect(r.warnings[0]).toStartWith("policy audit not ingested: policy audit ingest ");
   expect(r.files).toBe(0);
+});
+
+test("sync warnings are printed by formatSync and surfaced in dashboard meta, then cleared on a clean tick", async () => {
+  mkdirSync(policyAuditPath());
+  const r = await sync(db);
+  expect(formatSync(r)).toContain(`warning: ${r.warnings[0]}`);
+  const meta: SyncMeta = { synced_at: null, changed_at: null, error: null, warnings: [], interval_ms: 1 };
+  recordSync(meta, r);
+  expect(meta.warnings).toEqual(r.warnings);
+  recordSync(meta, { ...r, warnings: [] });
+  expect(meta.warnings).toEqual([]);
+  expect(meta.changed_at).toBeNull();
+  recordSync(meta, { ...r, policyAudit: { added: 2, badLines: 0 } as never });
+  expect(meta.changed_at).toBe(meta.synced_at);
 });

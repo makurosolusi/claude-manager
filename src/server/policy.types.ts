@@ -50,5 +50,5 @@ export interface PolicyWriteResult { policy: PolicyResponse; changes: SettingsCh
 /** One audit table row (no agent_id: the UI never shows it). */
 export type AuditRow = Omit<DbAuditRow, "agent_id">;
 
-/** GET /api/policy/audit?q&role&decision&tool&since&page&size (size ≤ 100, default 50; role/decision/tool repeatable). */
+/** GET /api/policy/audit?q&role&decision&tool&cap&since&page&size (size ≤ 100, default 50; role/decision/tool/cap repeatable). */
 export interface AuditResponse { items: AuditRow[]; total: number; page: number; size: number; facets: AuditFacets }

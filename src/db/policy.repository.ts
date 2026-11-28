@@ -5,6 +5,8 @@ import { listParam, type Params } from "./stats.repository.ts";
 
 /** One hook decision; carries no tool input, path or command by design. */
 export interface AuditRow {
+  /** Stable row id (the transcript line hash). */
+  id: string;
   ts: string;
   session_id: string | null;
   agent_id: string | null;
@@ -35,7 +37,7 @@ type Dim = "role" | "decision" | "cap" | "tool";
 const IN = (col: string, param: string) => `($${param} IS NULL OR ${col} IN (SELECT value FROM json_each($${param})))`;
 const FACET_LIMIT = 50;
 const SUMMARY_LIMIT = 1000; // roles x decisions; bounded by the number of agents, never by row count
-const COLS = "ts, session_id, agent_id, role, tool, cap, decision, rule, mode";
+const COLS = "line_hash AS id, ts, session_id, agent_id, role, tool, cap, decision, rule, mode";
 
 function where(skip?: Dim) {
   const on = (d: Dim, c: string, p: string) => (d === skip ? "1" : IN(c, p));
