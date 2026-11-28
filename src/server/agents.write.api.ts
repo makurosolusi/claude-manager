@@ -11,7 +11,7 @@ import type { AgentInput, AgentPatch, AgentWriteResult } from "./agents.types.ts
 import { checkWrite, type WriteSession } from "./write.guard.ts";
 
 const STATUS = { ok: 200, created: 201, badRequest: 400, notFound: 404, conflict: 409, stale: 412, noEtag: 428, internal: 500 } as const;
-const REASON_STATUS: Record<ErrorReason, number> = { invalid: STATUS.badRequest, not_found: STATUS.notFound, conflict: STATUS.conflict };
+const REASON_STATUS: Record<ErrorReason, number> = { invalid: STATUS.badRequest, not_found: STATUS.notFound, conflict: STATUS.conflict, server: STATUS.internal };
 const PATH = /^\/api\/agents(?:\/([^/]+))?$/;
 
 const fail = (status: number, error: string) => Response.json({ error }, { status });

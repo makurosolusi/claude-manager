@@ -9,13 +9,12 @@ import { ModelsPanel, RolesPanel, ToolsPanel } from "@/components/session.panels
 import { SessionTabs, type SessionTabDef } from "@/components/session.tabs.tsx";
 import { Timeline } from "@/components/timeline.view.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import { useApi } from "@/lib/api.client.ts";
+import { isNotFound, useApi } from "@/lib/api.client.ts";
 import { SESSIONS_PATH } from "@/lib/sessions.query.ts";
 import { KPI_ICON, UI_ICON } from "@/lib/icon.map.ts";
 import { parseTab, tabHref } from "@/lib/session.tabs.ts";
 
 /** Marker `getJson` puts in the error message of a 404 response. */
-const NOT_FOUND_MARKER = "(404)";
 
 const BackLink = () => (
   <a href="#/sessions" className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -53,7 +52,7 @@ export function SessionDetailPage({ id, dataVersion, roles, params }: Props) {
     return (
       <div className="flex flex-col gap-4">
         <BackLink />
-        {error.message.includes(NOT_FOUND_MARKER) ? (
+        {isNotFound(error) ? (
           <p className="p-6 text-center text-sm text-muted-foreground">Session not found. <a href="#/sessions" className="underline">Back to sessions</a></p>
         ) : (
           <div role="alert" className="flex items-center gap-2 rounded-md border border-destructive/50 p-3 text-sm">

@@ -9,7 +9,7 @@ import type { TierWriteResult } from "./tiers.types.ts";
 import { checkWrite, type WriteSession } from "./write.guard.ts";
 
 const STATUS = { ok: 200, badRequest: 400, notFound: 404, conflict: 409, stale: 412, noEtag: 428, internal: 500 } as const;
-const REASON_STATUS: Record<ErrorReason, number> = { invalid: STATUS.badRequest, not_found: STATUS.notFound, conflict: STATUS.conflict };
+const REASON_STATUS: Record<ErrorReason, number> = { invalid: STATUS.badRequest, not_found: STATUS.notFound, conflict: STATUS.conflict, server: STATUS.internal };
 const COLLECTION_PATH = /^\/api\/tiers$/;
 const ITEM_PATH = /^\/api\/tiers\/([^/]+)$/;
 const BODY_ERROR = 'body must be {"model": "<model-id>"}';
