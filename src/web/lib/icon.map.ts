@@ -4,7 +4,7 @@ import {
   Cpu, DatabaseZap, Download, Ellipsis, Feather, FilePen, FilePlus, FileText, FolderGit2, FolderOpen, FolderSearch, FunnelX,
   Gauge, Gem, GitBranch, Globe, Group, Hammer, Inbox, Layers, LayoutDashboard, Leaf, ListFilter, ListTodo, LoaderCircle, Lock,
   MessageSquare, MessagesSquare, Monitor, Moon, NotebookPen, OctagonX, PenLine, Plug, Radio, RotateCcw, Rows3, Rows4, Scissors,
-  Search, SearchX, ShieldCheck, Shrink, SlidersHorizontal, SquareTerminal, Sun, Telescope, TextSearch, Timer, TriangleAlert, UserCog, UserRound, Users,
+  Crown, Pencil, Search, SearchX, ShieldCheck, Shrink, SlidersHorizontal, SquareTerminal, Sun, Telescope, TextSearch, Timer, TriangleAlert, UserCog, UserRound, Users,
   WifiOff, Workflow, Wrench, X, Zap, type LucideIcon,
 } from "lucide-react";
 import type { ModelFamily, TierKey } from "./model.tier.ts";
@@ -42,7 +42,7 @@ export const UI_ICON = {
   sortAsc: ArrowUp, sortDesc: ArrowDown, sortIdle: ChevronsUpDown, collapsed: ChevronRight, expanded: ChevronDown, check: Check, remove: X,
   empty: Inbox, noMatch: SearchX, error: TriangleAlert, retry: RotateCcw, offline: WifiOff, loading: LoaderCircle,
   themeSystem: Monitor, themeLight: Sun, themeDark: Moon,
-  lock: Lock, copy: Copy, viewAll: ArrowRight, unpriced: CircleHelp, model: Boxes, tier: SlidersHorizontal, back: ChevronLeft,
+  crown: Crown, edit: Pencil, lock: Lock, copy: Copy, viewAll: ArrowRight, unpriced: CircleHelp, model: Boxes, tier: SlidersHorizontal, back: ChevronLeft,
 } satisfies Record<string, LucideIcon>;
 
 const TOOL_ICON: Record<string, LucideIcon> = {
