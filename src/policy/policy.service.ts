@@ -19,7 +19,7 @@ export const HOOK_MATCHER = "^(Read|Grep|Glob|LSP|Edit|Write|NotebookEdit|Bash|W
 export const HOOK_ARGS: readonly string[] = ["hook", "pre-tool-use"];
 export const HOOK_TIMEOUT_SECONDS = 5;
 const DEFAULT_MODE_KEY = "permissions.defaultMode";
-const POLICY_KEYS = new Set(["enabled", "preset", "scope", "projectDir", "overrides", "defaultMode", "testCommands"]);
+const POLICY_KEYS = new Set(["enabled", "preset", "scope", "projectDir", "overrides", "defaultMode", "testCommands", "escalate"]);
 
 const conflict = (msg: string): never => {
   throw new CliError(msg, 1, "conflict");
@@ -49,6 +49,7 @@ export function assertPolicy(policy: unknown): asserts policy is PolicyConfig {
     throw new CliError('defaultMode: only "acceptEdits" (or null) can be written');
   }
   if (p.testCommands !== undefined) assertTestCommands(p.testCommands);
+  if (p.escalate !== undefined && typeof p.escalate !== "boolean") throw new CliError("policy.escalate: expected true or false");
 }
 
 const withPolicy = (config: Config, policy: PolicyConfig): Config => {
@@ -58,14 +59,14 @@ const withPolicy = (config: Config, policy: PolicyConfig): Config => {
 
 /**
  * Sets the preset and scope and turns the policy on. Resets overrides (§7). `defaultMode`/`testCommands` left out keep
- * their stored value; `projectDir` is required for project scope.
+ * their stored value; `projectDir` is required for project scope. `escalate` keeps the caller's value, else the stored one, else on (first setup, or a v0.4.0 policy without the field).
  */
 export function applyPreset(
   config: Config, preset: PresetName, scope: "user" | "project",
-  extra: { projectDir?: string; defaultMode?: "acceptEdits" | null; testCommands?: string[] } = {},
+  extra: { projectDir?: string; defaultMode?: "acceptEdits" | null; testCommands?: string[]; escalate?: boolean } = {},
 ): Config {
   const prev = config.policy;
-  const policy: PolicyConfig = { enabled: true, preset, scope, overrides: {} };
+  const policy: PolicyConfig = { enabled: true, preset, scope, overrides: {}, escalate: extra.escalate ?? prev?.escalate ?? true };
   if (scope === "project") policy.projectDir = extra.projectDir;
   const defaultMode = extra.defaultMode !== undefined ? extra.defaultMode : prev?.defaultMode;
   if (defaultMode !== undefined) policy.defaultMode = defaultMode;
@@ -114,6 +115,9 @@ export function setTestCommands(config: Config, testCommands: unknown): Config {
   assertTestCommands(testCommands);
   return withPolicy(config, { ...policy, testCommands: [...testCommands] });
 }
+
+/** Turns worker escalation on or off (worker `ask` → deny + "report to the manager"). */
+export const setEscalate = (config: Config, on: boolean): Config => withPolicy(config, { ...requirePolicy(config), escalate: on });
 
 /** Turns the stored policy back on (writes settings + snapshot again on apply). */
 export const enablePolicy = (config: Config): Config => withPolicy(config, { ...requirePolicy(config), enabled: true });
@@ -173,6 +177,7 @@ export function compileSnapshot(config: Config, manifest: Manifest): PolicySnaps
     testCommands: [...(policy.testCommands ?? DEFAULT_TEST_COMMANDS)],
     ownerOnly: [...OWNER_ONLY_TOKENS],
     owned,
+    escalate: policy.escalate === true,
   };
   if (policy.scope === "project" && policy.projectDir) snapshot.projectDir = policy.projectDir;
   return snapshot;

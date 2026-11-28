@@ -6,6 +6,7 @@ import { PolicyCause } from "@/components/policy.cause.tsx";
 import { PolicyDiff } from "@/components/policy.diff.tsx";
 import { PolicyFloors } from "@/components/policy.floors.tsx";
 import { inputFromConfig, usePolicyFlow } from "@/components/policy.flow.tsx";
+import { EscalationState, EscalationSwitch } from "@/components/policy.escalate.tsx";
 import { PolicyActions } from "@/components/policy.header.tsx";
 import { PolicyMatrix } from "@/components/policy.matrix.tsx";
 import { DEFAULT_SETUP, formFromConfig, PolicySetup, PolicySummary, type SetupForm } from "@/components/policy.setup.tsx";
@@ -55,16 +56,22 @@ export function PolicyPage({ dataVersion, params, roles }: PageProps) {
       {data && <PolicyCause policy={data} readOnly={readOnly} busy={flow.busy} onReapply={reapply} />}
       {readOnly && status !== "enforced" && <p className="font-mono text-xs text-muted-foreground">{CLI_HINT}</p>}
       {stored && !showSetup && !flow.pending && (
-        <PolicySummary config={stored} onChange={write === true && status !== "blocked" ? () => { setForm(formFromConfig(stored)); setChanging(true); } : undefined} />
+        <PolicySummary config={stored} onChange={write === true && status !== "blocked" ? () => { setForm(formFromConfig(stored)); setChanging(true); } : undefined}
+          extra={write === true && status !== "blocked"
+            ? <EscalationSwitch on={!!stored.escalate} busy={flow.busy} onToggle={() => (stored.escalate ? flow.setAsk("escalate_off") : flow.toggleEscalate(true))} />
+            : <EscalationState on={!!stored.escalate} />} />
       )}
       {showSetup && !flow.pending && <PolicySetup form={form} onChange={setForm} busy={flow.busy} onPreview={() => flow.fromForm(form)} />}
+      {flow.pending && <p className="text-xs text-muted-foreground">{flow.pending.input.escalate ? "Worker asks → manager (only the manager prompts you)." : "Worker asks → you (workers prompt you directly)."}</p>}
       {flow.pending && <PolicyDiff preview={flow.pending.data} title="Confirm & apply" busy={flow.busy} onApply={() => flow.setAsk("apply")} onCancel={() => flow.setPending(null)} />}
       {data && status !== "not_set_up" && <PolicyMatrix policy={data} roles={roles} editable={write === true && status !== "blocked"}
         onSaved={(text) => { flow.setNotice({ tone: "success", text }); setRetry((n) => n + 1); }} onFailure={(e) => flow.fail(e)} />}
-      <PolicyFloors />
+      <PolicyFloors escalate={!!stored?.escalate} />
       <ConfirmDialog open={flow.ask === "apply"} busy={flow.busy} title="Apply policy?" confirmLabel="Apply"
         body={flow.pending && `Apply ${PRESET_LABEL[flow.pending.input.preset]} to ${flow.pending.data.settings_path}? Running sessions pick it up within seconds.`}
         onConfirm={flow.apply} onCancel={() => flow.setAsk(null)} />
+      <ConfirmDialog open={flow.ask === "escalate_off"} busy={flow.busy} destructive title="Turn off escalation?" confirmLabel="Turn off"
+        body="Workers will prompt you directly again." onConfirm={() => flow.toggleEscalate(false)} onCancel={() => flow.setAsk(null)} />
       <ConfirmDialog open={flow.ask === "disable"} busy={flow.busy} destructive title="Turn off the policy?" confirmLabel="Turn off"
         body="Workers will ask you for every tool again. Your matrix is kept." onConfirm={flow.disable} onCancel={() => flow.setAsk(null)} />
     </div>

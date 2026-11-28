@@ -1,14 +1,14 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { CliError } from "../src/cli.error.ts";
 import { commands } from "../src/commands/commands.registry.ts";
 import { policyCommand } from "../src/commands/policy.command.ts";
-import { loadConfig } from "../src/config/config.store.ts";
+import { configPath, loadConfig } from "../src/config/config.store.ts";
 import { install } from "../src/install/install.service.ts";
 import { resolveTarget } from "../src/install/install.target.ts";
 import { PUSH_ALLOW_ERROR } from "../src/policy/policy.presets.ts";
-import { policySnapshotPath } from "../src/policy/policy.paths.ts";
+import { policyAuditFilePath, policySnapshotPath } from "../src/policy/policy.paths.ts";
 import { useTempHome } from "./test.home.ts";
 
 const ctx = useTempHome();
@@ -104,6 +104,53 @@ describe("policy command", () => {
     expect(json.rows.find((r: { row: string }) => r.row === "coder").cells.edit).toEqual({ decision: "deny", source: "override" });
   });
 
+  test("escalate off/on writes the snapshot, show reports it, a re-apply keeps it", async () => {
+    await installUser();
+    await run("apply", "balanced", "--yes");
+    expect(snapshot().escalate).toBe(true);
+    expect((await run("show")).out).toContain("escalate: on\n  worker asks and defaults (except read) go to the manager; only the manager prompts you");
+    expect((await run("escalate", "off")).out).toContain("Escalation turned off.");
+    expect(snapshot().escalate).toBe(false);
+    const off = (await run("show")).out;
+    expect(off).toContain("escalate: off");
+    expect(off).not.toContain("only the manager prompts you");
+    await run("apply", "strict", "--yes");
+    expect(snapshot().escalate).toBe(false);
+    await run("escalate", "on");
+    expect(snapshot().escalate).toBe(true);
+  });
+
+  test("apply --no-escalate starts with escalation off; escalate needs a policy and on|off", async () => {
+    await installUser();
+    expect(await fail("escalate", "off")).toContain("policy apply balanced");
+    expect(await fail("escalate", "maybe")).toContain("usage");
+    await run("apply", "balanced", "--yes", "--no-escalate");
+    expect(snapshot().escalate).toBe(false);
+    expect(JSON.parse((await run("show", "--json")).out).policy.escalate).toBe(false);
+  });
+
+  test("apply prints the escalate line: first setup, a v0.4.0 policy without the field, and a change", async () => {
+    await installUser();
+    const first = (await run("apply", "balanced", "--yes")).out;
+    expect(first).toContain("escalate: on");
+    expect(first).not.toContain("was not set");
+    expect(first).toContain("Escalate to manager: on. Change it with: claude-manager policy escalate on|off");
+    expect(first.indexOf("escalate: on")).toBeLessThan(first.indexOf("row")); // before the matrix
+    const stored = JSON.parse(read(configPath())!);
+    delete stored.policy.escalate;
+    writeFileSync(configPath(), JSON.stringify(stored));
+    const upgrade = await run("apply", "balanced", "--dry-run");
+    expect(upgrade.out).toContain("escalate: on (new in 0.4.1; was not set)");
+    expect(upgrade.out).not.toContain("Escalate to manager");
+    const done = (await run("apply", "balanced", "--yes")).out;
+    expect(done).toContain("Escalate to manager: on (new in 0.4.1; was not set).");
+    expect(snapshot().escalate).toBe(true);
+    expect((await run("apply", "balanced", "--dry-run", "--no-escalate")).out).toContain("escalate: off (was on)");
+    await run("escalate", "off");
+    expect((await run("apply", "strict", "--dry-run")).out).toContain("escalate: off\n");
+    expect((await run("escalate", "on")).out).toContain("escalate: on (was off)");
+  });
+
   test("show before any apply says so", async () => {
     const { out } = await run("show");
     expect(out).toContain("not set up");
@@ -123,6 +170,17 @@ describe("policy command", () => {
 
   test("audit with no decisions prints an empty message", async () => {
     expect((await run("audit")).out).toContain("no policy decisions since");
+  });
+
+  test("audit lists decisions under a note about escalated denies", async () => {
+    // test-only fixture event
+    const event = { ts: new Date().toISOString(), session_id: "s1", agent_id: "a1", role: "coder", tool: "Edit", cap: "edit", decision: "deny", rule: "escalated:edit", mode: "default" };
+    mkdirSync(dirname(policyAuditFilePath()), { recursive: true });
+    writeFileSync(policyAuditFilePath(), JSON.stringify(event) + "\n");
+    const { out } = await run("audit");
+    expect(out.split("\n")[0]).toContain("escalated worker actions are recorded as deny (rule escalated:…); --decision ask won't list them");
+    expect(out).toContain("escalated:edit");
+    expect((await run("audit", "--since", "1h", "--role", "nobody")).out).not.toContain("note:");
   });
 
   test("apply from a source run needs --dev-hook or the env opt-in", async () => {

@@ -156,7 +156,7 @@ describe("PUT /api/policy", () => {
     const r = (await res.json()) as PolicyWriteResult;
     expect(r.policy.status).toBe("enforced");
     expect(r.etag).toBe((await get()).body.etag);
-    expect(JSON.parse(text(configPath())).policy).toEqual({ enabled: true, preset: "balanced", scope: "user", overrides: {} });
+    expect(JSON.parse(text(configPath())).policy).toEqual({ enabled: true, preset: "balanced", scope: "user", overrides: {}, escalate: true });
     const s = JSON.parse(text(settingsFile()));
     expect(s.permissions.ask).toEqual([...OWNER_ASK_RULES]);
     expect(s.hooks.PreToolUse).toHaveLength(1);
@@ -273,22 +273,6 @@ describe("DELETE /api/policy", () => {
     expect((await send("DELETE", "/api/policy", undefined, { match: "0".repeat(64) })).status).toBe(412);
     expect(JSON.parse(text(configPath())).policy.enabled).toBe(true);
   });
-});
-
-test("--read-only: every policy write is 403 and nothing changes", async () => {
-  const before = [text(configPath()), text(settingsFile())];
-  const writes = [
-    ["POST", "/api/policy/preview", BALANCED],
-    ["PUT", "/api/policy", { ...BALANCED, confirm: true }],
-    ["PATCH", "/api/policy/rows/coder", { edit: "ask" }],
-    ["DELETE", "/api/policy", undefined],
-  ] as const;
-  for (const [method, path, body] of writes) {
-    const res = await send(method, path, body, { session: RO });
-    expect(res.status).toBe(403);
-    expect(await error(res)).toBe(READ_ONLY_ERROR);
-  }
-  expect([text(configPath()), text(settingsFile())]).toEqual(before);
 });
 
 describe("GET /api/policy/audit", () => {

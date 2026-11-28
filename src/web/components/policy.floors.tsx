@@ -12,11 +12,13 @@ const Rules = ({ title, rules }: { title: string; rules: readonly string[] }) =>
 );
 
 /** Read-only list of the rules the policy always writes: owner-only asks and secret denies. */
-export function PolicyFloors() {
+export function PolicyFloors({ escalate = false }: { escalate?: boolean }) {
   return (
     <Panel title="Owner floors" action={<Lock aria-hidden className="size-3.5 text-muted-foreground" />}>
       <p className="text-sm text-muted-foreground">
-        Nobody can switch these off from the UI. Workers always ask you first for push, publish, deploy and recursive delete, and never read secrets.
+        Nobody can switch these off from the UI. {escalate
+          ? "Push, publish, deploy and recursive delete always need you: workers hand them to the manager, and only the manager's session asks you. Secrets are never read."
+          : "Workers always ask you first for push, publish, deploy and recursive delete, and never read secrets."}
         <code className="mx-1 font-mono text-xs">.env.example</code>is covered too: read it yourself or through the owner.
       </p>
       <div className="grid gap-4 lg:grid-cols-2">

@@ -6,18 +6,18 @@ import { type Config, loadConfig } from "../config/config.store.ts";
 import { loadManifest } from "../install/install.manifest.ts";
 import { applyPolicy, previewPolicy } from "../policy/policy.apply.ts";
 import { assertCells, isPresetName, PRESET_NAMES } from "../policy/policy.presets.ts";
-import { applyPreset, disablePolicy, setCell, setOverrides } from "../policy/policy.service.ts";
+import { applyPreset, disablePolicy, setCell, setEscalate, setOverrides } from "../policy/policy.service.ts";
 import { errorResponse, fail, managedBlocks, policyResponse, STATUS, trim } from "./policy.api.ts";
 import type { PolicyInput, PolicyPreview, PolicyWriteResult } from "./policy.types.ts";
 import { checkWrite, type WriteSession } from "./write.guard.ts";
 
 const ROW_PATH = /^\/api\/policy\/rows\/([^/]+)$/;
-const INPUT_KEYS = new Set(["preset", "scope", "overrides", "defaultMode", "testCommands"]);
+const INPUT_KEYS = new Set(["preset", "scope", "overrides", "defaultMode", "testCommands", "escalate"]);
 
-/** True for POST /api/policy/preview, PUT|DELETE /api/policy, PATCH /api/policy/rows/:row (§4.2 `isPolicyWriteRoute`). */
+/** True for POST /api/policy/preview, PUT|PATCH|DELETE /api/policy, PATCH /api/policy/rows/:row (§4.2 `isPolicyWriteRoute`). */
 export function isPolicyWriteRoute(method: string, pathname: string): boolean {
   const path = trim(pathname);
-  if (path === "/api/policy") return method === "PUT" || method === "DELETE";
+  if (path === "/api/policy") return method === "PUT" || method === "DELETE" || method === "PATCH";
   if (path === "/api/policy/preview") return method === "POST";
   return method === "PATCH" && ROW_PATH.test(path);
 }
@@ -32,9 +32,10 @@ function inputBuild(body: unknown, extra: string[] = []): ConfigBuild {
   const input = body as unknown as PolicyInput;
   if (!isPresetName(input.preset)) throw new CliError(`unknown preset "${String(input.preset)}". Use ${PRESET_NAMES.join(", ")}`);
   if (input.scope !== "user" && input.scope !== "project") throw new CliError(`invalid scope "${String(input.scope)}": use "user" or "project"`);
+  if (input.escalate !== undefined && typeof input.escalate !== "boolean") throw new CliError("escalate: expected true or false");
   const projectDir = input.scope === "project" ? gitRoot() : undefined;
   return (config: Config) => {
-    const next = applyPreset(config, input.preset, input.scope, { projectDir, defaultMode: input.defaultMode, testCommands: input.testCommands });
+    const next = applyPreset(config, input.preset, input.scope, { projectDir, defaultMode: input.defaultMode, testCommands: input.testCommands, escalate: input.escalate });
     return input.overrides === undefined ? next : setOverrides(next, input.overrides);
   };
 }
@@ -44,6 +45,14 @@ function rowBuild(row: string, body: unknown): ConfigBuild {
   if (!isObject(body) || !Object.keys(body).length) throw new CliError("body must be a JSON object of capability → decision");
   assertCells(body, row);
   return (config: Config) => Object.entries(body).reduce((c, [cap, d]) => setCell(c, row, cap, d as string), config);
+}
+
+/** PATCH /api/policy body `{ escalate: boolean }` → `setEscalate` (409 from `requirePolicy` when no policy exists). */
+function escalateBuild(body: unknown): ConfigBuild {
+  if (!isObject(body) || Object.keys(body).some((k) => k !== "escalate")) throw new CliError('body must be exactly { "escalate": true|false }');
+  if (typeof body.escalate !== "boolean") throw new CliError("escalate: expected true or false");
+  const on = body.escalate;
+  return (config: Config) => setEscalate(config, on);
 }
 
 /** 409 when managed settings would make an enabled policy ineffective (§5). */
@@ -66,6 +75,7 @@ function writeBuild(method: string, path: string, body: unknown): ConfigBuild {
     if (!isObject(body) || body.confirm !== true) throw new CliError("PUT /api/policy needs \"confirm\": true");
     return inputBuild(body, ["confirm"]);
   }
+  if (path === "/api/policy") return escalateBuild(body);
   return rowBuild(decodeURIComponent(ROW_PATH.exec(path)![1]!), body);
 }
 

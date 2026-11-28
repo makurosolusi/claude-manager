@@ -4,6 +4,45 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-11-28
+
+### Added
+
+- Escalate to manager. With escalate on, a worker's action (any subagent, including built-in agents such as
+  general-purpose, Explore and Plan) is sent back to the manager instead of prompting you whenever its cell is
+  Ask or Default. The worker gets a deny that tells it to stop and report to the manager. This includes
+  owner-only actions such as push.
+  - Only the manager's own session prompts you.
+  - Exceptions: Read stays Default (in-project reads follow Claude Code), and tools the policy does not model
+    are unaffected. Allow and Deny cells and the secret floors are unchanged.
+  - The manager preset prompt has a new "Blocked workers" section: collect the requests, decide, and ask you once.
+  - Escalate is on by default for new setups. It is not set for an existing 0.4.0 policy, and nothing changes
+    until you act. Re-applying a preset, from the CLI or the dashboard, turns escalate on. The CLI prints this,
+    and the dashboard pre-ticks the box. Untick it or pass `--no-escalate` to keep it off. After that,
+    re-applying keeps your stored choice.
+  - CLI: `claude-manager policy escalate on|off` and `policy apply <preset> --no-escalate`. `policy show` prints
+    the state.
+  - Dashboard: a checkbox on setup, an Escalation switch, "→ manager" markers on escalated Ask cells, "asks
+    manager" in the effective permission text, and an "Escalated" badge in the audit.
+  - API: `PATCH /api/policy` with `{"escalate": true|false}`.
+
+### Fixed
+
+- CLI and dashboard writes no longer overwrite each other. Config, policy, `install` and `uninstall` writes now
+  take a lock file, `config.lock`, in `~/.claude-manager` (or `$CLAUDE_MANAGER_HOME`). A lock left by a dead
+  process is cleared automatically (on a different machine, a lock older than 2 minutes is treated as abandoned). If another process holds the lock for more than
+  10 seconds, the command fails with "another claude-manager process is changing config (pid N); try again".
+- A broken `manifest.json` is now reported as a server error (500) that names the file, not as a bad request.
+- The config lock no longer lets two processes hold it when a stale lock file is empty or malformed, and it no
+  longer breaks a live holder on the same machine by age.
+- Audit: escalated actions are recorded as deny with a rule starting `escalated:`. `policy audit --decision ask`
+  doesn't list them.
+
+### Notes
+
+- No database migration: the schema stays at v4.
+- Rollback to 0.4.0: 0.4.0 ignores `escalate` in the policy snapshot, so worker asks prompt you again as soon as the 0.4.0 binary runs. Its hook, `policy show`, `policy audit` and agent and tier edits keep working. 0.4.0 does reject the `policy.escalate` key in `config.json` for policy edits that keep the stored policy (`policy set`, `enable`, `disable`, and the dashboard's cell edits and Turn off), failing with `policy: unknown field "escalate"`. To clear it, delete the `"escalate"` line from `policy` in `~/.claude-manager/config.json` (or `$CLAUDE_MANAGER_HOME`), which keeps your overrides; or run `policy apply <preset>` with 0.4.0, which drops the key but resets your cell overrides.
+
 ## [0.4.0] - 2026-11-28
 
 ### Added

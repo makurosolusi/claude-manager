@@ -18,7 +18,7 @@ export const policyConfig = (preset: PresetName, overrides: PolicyConfig["overri
 
 export function snapshotFor(preset: PresetName, overrides: PolicyConfig["overrides"] = {}, extra: Partial<PolicySnapshot> = {}): PolicySnapshot {
   const matrix = matrixOf(effectivePolicy({ ...baseConfig(), policy: policyConfig(preset, overrides) }));
-  return { version: 1, matrix, testCommands: [...DEFAULT_TEST_COMMANDS], ownerOnly: [...OWNER_ONLY_TOKENS], owned: {}, ...extra };
+  return { version: 1, matrix, testCommands: [...DEFAULT_TEST_COMMANDS], ownerOnly: [...OWNER_ONLY_TOKENS], owned: {}, escalate: false, ...extra };
 }
 
 /** Temp project + HOME per test, realpath'd (macOS /var → /private/var). */

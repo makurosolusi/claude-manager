@@ -20,6 +20,9 @@ export const applyPreset = (preset: PresetName, scope: PolicyInput["scope"], eta
 /** Turns the policy off (settings reverted, matrix kept). */
 export const disablePolicy = (etag: string): Promise<PolicyWriteResult> => sendJson("DELETE", BASE, undefined, etag);
 
+/** Turns worker escalation (worker asks go to the manager) on or off without touching the rest of the policy. */
+export const setEscalate = (escalate: boolean, etag: string): Promise<PolicyWriteResult> => sendJson("PATCH", BASE, { escalate }, etag);
+
 /** Sets cells of one row. */
 export const setCell = (row: string, body: PatchRequest["body"], etag: string): Promise<PolicyWriteResult> =>
   sendJson("PATCH", `${BASE}/rows/${encodeURIComponent(row)}`, body, etag);

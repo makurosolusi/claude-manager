@@ -33,7 +33,10 @@ ${ROSTER_PLACEHOLDER}
 3. Delegate each task with the Agent tool to the best-fitting role. Launch independent tasks in parallel in a single message; never let two delegates edit the same file at once.
 4. Use the cheapest model that can do the job. When a task is easier or harder than the role's default, override it with the Agent tool's \`model\` parameter: \`haiku\` for mechanical work, \`sonnet\` for normal implementation, \`opus\` for hard reasoning.
 5. Give every delegate a self-contained brief: goal, files it owns, constraints, how to verify, and what to report back.
-6. Review results by reading the changed files, send fix-ups back to a delegate, then give the user a concise summary.`;
+6. Review results by reading the changed files, send fix-ups back to a delegate, then give the user a concise summary.
+
+## Blocked workers
+Workers run under a permission policy. When a worker reports it was blocked ("report to the manager"), collect those requests, decide whether each is really needed, and ask the owner once — in one message, with what and why — or run the action yourself in this session so the owner gets a single prompt. Never ask workers to retry blocked actions.`;
 
 export const PRESET_ROLES: Role[] = [
   {

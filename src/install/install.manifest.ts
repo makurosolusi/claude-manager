@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { appDir } from "../app.paths.ts";
-import { readJson, writeJson } from "../storage/json.file.ts";
+import { CliError } from "../cli.error.ts";
+import { writeJson } from "../storage/json.file.ts";
 
 export type Scope = "user" | "project";
 
@@ -58,8 +59,16 @@ export interface Manifest {
 
 const manifestPath = () => join(appDir(), "manifest.json");
 
+/** The install manifest; empty when missing. Malformed = our own state is broken: CliError reason "server" (API 500, not 400). */
 export async function loadManifest(): Promise<Manifest> {
-  return (await readJson<Manifest>(manifestPath())) ?? { version: 1, installs: {} };
+  const path = manifestPath();
+  const file = Bun.file(path);
+  if (!(await file.exists())) return { version: 1, installs: {} };
+  try {
+    return JSON.parse(await file.text()) as Manifest;
+  } catch (err) {
+    throw new CliError(`manifest.json is not valid JSON: ${(err as Error).message} (${path})`, 1, "server");
+  }
 }
 
 export const saveManifest = (m: Manifest) => writeJson(manifestPath(), m);

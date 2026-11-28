@@ -11,7 +11,7 @@ import { uninstall } from "../src/install/uninstall.service.ts";
 import { applyPolicy, previewPolicy } from "../src/policy/policy.apply.ts";
 import { OWNER_ASK_RULES, PUSH_ALLOW_ERROR, SECRET_DENY_RULES } from "../src/policy/policy.presets.ts";
 import {
-  applyPreset, DEV_POLICY_ENV, disablePolicy, enablePolicy, HOOK_MATCHER, hookCommand, setCell, setOverrides, setTestCommands,
+  applyPreset, DEV_POLICY_ENV, disablePolicy, enablePolicy, HOOK_MATCHER, hookCommand, setCell, setEscalate, setOverrides, setTestCommands,
   SOURCE_HOOK_ERROR,
 } from "../src/policy/policy.service.ts";
 import { policySnapshotPath as compiledPolicyPath } from "../src/policy/policy.paths.ts";
@@ -61,9 +61,20 @@ describe("pure transforms", () => {
     expect((await reasonOf(() => disablePolicy(base))).reason).toBe("conflict");
     const custom = setTestCommands(setCell(balanced(base), "coder", "shell", "allow"), ["make check"]);
     const reset = applyPreset(custom, "strict", "user");
-    expect(reset.policy).toEqual({ enabled: true, preset: "strict", scope: "user", overrides: {}, testCommands: ["make check"] });
+    expect(reset.policy).toEqual({ enabled: true, preset: "strict", scope: "user", overrides: {}, escalate: true, testCommands: ["make check"] });
     expect((await reasonOf(() => setTestCommands(reset, ["bun test; rm x"]))).reason).toBe("invalid");
     expect(enablePolicy(disablePolicy(reset)).policy).toEqual(reset.policy);
+  });
+
+  test("applyPreset keeps escalate: explicit value, else stored value, else on", async () => {
+    const base = await loadConfig();
+    expect(balanced(base).policy!.escalate).toBe(true); // first setup
+    const off = setEscalate(balanced(base), false);
+    expect(applyPreset(off, "strict", "user").policy!.escalate).toBe(false); // stored value survives a re-apply
+    expect(applyPreset(off, "strict", "user", { escalate: true }).policy!.escalate).toBe(true); // explicit wins
+    expect(applyPreset(balanced(base), "strict", "user", { escalate: false }).policy!.escalate).toBe(false);
+    const { escalate: _e, ...v040 } = balanced(base).policy!; // v0.4.0 policy: field missing
+    expect(applyPreset({ ...base, policy: v040 }, "strict", "user").policy!.escalate).toBe(true);
   });
 
   test("hook command: compiled binary vs running from source (refused without the dev opt-in, hardened with it)", async () => {

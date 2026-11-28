@@ -1,3 +1,4 @@
+import { ArrowUpRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Panel } from "@/components/panel.tsx";
 import { PolicyCell } from "@/components/policy.cell.tsx";
@@ -6,6 +7,7 @@ import { RoleBadge } from "@/components/role.badge.tsx";
 import type { RoleMeta } from "@/lib/color.tokens.ts";
 import { cn } from "@/lib/cn.ts";
 import { useFrozenEtag } from "@/lib/agent.write.ts";
+import { ESCALATE_LEGEND, isEscalated } from "@/lib/policy.status.ts";
 import { applyPatches } from "@/lib/policy.write.ts";
 import {
   countLine, diffToPatches, discardStaging, isDirty, newStaging, rowsForDisplay, stageCell, stagedRows, summarizeRow, type Staging,
@@ -14,7 +16,7 @@ import { useDirtyGuard } from "@/lib/use.dirty.guard.ts";
 import { CAPABILITIES, PRESET_LABEL, presetRow } from "../../policy/policy.presets.ts";
 import type { Capability, PolicyResponse, PolicyRow } from "../../server/policy.types.ts";
 
-const TH = "px-2 py-2 text-left text-xs font-medium text-muted-foreground";
+const TH = "px-1.5 py-2 text-left text-xs font-medium text-muted-foreground";
 const KIND_NOTE: Record<string, string> = { main: "your own session", unknown: "built-in and other agents" };
 
 interface Props { policy: PolicyResponse; editable: boolean; roles?: readonly RoleMeta[]; onSaved: (text: string) => void; onFailure: (e: unknown) => void }
@@ -49,6 +51,7 @@ export function PolicyMatrix({ policy, editable, roles, onSaved, onFailure }: Pr
   return (
     <Panel title="What each agent may do">
       <p className="text-xs text-muted-foreground">Default means Claude Code's own mode and rules decide. Push can be Ask or Deny, never Allow.</p>
+      {!!policy.config?.escalate && <p className="flex items-center gap-1 text-xs text-muted-foreground"><ArrowUpRight aria-hidden className="size-3" />{ESCALATE_LEGEND}</p>}
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[56rem] border-separate border-spacing-0 text-sm">
           <thead><tr><th className={TH}>Agent</th>{CAPABILITIES.map((c) => <th key={c} className={cn(TH, c === "mcp" ? "uppercase" : "capitalize")}>{c}</th>)}</tr></thead>
@@ -60,8 +63,8 @@ export function PolicyMatrix({ policy, editable, roles, onSaved, onFailure }: Pr
                   {KIND_NOTE[r.kind] && <span className="mt-0.5 block text-[11px] text-muted-foreground">{KIND_NOTE[r.kind]}</span>}
                 </th>
                 {CAPABILITIES.map((c) => (
-                  <td key={c} className="border-t px-2 py-1.5">
-                    <PolicyCell row={r} cap={c} preset={presetOf(r, c)} editable={editable} staged={staging.edits[r.row]?.[c] !== undefined} onChange={(d) => setStaging(stageCell(staging, r.row, c, d))} />
+                  <td key={c} className="border-t px-1 py-1.5">
+                    <PolicyCell row={r} cap={c} escalated={isEscalated(r, policy.config?.escalate)} preset={presetOf(r, c)} editable={editable} staged={staging.edits[r.row]?.[c] !== undefined} onChange={(d) => setStaging(stageCell(staging, r.row, c, d))} />
                   </td>
                 ))}
               </tr>
@@ -81,7 +84,7 @@ export function PolicyMatrix({ policy, editable, roles, onSaved, onFailure }: Pr
               {CAPABILITIES.map((c) => (
                 <li key={c} className="flex items-center justify-between gap-2 px-3 py-1">
                   <span className={cn("text-sm", c === "mcp" ? "uppercase" : "capitalize")}>{c}</span>
-                  <PolicyCell row={r} cap={c} preset={presetOf(r, c)} editable={editable} staged={staging.edits[r.row]?.[c] !== undefined} onChange={(d) => setStaging(stageCell(staging, r.row, c, d))} />
+                  <PolicyCell row={r} cap={c} escalated={isEscalated(r, policy.config?.escalate)} preset={presetOf(r, c)} editable={editable} staged={staging.edits[r.row]?.[c] !== undefined} onChange={(d) => setStaging(stageCell(staging, r.row, c, d))} />
                 </li>
               ))}
             </ul>

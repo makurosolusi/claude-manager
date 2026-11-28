@@ -2,12 +2,12 @@ import { useState } from "react";
 import type { SetupForm } from "@/components/policy.setup.tsx";
 import { ApiWriteError } from "@/lib/api.write.ts";
 import type { Notice } from "@/lib/agent.write.ts";
-import { disablePolicy, enablePolicy, previewPolicy } from "@/lib/policy.write.ts";
-import type { PolicyConfig, PolicyInput, PolicyPreview, PolicyResponse } from "../../server/policy.types.ts";
+import { disablePolicy, enablePolicy, previewPolicy, setEscalate } from "@/lib/policy.write.ts";
+import type { PolicyConfigView, PolicyInput, PolicyPreview, PolicyResponse } from "../../server/policy.types.ts";
 
 export interface Failure { text: string; reload: boolean }
 export interface Pending { input: PolicyInput; data: PolicyPreview; label: string }
-export type Ask = "apply" | "disable" | null;
+export type Ask = "apply" | "disable" | "escalate_off" | null;
 
 /** Maps a failed write to banner text; 412 asks for a reload, everything else shows the server message (409 carries the fix command). */
 export function toFailure(err: unknown): Failure {
@@ -16,9 +16,9 @@ export function toFailure(err: unknown): Failure {
   return { text: err.serverMessage, reload: false };
 }
 
-/** PolicyInput that re-applies the stored config (Turn on, Repair). */
-export const inputFromConfig = (c: PolicyConfig): PolicyInput =>
-  ({ preset: c.preset, scope: c.scope, overrides: c.overrides, defaultMode: c.defaultMode ?? null, testCommands: c.testCommands });
+/** PolicyInput that re-applies the stored config (Turn on, Repair); an unset `escalate` is left out so the server default (on) applies. */
+export const inputFromConfig = (c: PolicyConfigView): PolicyInput =>
+  ({ preset: c.preset, scope: c.scope, overrides: c.overrides, defaultMode: c.defaultMode ?? null, testCommands: c.testCommands, escalate: c.escalate ?? undefined });
 
 /** Preview → confirm → apply and confirm → disable, with busy, notice and failure state for the Policy page. */
 export function usePolicyFlow(policy: PolicyResponse | undefined, refetch: () => void) {
@@ -38,7 +38,7 @@ export function usePolicyFlow(policy: PolicyResponse | undefined, refetch: () =>
     setNotice(null);
     setPending({ input, label, data: await previewPolicy(input, policy.etag) });
   });
-  const fromForm = (f: SetupForm) => preview({ preset: f.preset, scope: f.scope, defaultMode: f.acceptEdits ? "acceptEdits" : null, overrides: policy?.config?.overrides, testCommands: policy?.config?.testCommands }, f.preset);
+  const fromForm = (f: SetupForm) => preview({ preset: f.preset, scope: f.scope, defaultMode: f.acceptEdits ? "acceptEdits" : null, overrides: policy?.config?.overrides, testCommands: policy?.config?.testCommands, escalate: f.escalate }, f.preset);
   const apply = () => run(async () => {
     if (!pending) return;
     await enablePolicy(pending.input, pending.data.etag);
@@ -53,6 +53,12 @@ export function usePolicyFlow(policy: PolicyResponse | undefined, refetch: () =>
     setAsk(null); setNotice({ tone: "success", text: "Policy turned off. Workers ask you for every tool again." });
     refetch();
   });
+  const toggleEscalate = (on: boolean) => run(async () => {
+    if (!policy) return;
+    await setEscalate(on, policy.etag);
+    setAsk(null); setNotice({ tone: "success", text: on ? "Escalation on. Worker asks now go to the manager." : "Escalation off. Workers prompt you directly again." });
+    refetch();
+  });
   const fail = (e: unknown) => setFailure(toFailure(e));
-  return { fail, pending, setPending, ask, setAsk, busy, notice, setNotice, failure, setFailure, preview, fromForm, apply, disable };
+  return { fail, pending, setPending, ask, setAsk, busy, notice, setNotice, failure, setFailure, preview, fromForm, apply, disable, toggleEscalate };
 }

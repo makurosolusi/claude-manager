@@ -15,7 +15,15 @@ export function gitRoot(from = process.cwd()): string {
   }
 }
 
-function printPlan(plan: PolicyPlan): void {
+/** `escalate: on` plus what changed against the stored value; absent = a v0.4.0 policy, or a first setup (no note). */
+export function escalateLine(plan: PolicyPlan, stored: { escalate?: boolean } | undefined): string | null {
+  if (!plan.snapshot) return null;
+  const now = plan.snapshot.escalate;
+  const note = !stored ? "" : stored.escalate === undefined ? " (new in 0.4.1; was not set)" : stored.escalate !== now ? ` (was ${stored.escalate ? "on" : "off"})` : "";
+  return `escalate: ${now ? "on" : "off"}${note}`;
+}
+
+function printPlan(plan: PolicyPlan, escalate: string | null): void {
   console.log(`settings: ${plan.settingsPath ?? "-"}`);
   if (!plan.changes.length) console.log("  (no settings changes)");
   for (const c of plan.changes) {
@@ -25,6 +33,7 @@ function printPlan(plan: PolicyPlan): void {
   }
   console.log(plan.hook ? `hook: PreToolUse ${plan.hook.matcher}` : "hook: none");
   console.log(plan.snapshot ? `snapshot: ${plan.compiledPath}` : `snapshot: removed (${plan.compiledPath})`);
+  if (escalate) console.log(escalate);
   if (plan.snapshot) console.log(`\n${matrixTable(plan.rows)}`);
 }
 
@@ -39,8 +48,10 @@ export async function runPolicyChange(
   build: ConfigBuild,
   opts: { dryRun: boolean; confirm: boolean; yes: boolean; done: string; devHook?: boolean },
 ): Promise<number> {
-  const plan = await previewPolicy(await build(await loadConfig(), await loadManifest()), { devHook: opts.devHook });
-  printPlan(plan);
+  const before = await loadConfig();
+  const plan = await previewPolicy(await build(before, await loadManifest()), { devHook: opts.devHook });
+  const escalate = escalateLine(plan, before.policy);
+  printPlan(plan, escalate);
   if (opts.dryRun) {
     console.log("\nDry run, nothing written.");
     return 0;
@@ -51,5 +62,6 @@ export async function runPolicyChange(
   }
   await applyPolicy(build, { expectedEtag: plan.etag, devHook: opts.devHook });
   console.log(`\n${opts.done}`);
+  if (escalate) console.log(`${escalate.replace("escalate:", "Escalate to manager:")}. Change it with: claude-manager policy escalate on|off`);
   return 0;
 }
