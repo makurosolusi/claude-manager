@@ -21,7 +21,7 @@ function parsePort(raw: string): number {
   return n;
 }
 
-function serve(db: Database, port: number, meta: MetaProvider, _session: WriteSession) {
+function serve(db: Database, port: number, meta: MetaProvider, session: WriteSession) {
   try {
     return Bun.serve({
       hostname: HOSTNAME,
@@ -32,8 +32,7 @@ function serve(db: Database, port: number, meta: MetaProvider, _session: WriteSe
       // reusePort default of false; set it explicitly so EADDRINUSE still surfaces as "port in use".
       reusePort: false,
       routes: { "/": index },
-      // Integration point: Wave D passes `_session` to the agents write routes (agents.write.api.ts) via handleRequest.
-      fetch: (req) => handleRequest(req, db, port, meta) ?? new Response("Not Found", { status: 404 }),
+      fetch: (req) => handleRequest(req, db, port, meta, session) ?? new Response("Not Found", { status: 404 }),
     });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "EADDRINUSE") throw new CliError(`port ${port} is in use; try --port <n>`);

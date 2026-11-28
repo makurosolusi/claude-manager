@@ -96,8 +96,8 @@ describe("GET /api/agents/:name", () => {
   });
 });
 
-describe("writes stay closed", () => {
-  for (const [method, path] of [["POST", "/api/agents"], ["PATCH", "/api/agents/reviewer"], ["DELETE", "/api/agents/reviewer"]]) {
+describe("unknown methods stay closed", () => {
+  for (const [method, path] of [["PUT", "/api/agents"], ["PUT", "/api/agents/reviewer"], ["OPTIONS", "/api/agents/reviewer"], ["POST", "/api/agents/reviewer"]]) {
     test(`${method} ${path} is 405`, async () => {
       expect((await call(path!, method)).status).toBe(405);
     });
