@@ -16,6 +16,8 @@ export interface GroupSpec<T> {
   onToggle(): void;
   rows: T[] | undefined; // undefined + open = skeleton rows
   footer?: ReactNode;
+  /** Control placed right after the toggle (a sibling, so a link is valid HTML); absent = header renders as before. */
+  action?: ReactNode;
 }
 
 interface GroupRowsProps<T> {
@@ -40,18 +42,21 @@ export function GroupRows<T>({ spec: g, columns, primary, rowH, renderRow, cellC
         {columns.map((c, i) => (
           <td key={c.id} className={cn("px-3 text-[13px]", cellClass(c), i === fill && "w-full max-w-0")}>
             {i === primary ? (
-              <button
-                type="button"
-                aria-expanded={g.open}
-                aria-controls={id}
-                onClick={g.onToggle}
-                className="flex w-full min-w-0 items-center gap-2 rounded-sm text-left font-medium outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
-              >
-                <span className="sr-only">Subtotal </span>
-                <Chevron aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="truncate">{g.label}</span>
-                <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground tabular-nums">{fmtInt(g.count)}</span>
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  aria-expanded={g.open}
+                  aria-controls={id}
+                  onClick={g.onToggle}
+                  className={cn("flex min-w-0 items-center gap-2 rounded-sm text-left font-medium outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring", !g.action && "w-full")}
+                >
+                  <span className="sr-only">Subtotal </span>
+                  <Chevron aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{g.label}</span>
+                  <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground tabular-nums">{fmtInt(g.count)}</span>
+                </button>
+                {g.action}
+              </div>
             ) : (
               g.totals[c.id] !== undefined && (
                 <span className="font-semibold">{g.totals[c.id]}</span>
