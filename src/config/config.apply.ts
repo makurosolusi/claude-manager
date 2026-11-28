@@ -1,11 +1,10 @@
 import { readdir, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { CliError } from "../cli.error.ts";
-import { install, reapplyAll } from "../install/install.service.ts";
+import { install, reapplyAll, refreshPolicySnapshot } from "../install/install.service.ts";
 import { backupPath, loadManifest, type Manifest } from "../install/install.manifest.ts";
 import { readText } from "../install/install.target.ts";
 import { policySnapshotPath } from "../policy/policy.paths.ts";
-import { compileSnapshot } from "../policy/policy.service.ts";
 import { sha256, writeJson } from "../storage/json.file.ts";
 import { type Config, configPath, loadConfig } from "./config.store.ts";
 
@@ -105,15 +104,6 @@ async function rollback(err: unknown, path: string, before: string | undefined, 
 async function pruneConfigBackups(dir: string): Promise<void> {
   const old = (await readdir(dir)).filter((f) => f.endsWith(CONFIG_BACKUP_SUFFIX)).sort().slice(0, -MAX_CONFIG_BACKUPS);
   await Promise.all(old.map((f) => rm(join(dir, f), { force: true })));
-}
-
-/**
- * With the policy applied (`manifest.policy`), recompiles the hook snapshot so `owned` hashes and rows follow the
- * re-rendered agent files. Settings stay as they are: `desiredSettings` depends only on the policy, not on roles.
- */
-async function refreshPolicySnapshot(next: Config): Promise<void> {
-  const manifest = await loadManifest();
-  if (manifest.policy && next.policy?.enabled) await writeJson(policySnapshotPath(), compileSnapshot(next, manifest));
 }
 
 /**

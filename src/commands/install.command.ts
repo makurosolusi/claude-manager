@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
 import { loadConfig } from "../config/config.store.ts";
-import { install } from "../install/install.service.ts";
+import { install, refreshPolicySnapshot } from "../install/install.service.ts";
 import { formatOps, resolveTarget } from "../install/install.target.ts";
 import type { Command } from "./command.types.ts";
 
@@ -30,11 +30,14 @@ Options:
       },
     });
     const target = resolveTarget(values.scope!);
-    const ops = await install(target, await loadConfig(), {
+    const config = await loadConfig();
+    const ops = await install(target, config, {
       mainAgent: values["main-agent"],
       force: values.force,
       dryRun: values["dry-run"],
     });
+    // New agent files must enter the snapshot's `owned` map, or every role reads as shadowed and falls back to `unknown`.
+    if (!values["dry-run"]) await refreshPolicySnapshot(config);
     console.log(values["dry-run"] ? "Dry run, nothing written:" : `Installed (${target.scope} scope):`);
     console.log(formatOps(ops));
     if (!values["dry-run"] && !values["main-agent"]) console.log("\nStart a swarm session with: claude --agent manager");

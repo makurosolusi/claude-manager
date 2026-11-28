@@ -4,7 +4,9 @@ import { CliError } from "../cli.error.ts";
 import { type Config, TIER_ENV, TIERS } from "../config/config.store.ts";
 import { resolveRoles } from "../roles/roles.registry.ts";
 import { renderRole } from "../roles/roles.render.ts";
-import { sha256 } from "../storage/json.file.ts";
+import { policySnapshotPath } from "../policy/policy.paths.ts";
+import { compileSnapshot } from "../policy/policy.service.ts";
+import { sha256, writeJson } from "../storage/json.file.ts";
 import { backupPath, type InstallRecord, loadManifest, type Manifest, saveManifest } from "./install.manifest.ts";
 import { getKey, revertKey, setKey } from "./settings.merge.ts";
 import { type FileOp, parseSettings, readText, type Target } from "./install.target.ts";
@@ -187,4 +189,13 @@ export async function reapplyAll(config: Config): Promise<InstallRecord[]> {
     await install(target, config, { mainAgent: rec.mainAgent });
   }
   return records;
+}
+
+/**
+ * Recompiles the policy hook snapshot after install/uninstall changed which agent files are managed.
+ * No-op without an applied, enabled policy; a full uninstall has already dropped `manifest.policy`, so nothing is written.
+ */
+export async function refreshPolicySnapshot(config: Config): Promise<void> {
+  const manifest = await loadManifest();
+  if (manifest.policy && config.policy?.enabled) await writeJson(policySnapshotPath(), compileSnapshot(config, manifest));
 }
