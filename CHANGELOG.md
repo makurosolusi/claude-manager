@@ -4,6 +4,63 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-11-28
+
+### Added
+
+- Agents page (`#/agents`, fourth item in the navigation):
+  - A list of every agent: preset, custom and external (built-ins, hand-written files, and plugin agents seen
+    in your usage), grouped by level by default. Built-in agents have descriptions from the Claude Code docs.
+  - A detail view per agent with its prompt, tools, install files and their state (installed, edited, missing
+    or shadowed), 30-day usage and warnings.
+  - A hierarchy panel: You, the main agent, then the Think, Work and Basic tier cards with the model, the
+    price per MTok and the 30-day cost.
+- Create, edit, delete, disable and enable managed agents from the dashboard. Deleting asks for confirmation,
+  leaving a form with unsaved changes asks first, and each save shows a notice with the live-effect note.
+- Edit the model behind a tier from the dashboard (`GET /api/tiers`, `PUT /api/tiers/:tier`). The model picker
+  shows prices and a 30-day cost estimate (the same tokens re-priced), a "Newer" hint, a preview of the
+  affected agents and a warning when you switch model family. The notice says: "Applies to new Claude Code
+  sessions; running sessions reload settings and may switch on their next request — restart them to be sure."
+- `claude-manager dashboard --read-only` turns all writes off. The UI hides the controls and the API
+  returns 403.
+- `claude-manager roles edit <name>` with `--description`, `--tier`, `--pin`, `--default`,
+  `--tools <A,B|all>`, `--prompt-file`, `--enable` and `--disable`. It shares code with the dashboard and
+  gives the same result. `--tier`, `--pin` and `--default` are mutually exclusive, and so are `--enable` and
+  `--disable`.
+- Safer dashboard writes: every write needs a per-process token and a same-origin request, a JSON body of at
+  most 64 KiB, and an `If-Match` header (412 when it is stale, 428 when it is missing). `config.json` is
+  backed up before each write (the last 20 are kept in `~/.claude-manager/backups/`) and written atomically.
+  If applying a change fails, config and files are rolled back. An agent file you edited by hand blocks writes
+  with a 409 and an `install --force` hint.
+
+### Changed
+
+- **Breaking:** `claude-manager tier set <tier> <model>` now rejects aliases (`opus`, `sonnet`, `haiku`,
+  `fable`, `best`, `opusplan`, `default`, `inherit`) and ids longer than 128 characters. Claude Code needs a
+  full model name in `ANTHROPIC_DEFAULT_*_MODEL`. Use a full id such as `claude-opus-5-5`. `tier set` also
+  prints the new-sessions note.
+- Session detail: a capped summary row (Models, Tools used, By role) and tabs (Requests, Agents, Prompts).
+  The Agents tab is a searchable, paginated table and replaces the unbounded tree.
+- Roles page: one table with a By role / By model / By tier switch replaces the three stacked tables. Each
+  role has an "Open on the Agents page" link. Old `?group=` links still work.
+- Projects page: shows the full working directory (`~`-relative) under each project name, with a copy
+  button, and groups by folder by default. Rows are classified as Project, Worktree, Temp dir, Home or Other,
+  with a Kind facet. Temp dirs, home and paths outside home go into named groups at the bottom.
+- A broken `config.json` is reported as a server error (500) by the API, and the dashboard header shows it
+  before sync errors.
+- Upgrading from 0.2.0: 0.2.1 was never published as a tag, so its migration (v3, below) applies to you. The
+  first sync reads all transcripts again once. 0.3.0 adds no database migration.
+- Rollback: binaries older than 0.2.1 cannot open a v3 database (see the 0.2.1 note). Config backups are in
+  `~/.claude-manager/backups/`.
+
+### Fixed
+
+- Concurrent dashboard saves can no longer silently overwrite each other.
+- Agent names such as `__proto__` are rejected.
+- Browser Back while editing keeps the history intact.
+- A network error is no longer shown as "read-only".
+- A directory or broken symlink in an agents folder no longer breaks the Agents page.
+
 ## [0.2.1] - 2026-11-28
 
 ### Added

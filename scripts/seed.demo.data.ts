@@ -1,4 +1,4 @@
-// Static tables for scripts/seed.demo.ts. All fake: /work/... paths, invented titles, no real data.
+// Static tables for scripts/seed.demo.ts. All fake: ~/work/... paths, invented titles, no real data.
 
 /** Main-session model pool per tier (200k-window tiers stay on 4.x ids so the live context-level cases hold). */
 export const MODEL = {
@@ -24,15 +24,21 @@ export const ROLE_MODELS: Record<string, readonly string[]> = {
 export const HEAVY_ROLES = ["coder", "architect", "manager", "general-purpose", "fork"];
 
 // Two projects share the basename "web" on purpose: the UI must not rely on basename alone.
+// `~` expands to the temp HOME and `$TMP` to the OS temp dir, so every project kind shows on the Projects page:
+// real projects under three parent folders, an agent worktree of ~/work/acme/web, a temp-dir run and a run from home itself.
+// Keep the first 8 entries first: the live/idle demo sessions index into them.
 export const PROJECTS = [
-  { cwd: "/work/acme/api", branch: ["main", "feat/billing-v2", "fix/rate-limit"], weight: 5 },
-  { cwd: "/work/acme/web", branch: ["main", "feat/onboarding"], weight: 4 },
-  { cwd: "/work/side/web", branch: ["main"], weight: 2 },
-  { cwd: "/work/acme/infra-terraform", branch: ["main", "chore/upgrade-provider"], weight: 2 },
-  { cwd: "/work/oss/bun-sqlite-kit", branch: ["main"], weight: 2 },
-  { cwd: "/work/notes/research-llm-evals", branch: ["main"], weight: 1 },
-  { cwd: "/work/acme/mobile-app", branch: ["develop", "feat/push"], weight: 2 },
-  { cwd: "/work/claude-manager", branch: ["main", "feature/m5-ui-polish"], weight: 3 },
+  { cwd: "~/work/acme/api", branch: ["main", "feat/billing-v2", "fix/rate-limit"], weight: 5 },
+  { cwd: "~/work/acme/web", branch: ["main", "feat/onboarding"], weight: 4 },
+  { cwd: "~/side/web", branch: ["main"], weight: 2 },
+  { cwd: "~/work/acme/infra-terraform", branch: ["main", "chore/upgrade-provider"], weight: 2 },
+  { cwd: "~/oss/bun-sqlite-kit", branch: ["main"], weight: 2 },
+  { cwd: "~/side/research-llm-evals", branch: ["main"], weight: 1 },
+  { cwd: "~/work/acme/mobile-app", branch: ["develop", "feat/push"], weight: 2 },
+  { cwd: "~/oss/claude-manager", branch: ["main", "feature/m5-ui-polish"], weight: 3 },
+  { cwd: "~/work/acme/web/.claude/worktrees/task-ag-a6ef89935c86980d7c79", branch: ["worktree-task-ag-a6ef89935c86980d7c79"], weight: 1 },
+  { cwd: "$TMP/cm-demo-scratch", branch: ["main"], weight: 1 },
+  { cwd: "~", branch: ["main"], weight: 1 },
 ];
 
 export const TITLES = [
@@ -66,3 +72,24 @@ export const TOOLS: { name: string; input: Record<string, unknown> }[] = [
   { name: "TodoWrite", input: { todos: [] } },
   { name: "mcp__docs__search", input: { query: "rate limiting" } },
 ];
+
+/** `claude-manager` CLI steps the demo runs against the temp config (real code path: config.json, then install writes files + manifest). */
+export const MANAGER_STEPS: string[][] = [
+  ["roles", "add", "ui-ux", "--tier", "work", "--tools", "Read,Grep,Glob,Edit,Write", "--description", "Designs UI layouts, accessibility and visual polish"],
+  ["roles", "rm", "writer"], // disables a preset
+  ["install", "--scope", "user"],
+];
+
+/** Hand-written agent files (external: not managed by claude-manager), written to `<config>/agents/<name>.md`. */
+export const EXTERNAL_AGENTS: Record<string, string> = {
+  "code-simplifier": `---
+name: code-simplifier
+description: Simplifies recently changed code without altering behaviour. Use after a feature lands.
+tools: Read, Edit, Grep, Glob
+model: sonnet
+color: cyan
+---
+You simplify recently modified code: remove dead branches, flatten nesting, keep behaviour identical.
+Never touch tests unless they fail to compile.
+`,
+};

@@ -79,7 +79,7 @@ export const filterParams = (f: StatsFilter): Params => ({
   projects: listParam(f.projects),
 });
 
-const FROM = "FROM requests r LEFT JOIN agents a ON a.id = r.agent_id LEFT JOIN sessions s ON s.id = r.session_id";
+export const FROM = "FROM requests r LEFT JOIN agents a ON a.id = r.agent_id LEFT JOIN sessions s ON s.id = r.session_id";
 
 /** Token and cost totals grouped by one dimension, most expensive first (days: newest first). */
 export function usageBy(db: Database, by: GroupBy, f: StatsFilter, limit: number): UsageRow[] {

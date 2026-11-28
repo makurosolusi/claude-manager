@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { AgentNode, Page, ProjectRow, RoleRow, SessionRow, TimelineItem } from "../server/dashboard.types.ts";
+import type { AgentNode, Page, ProjectUsageRow, RoleRow, SessionRow, TimelineItem } from "../server/dashboard.types.ts";
 import { filterParams, KEY, REROUTED_COUNT, WHERE, type Params, type StatsFilter } from "./stats.repository.ts";
 
 /** Page window: 1-based page number and its size. */
@@ -36,8 +36,8 @@ export function paged<T>(db: Database, p: PageQuery, itemsSql: string, countSql:
 }
 
 /** Usage per project in the filter window, most expensive first. */
-export function projectsPage(db: Database, f: StatsFilter, p: PageQuery): Page<ProjectRow> {
-  return paged<ProjectRow>(
+export function projectsPage(db: Database, f: StatsFilter, p: PageQuery): Page<ProjectUsageRow> {
+  return paged<ProjectUsageRow>(
     db,
     p,
     `SELECT ${KEY.project} AS project, COUNT(DISTINCT r.session_id) AS sessions, MAX(r.ts) AS last_ts, ${USAGE}

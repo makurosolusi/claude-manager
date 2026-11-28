@@ -2,17 +2,19 @@ import { useState } from "react";
 import type { PageProps } from "@/lib/page.props.ts";
 import { TriangleAlert } from "lucide-react";
 import type { SessionDetailFull } from "../../server/session.detail.types.ts";
-import { AgentTree } from "@/components/agent.tree.view.tsx";
 import { RequestsTable } from "@/components/requests.table.tsx";
 import { SessionHeader, SessionKpis } from "@/components/session.summary.tsx";
-import { Panel } from "@/components/panel.tsx";
-import { ModelsPanel, ToolsPanel } from "@/components/session.panels.tsx";
+import { SessionAgentsTable } from "@/components/session.agents.table.tsx";
+import { ModelsPanel, RolesPanel, ToolsPanel } from "@/components/session.panels.tsx";
+import { SessionTabs, type SessionTabDef } from "@/components/session.tabs.tsx";
 import { Timeline } from "@/components/timeline.view.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import { useApi } from "@/lib/api.client.ts";
+import { isNotFound, useApi } from "@/lib/api.client.ts";
+import { SESSIONS_PATH } from "@/lib/sessions.query.ts";
+import { KPI_ICON, UI_ICON } from "@/lib/icon.map.ts";
+import { parseTab, tabHref } from "@/lib/session.tabs.ts";
 
 /** Marker `getJson` puts in the error message of a 404 response. */
-const NOT_FOUND_MARKER = "(404)";
 
 const BackLink = () => (
   <a href="#/sessions" className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -32,11 +34,17 @@ function Skeleton() {
   );
 }
 
+const tabs = (requests: number, agents: number): SessionTabDef[] => [
+  { id: "requests", label: "Requests", icon: KPI_ICON.requests, count: requests },
+  { id: "agents", label: "Agents", icon: KPI_ICON.agents, count: agents },
+  { id: "prompts", label: "Prompts", icon: UI_ICON.prompt },
+];
+
 /** Shell page props plus the session id; uses the id, the data version (live refresh) and the role roster. */
 type Props = PageProps & { id: string };
 
-/** One session: header, KPIs, context, requests table, side panels (models, tools, agents) and prompt timeline. */
-export function SessionDetailPage({ id, dataVersion, roles }: Props) {
+/** One session: header, KPIs, a capped summary row (models, tools, roles) and one tabbed list at a time (requests, agents, prompts). */
+export function SessionDetailPage({ id, dataVersion, roles, params }: Props) {
   const [retry, setRetry] = useState(0);
   const { data, error } = useApi<SessionDetailFull>(`/api/sessions/${encodeURIComponent(id)}`, {}, retry + dataVersion);
 
@@ -44,7 +52,7 @@ export function SessionDetailPage({ id, dataVersion, roles }: Props) {
     return (
       <div className="flex flex-col gap-4">
         <BackLink />
-        {error.message.includes(NOT_FOUND_MARKER) ? (
+        {isNotFound(error) ? (
           <p className="p-6 text-center text-sm text-muted-foreground">Session not found. <a href="#/sessions" className="underline">Back to sessions</a></p>
         ) : (
           <div role="alert" className="flex items-center gap-2 rounded-md border border-destructive/50 p-3 text-sm">
@@ -59,23 +67,22 @@ export function SessionDetailPage({ id, dataVersion, roles }: Props) {
   if (!data) return <Skeleton />;
 
   const { session, agents, models, tools, compactions, context } = data;
+  const tab = parseTab(params.get("tab"));
+  const path = `${SESSIONS_PATH}/${encodeURIComponent(id)}`;
   return (
     <div className="flex flex-col gap-6">
       <SessionHeader session={session} models={models} roles={roles} />
       <SessionKpis session={session} compactions={compactions} context={context} />
       <div className="grid items-start gap-4 md:grid-cols-3">
-        <Panel title="Agents" count={agents.length}>
-          <AgentTree agents={agents} roles={roles} />
-        </Panel>
         <ModelsPanel models={models} />
         <ToolsPanel tools={tools} />
+        <RolesPanel agents={agents} roles={roles} />
       </div>
-      <Panel title="Requests">
-        <RequestsTable sessionId={session.id} roles={roles} tick={dataVersion} />
-      </Panel>
-      <Panel title="Prompts">
-        <Timeline sessionId={session.id} tick={dataVersion} />
-      </Panel>
+      <SessionTabs tabs={tabs(session.requests, agents.length)} active={tab} onChange={(t) => (location.hash = tabHref({ path, params }, t))}>
+        {tab === "requests" && <RequestsTable sessionId={session.id} roles={roles} tick={dataVersion} />}
+        {tab === "agents" && <SessionAgentsTable agents={agents} roles={roles} path={path} params={params} />}
+        {tab === "prompts" && <Timeline sessionId={session.id} tick={dataVersion} />}
+      </SessionTabs>
     </div>
   );
 }

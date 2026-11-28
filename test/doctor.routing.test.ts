@@ -52,3 +52,15 @@ test("warns when tier aliases are not mapped in settings or env", async () => {
   const checks = await checkRouting([record()], ["coder"], {}, ctx.home);
   expect(checks.some((c) => c.label.includes("ANTHROPIC_DEFAULT_SONNET_MODEL"))).toBe(true);
 });
+
+test("shadow check carries its role; global checks do not", async () => {
+  const dir = join(ctx.home, ".claude", "agents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "coder.md"), "---\nname: coder\n---\n");
+  const env = { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1", ANTHROPIC_BASE_URL: "https://gw.example" };
+  const checks = await checkRouting([record()], ["coder"], env, ctx.home);
+  expect(checks.find((c) => c.label.includes("shadows"))?.role).toBe("coder");
+  const globals = checks.filter((c) => !c.label.includes("shadows"));
+  expect(globals.length).toBeGreaterThanOrEqual(3);
+  expect(globals.every((c) => c.role === undefined)).toBe(true);
+});

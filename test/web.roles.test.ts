@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import type { RoleRow } from "../src/server/dashboard.types.ts";
 import type { RoleMeta } from "../src/web/lib/color.tokens.ts";
 import { costByTier } from "../src/web/lib/tier.cost.ts";
-import { byModel, byRole, configuredTierMismatch, byTierOrder, cacheHitLabel, roleKind, sumUsage, tierSubtotals, withTier } from "../src/web/lib/roles.aggregate.ts";
+import { agentHref, flipsFor, groupRows, parseView, viewForKey } from "../src/web/lib/roles.view.ts";
+import { configuredTierMismatch, cacheHitLabel, roleKind, sumUsage, withTier } from "../src/web/lib/roles.aggregate.ts";
 
 // test-only fixtures
 const tiers = { think: "claude-opus-4-7", work: "claude-sonnet-4-5", basic: "claude-haiku-4-5" };
@@ -26,25 +27,25 @@ test("withTier uses config first, family fallback, other for unknown", () => {
   expect(rows.map((r) => r.tier)).toEqual(["think", "think", "work", "work", "other"]);
 });
 
-test("byModel and byRole sum usage, sort by cost and share the overall total", () => {
-  const m = byModel(rows);
-  expect(m.map((x) => [x.key, x.cost_usd, x.requests, x.count])).toEqual([
+test("group subtotals per model and per role sum usage and cover the overall total", () => {
+  const m = groupRows(rows, "model");
+  expect(m.map((g) => [g.key, sumUsage(g.rows).cost_usd, sumUsage(g.rows).requests, g.rows.length])).toEqual([
     ["claude-opus-4-7", 16, 6, 2], ["claude-sonnet-4-5", 4, 4, 2], ["mystery-model", 0.5, 1, 1],
   ]);
-  expect(m.reduce((s, x) => s + x.share, 0)).toBeCloseTo(1);
-  const r = byRole(rows, roles);
-  expect(r.map((x) => x.key)).toEqual(["manager", "coder", "main", "qa-bot"]);
-  expect(r.find((x) => x.key === "coder")).toMatchObject({ cost_usd: 9, tier: "work", input: 20 });
-  expect(r.find((x) => x.key === "main")!.tier).toBe("work"); // no config: costliest row's tier
+  const r = groupRows(rows, "role");
+  expect(r.map((g) => g.key)).toEqual(["manager", "coder", "main", "qa-bot"]);
+  expect(sumUsage(r.find((g) => g.key === "coder")!.rows)).toMatchObject({ cost_usd: 9, input: 20 });
+  const total = sumUsage(rows).cost_usd;
+  for (const groups of [m, r]) expect(groups.reduce((s, g) => s + sumUsage(g.rows).cost_usd, 0)).toBeCloseTo(total);
 });
 
-test("tier subtotals add up to the total and equal costByTier", () => {
+test("tier group subtotals add up to the total and equal costByTier", () => {
   const total = sumUsage(rows).cost_usd;
-  const sub = tierSubtotals(rows);
+  const sub = groupRows(rows, "tier").map((g) => ({ key: g.key, ...sumUsage(g.rows) }));
   expect(sub.map((t) => t.key)).toEqual(["think", "work", "other"]);
   expect(sub.reduce((s, t) => s + t.cost_usd, 0)).toBeCloseTo(total);
-  expect(sub.reduce((s, t) => s + t.share, 0)).toBeCloseTo(1);
-  const overview = costByTier(byModel(rows).map((m) => ({ ...m })), tiers);
+  const perModel = groupRows(rows, "model").map((g) => ({ key: g.key, ...sumUsage(g.rows) }));
+  const overview = costByTier(perModel, tiers);
   for (const t of overview.filter((o) => o.cost_usd > 0)) {
     const mine = sub.find((s) => s.key === t.tier)!;
     expect(mine.cost_usd).toBeCloseTo(t.cost_usd);
@@ -75,7 +76,53 @@ test("cacheHitLabel is token-weighted, not an average of row rates", () => {
   expect(cacheHitLabel(sumUsage([]))).toBe("—");
 });
 
-test("byTierOrder sorts think, work, basic, other", () => {
-  const keys = byTierOrder([{ key: "other" }, { key: "basic" }, { key: "think" }, { key: "work" }]).map((g) => g.key);
-  expect(keys).toEqual(["think", "work", "basic", "other"]);
+// --- view switch (roles.view.ts) ---
+
+test("parseView prefers ?view, maps legacy ?group, falls back to by role", () => {
+  const p = (q: string) => parseView(new URLSearchParams(q));
+  expect(p("")).toBe("role");
+  expect(p("view=model")).toBe("model");
+  expect(p("view=tier")).toBe("tier");
+  expect(p("group=tier")).toBe("tier");
+  expect(p("group=role")).toBe("role");
+  expect(p("group=family")).toBe("model");
+  expect(p("group=none")).toBe("role");
+  expect(p("view=bogus&group=tier")).toBe("tier");
+  expect(p("view=role&group=tier")).toBe("role");
+});
+
+test("groupRows by model sums per model and orders by cost; children are the roles", () => {
+  const g = groupRows(rows, "model");
+  expect(g.map((x) => x.key)).toEqual(["claude-opus-4-7", "claude-sonnet-4-5", "mystery-model"]);
+  expect(g.map((x) => sumUsage(x.rows).cost_usd)).toEqual([16, 4, 0.5]);
+  expect(g[0]!.rows.map((r) => r.role)).toEqual(["manager", "coder"]);
+});
+
+test("groupRows by role orders by cost and by tier follows think, work, basic, other", () => {
+  expect(groupRows(rows, "role").map((x) => x.key)).toEqual(["manager", "coder", "main", "qa-bot"]);
+  expect(groupRows(rows, "tier").map((x) => x.key)).toEqual(["think", "work", "other"]);
+  expect(groupRows([], "role")).toEqual([]);
+});
+
+test("viewForKey wraps around and ignores other keys", () => {
+  expect(viewForKey("role", "ArrowRight")).toBe("model");
+  expect(viewForKey("tier", "ArrowRight")).toBe("role");
+  expect(viewForKey("role", "ArrowLeft")).toBe("tier");
+  expect(viewForKey("model", "Home")).toBe("role");
+  expect(viewForKey("model", "End")).toBe("tier");
+  expect(viewForKey("model", "a")).toBeUndefined();
+});
+
+test("agentHref links managed agents only, encoding the name", () => {
+  expect(agentHref("coder")).toBe("#/agents/coder");
+  expect(agentHref("my agent/x")).toBe("#/agents/my%20agent%2Fx");
+  expect(agentHref("main")).toBeUndefined();
+  expect(agentHref("subagent")).toBeUndefined();
+});
+
+test("flipsFor flips every key to reach the wanted open state", () => {
+  expect(flipsFor(["a", "b"], true, true)).toEqual(["a", "b"]); // default closed, want open
+  expect(flipsFor(["a", "b"], true, false)).toEqual([]);
+  expect(flipsFor(["a", "b"], false, false)).toEqual(["a", "b"]);
+  expect(flipsFor(["a", "b"], false, true)).toEqual([]);
 });

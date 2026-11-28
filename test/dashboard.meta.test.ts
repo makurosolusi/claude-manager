@@ -28,19 +28,21 @@ describe("liveMeta", () => {
     save("{ not json");
     const next = meta();
     expect(next.roles.some((r) => r.name === "qa-extra")).toBe(true);
-    expect(next.error).toStartWith("config.json is invalid: ");
-    expect(next.error).toEndWith("; showing last valid roles");
-    expect(() => loadConfigSync()).toThrow("invalid JSON");
+    expect(next.error).toStartWith("config.json is not valid JSON: ");
+    expect(next.error).toEndWith(" — fix it or run claude-manager doctor");
+    expect(() => loadConfigSync()).toThrow("config.json is not valid JSON");
   });
 
-  test("a sync error wins over the config error, and a fixed config clears the message", () => {
+  test("the config error comes first and the sync error is appended, and a fixed config clears the message", () => {
     save({ customRoles: {} });
     const s: SyncMeta = { ...state, error: "boom" };
     const meta = liveMeta(s);
     save("{ not json");
-    expect(meta().error).toBe("boom");
+    const both = meta().error!;
+    expect(both).toStartWith("config.json is not valid JSON");
+    expect(both).toEndWith("; sync also failed: boom");
     s.error = null;
-    expect(meta().error).toContain("config.json is invalid");
+    expect(meta().error).toContain("config.json is not valid JSON");
     save({ customRoles: {} });
     expect(meta().error).toBeNull();
   });

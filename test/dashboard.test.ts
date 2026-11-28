@@ -122,6 +122,7 @@ describe("dashboard api", () => {
     const byName = Object.fromEntries(p.items.map((r) => [r.project, r]));
     expect(byName["/work/app"]).toMatchObject({ sessions: 1, requests: 4 });
     expect(byName["/work/web"]).toMatchObject({ sessions: 2, requests: 3 });
+    expect(byName["/work/app"]).toMatchObject({ path_display: "/work/app", name: "app", parent: "/work", kind: "other", repo: null }); // outside the temp HOME
   });
 
   test("sessions are paged newest first", async () => {

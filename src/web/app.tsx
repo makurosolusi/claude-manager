@@ -14,6 +14,8 @@ import { OverviewPage } from "@/pages/overview.page.tsx";
 import { ProjectsPage } from "@/pages/projects.page.tsx";
 import { SessionsPage } from "@/pages/sessions.page.tsx";
 import { SessionDetailPage } from "@/pages/session-detail.page.tsx";
+import { AgentsPage } from "@/pages/agents.page.tsx";
+import { AgentDetailPage } from "@/pages/agent-detail.page.tsx";
 import { RolesPage } from "@/pages/roles.page.tsx";
 import { LivePage } from "@/pages/live.page.tsx";
 
@@ -26,6 +28,7 @@ const NAV = [
   { path: "/", label: "Overview", icon: NAV_ICON.overview, match: (p: string) => p === "/" },
   { path: "/projects", label: "Projects", icon: NAV_ICON.projects, match: (p: string) => p.startsWith("/projects") },
   { path: "/sessions", label: "Sessions", icon: NAV_ICON.sessions, match: (p: string) => p.startsWith("/sessions") },
+  { path: "/agents", label: "Agents", icon: NAV_ICON.agents, match: (p: string) => p.startsWith("/agents") },
   { path: "/roles", label: "Roles", icon: NAV_ICON.roles, match: (p: string) => p.startsWith("/roles") },
   { path: "/live", label: "Live", icon: NAV_ICON.live, match: (p: string) => p.startsWith("/live") },
 ];
@@ -48,12 +51,15 @@ export function App() {
   const since = useMemo(() => sinceFor(range), [range, dataVersion]);
   const { tiers, roles } = meta ?? {};
   const sessionId = path.match(/^\/sessions\/(.+)$/)?.[1];
-  const timeless = !!sessionId || path.startsWith("/live");
+  const agentName = path.match(/^\/agents\/(.+)$/)?.[1];
+  const timeless = !!sessionId || path.startsWith("/live") || path.startsWith("/agents");
 
   let page;
   if (sessionId) page = <SessionDetailPage id={decodeURIComponent(sessionId)} since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
   else if (path === "/projects") page = <ProjectsPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
   else if (path === "/sessions") page = <SessionsPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
+  else if (agentName) page = <AgentDetailPage name={decodeURIComponent(agentName)} since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
+  else if (path === "/agents") page = <AgentsPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
   else if (path === "/roles") page = <RolesPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
   else if (path === "/live") page = <LivePage range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
   else if (path === "/") page = <OverviewPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
@@ -63,13 +69,13 @@ export function App() {
     <div className="flex min-h-dvh flex-col">
       <a href="#main" className="sr-only z-30 rounded-md bg-background px-3 py-2 text-sm focus:not-sr-only focus:fixed focus:left-4 focus:top-2 focus:outline-2 focus:outline-solid focus:outline-ring">Skip to content</a>
       <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
-        {/* <640: row 1 = logo · sync · range · theme, row 2 = 5-column nav (all links visible, 48px targets). ≥640: one h-12 row. */}
+        {/* <640: row 1 = logo · sync · range · theme, row 2 = 6-column nav (all links visible, 48px targets). ≥640: one h-12 row. */}
         <div className={cn(CONTAINER, "flex flex-wrap items-center gap-x-3 gap-y-0 sm:h-12 sm:flex-nowrap sm:gap-x-4")}>
           <a href={hashHref("/", { range: rangeParam(range) })} className="order-1 flex min-h-11 shrink-0 items-center gap-2 rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring sm:min-h-0">
             <span aria-hidden className="size-2.5 rounded-[2px] bg-brand" />
             <span className="font-mono text-[13px] font-semibold">claude-manager</span>
           </a>
-          <nav aria-label="Main" className="order-5 -mx-4 grid basis-full grid-cols-5 sm:order-2 sm:mx-0 sm:flex sm:min-w-0 sm:flex-1 sm:basis-0 sm:gap-0.5">
+          <nav aria-label="Main" className="order-5 -mx-4 grid basis-full grid-cols-6 sm:order-2 sm:mx-0 sm:flex sm:min-w-0 sm:flex-1 sm:basis-0 sm:gap-0.5">
             {NAV.map((n) => {
               const active = n.match(path);
               return (

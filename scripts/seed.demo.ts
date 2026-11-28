@@ -1,11 +1,13 @@
 // Writes synthetic, deterministic Claude Code transcripts for dashboard demos and UI audits. Never reads real logs.
 // Usage: bun scripts/seed.demo.ts <claude-config-dir>   (e.g. $T/.claude, then run the dashboard with CLAUDE_CONFIG_DIR=$T/.claude)
-// For the custom role `ui-ux` to show as "custom" (not external), register it first, with the same env as the dashboard:
-//   HOME=$T CLAUDE_CONFIG_DIR=$T/.claude CLAUDE_MANAGER_HOME=$T/.cm bun src/cli.ts roles add ui-ux --tier work --description "UI/UX work"
+// Also sets up the Agents page demo through the real CLI: custom role `ui-ux`, disabled preset `writer`, a user-scope install
+// (manifest) and an external hand-written agent. It uses HOME=<parent of dir> and CLAUDE_MANAGER_HOME=<parent>/.cm, so run the dashboard with:
+//   HOME=$T CLAUDE_CONFIG_DIR=$T/.claude CLAUDE_MANAGER_HOME=$T/.cm bun src/cli.ts dashboard
 // Shape follows src/ingest/ingest.parser.ts and the fixtures in test/dashboard.test.ts.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { HEAVY_ROLES, LONG_TITLE, MODEL, type ModelKey, PROJECTS, PROMPTS, ROLE_MODELS, TITLES, TOOLS } from "./seed.demo.data.ts";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { EXTERNAL_AGENTS, HEAVY_ROLES, MANAGER_STEPS, LONG_TITLE, MODEL, type ModelKey, PROJECTS as PROJECT_TEMPLATES, PROMPTS, ROLE_MODELS, TITLES, TOOLS } from "./seed.demo.data.ts";
 
 const SEED = 0x5eed;
 const DAYS = 30;
@@ -15,6 +17,8 @@ const PREV_SESSIONS = 8;
 const MIN = 60_000;
 const DAY = 24 * 60 * MIN;
 const WINDOW_200K = 200_000;
+/** Subagent runs in the one big demo session (specs[0]). */
+const FANOUT_RUNS = 180;
 const CODER_REQUESTED = "claude-sonnet-5-5";
 
 const root = process.argv[2];
@@ -23,6 +27,9 @@ if (!root) {
   process.exit(1);
 }
 const projectsDir = join(root, "projects");
+// Same HOME the run command pins (parent of the config dir), so `~` paths read as home-relative in the dashboard.
+const home = dirname(resolve(root));
+const PROJECTS = PROJECT_TEMPLATES.map((p) => ({ ...p, cwd: p.cwd.replace(/^~/, home).replace(/^\$TMP/, tmpdir()) }));
 rmSync(projectsDir, { recursive: true, force: true }); // rerun = same output, no stale files
 
 // mulberry32: tiny seeded PRNG so every run produces the same data shape.
@@ -38,7 +45,7 @@ const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)]!;
 const hex = (n: number) => Array.from({ length: n }, () => Math.floor(rand() * 16).toString(16)).join("");
 const uuid = () => `${hex(8)}-${hex(4)}-4${hex(3)}-a${hex(3)}-${hex(12)}`;
 
-interface Spec { sid: string; project: (typeof PROJECTS)[number]; start: number; model: ModelKey; mid: string; turns: number; titled: boolean; title?: string; manager: boolean; agent?: string; ctxStart: number; ctxGrowth: number }
+interface Spec { sid: string; project: (typeof PROJECTS)[number]; start: number; model: ModelKey; mid: string; turns: number; titled: boolean; title?: string; manager: boolean; agent?: string; ctxStart: number; ctxGrowth: number; fanout?: number }
 
 let seq = 0;
 const lines = new Map<string, string[]>();
@@ -78,10 +85,10 @@ const assistant = (model: string, u: Record<string, number>, content: unknown[] 
 const prompt = (text: string) => ({ type: "user", promptSource: "typed", message: { role: "user", content: text } });
 
 /** Subagent transcript + .meta.json; may spawn one nested reviewer (depth 2). Returns ms spent. */
-function subagent(s: Spec, ts: number, branch: string, role: string, toolUseId: string, depth: number): number {
+function subagent(s: Spec, ts: number, branch: string, role: string, toolUseId: string, depth: number, light = false): number {
   const agentId = hex(17);
   const path = fileFor(s.project.cwd, s.sid, agentId);
-  const heavy = HEAVY_ROLES.includes(role) && rand() < 0.6;
+  const heavy = !light && HEAVY_ROLES.includes(role) && rand() < 0.6;
   const sc = { isSidechain: true, agentId };
   emit(path, { ...base(s, ts, branch), ...sc, ...prompt(`${role}: ${pick(PROMPTS)}`) });
   const steps = heavy ? int(220, 420) : int(2, 7);
@@ -124,6 +131,14 @@ function session(s: Spec): number {
     }
     t += int(1, 12) * MIN;
   }
+  // Big fan-out session (hundreds of short subagent runs across every role) so the Agents tab needs paging.
+  const roleNames = Object.keys(ROLE_MODELS);
+  for (let i = 0; i < (s.fanout ?? 0); i++) {
+    const role = roleNames[i % roleNames.length]!;
+    const tu = `toolu_${hex(20)}`;
+    emit(path, { ...base(s, t, branch), ...assistant(s.mid, usage(ctx), [{ type: "tool_use", id: tu, name: "Agent", input: { subagent_type: role } }]) });
+    t += subagent(s, t + 1000, branch, role, tu, 1, true) + int(2, 20) * 1000;
+  }
   if (s.titled) emit(path, { type: "ai-title", sessionId: s.sid, aiTitle: s.title ?? pick(TITLES) });
   return t;
 }
@@ -141,7 +156,7 @@ function spec(start: number, over: Partial<Spec> = {}): Spec {
 const specs: Spec[] = [];
 for (let i = 0; i < SESSIONS; i++) specs.push(spec(now - DAYS * DAY + Math.floor(rand() * (DAYS - 1) * DAY)));
 for (let i = 0; i < PREV_SESSIONS; i++) specs.push(spec(now - 2 * DAYS * DAY + Math.floor(rand() * (DAYS - 1) * DAY)));
-Object.assign(specs[0]!, { titled: true, title: LONG_TITLE });
+Object.assign(specs[0]!, { titled: true, title: LONG_TITLE, manager: true, fanout: FANOUT_RUNS });
 for (const s of specs.slice(1, 6)) s.titled = false; // a few untitled sessions
 // Non-preset main agents: custom `ui-ux` and external `Plan` / `code-simplifier`, so their role style is visible in the demo.
 specs.slice(6, 12).forEach((s, i) => (s.agent = i < 3 ? "ui-ux" : i < 5 ? "Plan" : "code-simplifier"));
@@ -185,4 +200,16 @@ for (const [path, ls] of lines) {
 }
 for (const [path, meta] of metas) writeFileSync(path, JSON.stringify(meta));
 const agents = metas.size;
+
+// Agents page demo: external agent files first, then the CLI (config + install). Env is pinned to the temp dir, never the real ~/.claude.
+const configDir = resolve(root);
+const env = { ...process.env, HOME: dirname(configDir), CLAUDE_CONFIG_DIR: configDir, CLAUDE_MANAGER_HOME: join(dirname(configDir), ".cm") };
+rmSync(env.CLAUDE_MANAGER_HOME, { recursive: true, force: true }); // rerun = same output (config and manifest start clean)
+rmSync(join(configDir, "agents"), { recursive: true, force: true });
+mkdirSync(join(configDir, "agents"), { recursive: true });
+for (const [name, text] of Object.entries(EXTERNAL_AGENTS)) writeFileSync(join(configDir, "agents", `${name}.md`), text);
+for (const step of MANAGER_STEPS) {
+  const r = Bun.spawnSync(["bun", join(import.meta.dir, "../src/cli.ts"), ...step], { env, stderr: "pipe", stdout: "pipe" });
+  if (r.exitCode !== 0) throw new Error(`seed.demo: "claude-manager ${step.join(" ")}" failed (${r.exitCode}): ${r.stderr.toString().trim()}`);
+}
 console.log(`seed.demo: ${specs.length + LIVE_COUNT} sessions, ${agents} subagents, ${PROJECTS.length} projects → ${projectsDir}`);

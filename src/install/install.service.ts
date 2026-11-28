@@ -5,7 +5,7 @@ import { type Config, TIER_ENV, TIERS } from "../config/config.store.ts";
 import { resolveRoles } from "../roles/roles.registry.ts";
 import { renderRole } from "../roles/roles.render.ts";
 import { sha256 } from "../storage/json.file.ts";
-import { backupPath, type InstallRecord, loadManifest, saveManifest } from "./install.manifest.ts";
+import { backupPath, type InstallRecord, loadManifest, type Manifest, saveManifest } from "./install.manifest.ts";
 import { getKey, revertKey, setKey } from "./settings.merge.ts";
 import { type FileOp, parseSettings, readText, type Target } from "./install.target.ts";
 
@@ -15,7 +15,8 @@ export interface InstallOptions {
   dryRun?: boolean;
 }
 
-type Write = () => Promise<unknown>;
+/** One planned change: `run` touches disk (absent = nothing to write), `done` records it in the manifest once it succeeded. */
+type Step = { run?: () => Promise<unknown>; done: (rec: InstallRecord) => void };
 
 function desiredKeys(config: Config, mainAgent?: string): Record<string, unknown> {
   const keys: Record<string, unknown> = {};
@@ -42,7 +43,7 @@ export async function install(target: Target, config: Config, opts: InstallOptio
     installedAt: new Date().toISOString(),
   };
   const ops: FileOp[] = [];
-  const writes: Write[] = [];
+  const steps: Step[] = [];
 
   for (const role of roles) {
     const path = join(target.agentsDir, `${role.name}.md`);
@@ -50,9 +51,10 @@ export async function install(target: Target, config: Config, opts: InstallOptio
     const owned = prior?.files[path];
     const onDisk = await readText(path);
     record.files[path] = { sha256: sha256(content), backup: owned?.backup };
+    const done = (r: InstallRecord) => void (r.files[path] = record.files[path]!);
     if (onDisk === undefined) {
       ops.push({ path, op: "create" });
-      writes.push(() => Bun.write(path, content));
+      steps.push({ run: () => Bun.write(path, content), done });
       continue;
     }
     if (!owned) {
@@ -64,23 +66,30 @@ export async function install(target: Target, config: Config, opts: InstallOptio
       const backup = backupPath(basename(path));
       record.files[path]!.backup = backup;
       ops.push({ path, op: conflict ? "conflict" : "unchanged" });
-      writes.push(async () => {
-        await Bun.write(backup, onDisk);
-        await Bun.write(path, content);
+      steps.push({
+        run: async () => {
+          await Bun.write(backup, onDisk);
+          await Bun.write(path, content);
+        },
+        done,
       });
       continue;
     }
     if (onDisk === content) {
       ops.push({ path, op: "unchanged" });
+      steps.push({ done });
       continue;
     }
     const edited = sha256(onDisk) !== owned.sha256;
     ops.push({ path, op: edited ? "conflict" : "update" });
     if (edited && !opts.force) continue;
-    writes.push(async () => {
-      // Safety copy of the user's edits; not restored on uninstall (the original backup is).
-      if (edited) await Bun.write(backupPath(basename(path)), onDisk);
-      await Bun.write(path, content);
+    steps.push({
+      run: async () => {
+        // Safety copy of the user's edits; not restored on uninstall (the original backup is).
+        if (edited) await Bun.write(backupPath(basename(path)), onDisk);
+        await Bun.write(path, content);
+      },
+      done,
     });
   }
 
@@ -94,15 +103,20 @@ export async function install(target: Target, config: Config, opts: InstallOptio
   for (const [path, rec] of Object.entries(prior?.files ?? {})) {
     if (record.files[path]) continue;
     const onDisk = await readText(path);
+    const drop = (r: InstallRecord) => void delete r.files[path];
     if (onDisk === undefined) continue;
     if (sha256(onDisk) !== rec.sha256) {
       ops.push({ path, op: "keep-modified" });
+      steps.push({ done: drop });
       continue;
     }
     ops.push({ path, op: rec.backup ? "restore" : "remove" });
-    writes.push(async () => {
-      if (rec.backup) await Bun.write(path, Bun.file(rec.backup));
-      else await rm(path, { force: true });
+    steps.push({
+      run: async () => {
+        if (rec.backup) await Bun.write(path, Bun.file(rec.backup));
+        else await rm(path, { force: true });
+      },
+      done: drop,
     });
   }
 
@@ -112,7 +126,7 @@ export async function install(target: Target, config: Config, opts: InstallOptio
   if (!prior && raw !== undefined) {
     const backup = backupPath(`${target.scope}-settings.json`);
     record.settings.backup = backup;
-    writes.push(() => Bun.write(backup, raw));
+    steps.push({ run: () => Bun.write(backup, raw), done: (r) => void (r.settings.backup = backup) });
   }
   for (const [key, value] of Object.entries(desiredKeys(config, opts.mainAgent))) {
     const priorKey = prior?.settings.keys[key];
@@ -122,16 +136,47 @@ export async function install(target: Target, config: Config, opts: InstallOptio
   for (const [key, rec] of Object.entries(prior?.settings.keys ?? {})) {
     if (!record.settings.keys[key]) revertKey(settings, key, rec);
   }
+  const keysDone = (r: InstallRecord) => {
+    r.settings.keys = record.settings.keys;
+    r.mainAgent = record.mainAgent;
+  };
   if (JSON.stringify(settings) !== before || raw === undefined) {
     ops.push({ path: target.settingsPath, op: raw === undefined ? "create" : "update" });
-    writes.push(() => Bun.write(target.settingsPath, `${JSON.stringify(settings, null, 2)}\n`));
-  } else ops.push({ path: target.settingsPath, op: "unchanged" });
+    steps.push({ run: () => Bun.write(target.settingsPath, `${JSON.stringify(settings, null, 2)}\n`), done: keysDone });
+  } else {
+    ops.push({ path: target.settingsPath, op: "unchanged" });
+    steps.push({ done: keysDone });
+  }
 
   if (opts.dryRun) return ops;
-  for (const write of writes) await write();
+  await runSteps(steps, manifest, target.settingsPath, prior ?? { ...record, mainAgent: undefined, files: {}, settings: { keys: {} } });
   manifest.installs[target.settingsPath] = record;
   await saveManifest(manifest);
   return ops;
+}
+
+/**
+ * Runs the steps in order. On failure the manifest records exactly what was written (`base` + finished steps),
+ * so files written before the failure match their sha and the next apply doesn't report them as edited by hand.
+ */
+async function runSteps(steps: Step[], manifest: Manifest, key: string, base: InstallRecord): Promise<void> {
+  const progress = structuredClone(base);
+  let wrote = false;
+  try {
+    for (const step of steps) {
+      await step.run?.();
+      wrote ||= step.run !== undefined;
+      step.done(progress);
+    }
+  } catch (err) {
+    if (manifest.installs[key] || wrote) {
+      manifest.installs[key] = progress;
+      await saveManifest(manifest).catch((saveErr: unknown) => {
+        throw new Error(`${(err as Error).message}; recording install progress for ${key} also failed: ${(saveErr as Error).message}`, { cause: err });
+      });
+    }
+    throw err;
+  }
 }
 
 /** Re-renders every recorded install with the current config (after roles/tier changes). */

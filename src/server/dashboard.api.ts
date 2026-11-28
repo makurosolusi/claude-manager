@@ -7,9 +7,13 @@ import { contextWindow } from "./context.window.ts";
 import { filter, HTTP, HttpError, pageQuery, sessionFilter, sessionGroupBy, sessionQuery, wantsFacets } from "./dashboard.params.ts";
 import type { ApiError, DashboardMeta, LiveSession, Overview, SessionGroups, SessionsResponse } from "./dashboard.types.ts";
 import { FAVICON_PATHS, faviconResponse } from "./favicon.ts";
+import { isAgentsPath, routeAgents } from "./agents.api.ts";
+import { isAgentsWriteRoute, routeAgentsWrite } from "./agents.write.api.ts";
+import { isTiersPath, isTiersWriteRoute, routeTiersRead, routeTiersWrite } from "./tiers.api.ts";
+import { LOCAL_HOSTS, type WriteSession } from "./write.guard.ts";
 import { routeSessionDetail } from "./session.detail.api.ts";
 import { PRESET_ROLES } from "../roles/roles.presets.ts";
-
+import { withProjectPaths } from "./project.env.ts";
 /** Port the dashboard listens on unless config or --port says otherwise. */
 export const DEFAULT_DASHBOARD_PORT = 5757;
 /** How often the running dashboard re-imports new transcript bytes. */
@@ -22,7 +26,6 @@ export const LIVE_WINDOW_MIN = 15;
 const DAY_LIMIT = 90;
 const BREAKDOWN_LIMIT = 50;
 const MINUTE_MS = 60_000;
-const ALLOWED_HOSTS = ["127.0.0.1", "localhost"];
 
 /** Supplies /api/meta; without one the endpoint reports "never synced" and the default tier models. */
 export type MetaProvider = () => DashboardMeta;
@@ -81,7 +84,7 @@ function groups(db: Database, url: URL, now = Date.now()): SessionGroups {
 function route(db: Database, url: URL, meta: MetaProvider): unknown {
   const path = url.pathname.replace(/\/+$/, "");
   if (path === "/api/overview") return overview(db, filter(url));
-  if (path === "/api/projects") return repo.projectsPage(db, filter(url), pageQuery(url));
+  if (path === "/api/projects") return withProjectPaths(repo.projectsPage(db, filter(url), pageQuery(url)));
   if (path === "/api/sessions") return sessions(db, url);
   if (path === "/api/sessions/groups") return groups(db, url); // before /api/sessions/:id, which would read "groups" as an id
   if (path === "/api/roles") return repo.rolesPage(db, filter(url), pageQuery(url));
@@ -94,16 +97,23 @@ function route(db: Database, url: URL, meta: MetaProvider): unknown {
   throw new HttpError(HTTP.notFound, `unknown endpoint ${path}`);
 }
 
+/** Host allowlist first, then GET-only (plus the agents and tier write routes); undefined when the request may proceed. */
+function guard(req: Request, url: URL, port: number): Response | undefined {
+  // DNS rebinding guard: a foreign page resolving its own name to 127.0.0.1 still sends its own Host.
+  // Bun.serve builds req.url from Host, so url.host is the fallback when the header is absent.
+  const host = req.headers.get("host") ?? url.host;
+  if (!LOCAL_HOSTS.some((h) => host === `${h}:${port}`)) return fail(HTTP.forbidden, "forbidden host");
+  if (req.method !== "GET" && !isAgentsWriteRoute(req.method, url.pathname) && !isTiersWriteRoute(req.method, url.pathname)) return fail(HTTP.notAllowed, "method not allowed");
+  return undefined;
+}
+
 /** Serves the read-only dashboard JSON API; undefined for non-/api paths. */
 export function handleApi(req: Request, db: Database, port = DEFAULT_DASHBOARD_PORT, meta: MetaProvider = NO_META): Response | undefined {
   const url = new URL(req.url);
   if (FAVICON_PATHS.includes(url.pathname)) return faviconResponse();
   if (url.pathname !== "/api" && !url.pathname.startsWith("/api/")) return undefined;
-  // DNS rebinding guard: a foreign page resolving its own name to 127.0.0.1 still sends its own Host.
-  // Bun.serve builds req.url from Host, so url.host is the fallback when the header is absent.
-  const host = req.headers.get("host") ?? url.host;
-  if (!ALLOWED_HOSTS.some((h) => host === `${h}:${port}`)) return fail(HTTP.forbidden, "forbidden host");
-  if (req.method !== "GET") return fail(HTTP.notAllowed, "method not allowed");
+  const denied = guard(req, url, port);
+  if (denied) return denied;
   try {
     const body = route(db, url, meta);
     return body instanceof Response ? body : json(body);
@@ -111,4 +121,23 @@ export function handleApi(req: Request, db: Database, port = DEFAULT_DASHBOARD_P
     if (err instanceof HttpError) return fail(err.status, err.message);
     throw err;
   }
+}
+
+const NO_SESSION: WriteSession = { readOnly: true, token: null };
+
+/** handleApi plus /api/session and the async /api/agents routes (same Host guard); undefined for non-/api paths. */
+export function handleRequest(req: Request, db: Database, port = DEFAULT_DASHBOARD_PORT, meta: MetaProvider = NO_META, session: WriteSession = NO_SESSION): Response | Promise<Response> | undefined {
+  const url = new URL(req.url);
+  if (url.pathname.replace(/\/+$/, "") === "/api/session") {
+    return guard(req, url, port) ?? Response.json({ write: !session.readOnly, token: session.token }, { headers: { "Cache-Control": "no-store" } });
+  }
+  if (isTiersPath(url.pathname)) {
+    const refused = guard(req, url, port);
+    if (refused) return refused;
+    return req.method === "GET" ? routeTiersRead(db, url.pathname) : routeTiersWrite(req, url.pathname, session, port);
+  }
+  if (!isAgentsPath(url.pathname)) return handleApi(req, db, port, meta);
+  const denied = guard(req, url, port);
+  if (denied) return denied;
+  return req.method === "GET" ? routeAgents(db, url.pathname) : routeAgentsWrite(req, db, url.pathname, session, port);
 }

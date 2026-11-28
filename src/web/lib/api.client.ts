@@ -17,6 +17,17 @@ export function withQuery(path: string, query: Query = {}): string {
   return params.size ? `${path}?${params}` : path;
 }
 
+/** A non-2xx GET: the message keeps the `GET path failed (status): reason` format, `status` is for callers that branch on it (404). */
+export class ApiRequestError extends Error {
+  constructor(readonly path: string, readonly status: number, reason: string) {
+    super(`GET ${path} failed (${status}): ${reason}`);
+    this.name = "ApiRequestError";
+  }
+}
+
+/** True when `err` is a 404 from `getJson`. */
+export const isNotFound = (err: unknown): boolean => err instanceof ApiRequestError && err.status === 404;
+
 /** GETs a dashboard API path and parses JSON; non-2xx responses throw with the server's `{error}` message. */
 export async function getJson<T>(path: string, query: Query = {}, signal?: AbortSignal): Promise<T> {
   const url = withQuery(path, query);
@@ -32,7 +43,7 @@ export async function getJson<T>(path: string, query: Query = {}, signal?: Abort
   if (!res.ok) {
     // A non-JSON error body (e.g. proxy page) falls back to statusText; the request still throws below.
     const body = (await res.json().catch(() => null)) as ApiError | null;
-    throw new Error(`GET ${path} failed (${res.status}): ${body?.error ?? res.statusText}`);
+    throw new ApiRequestError(path, res.status, body?.error ?? res.statusText);
   }
   return (await res.json()) as T;
 }

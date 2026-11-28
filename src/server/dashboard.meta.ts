@@ -19,8 +19,9 @@ export function liveMeta(state: SyncMeta, load: () => Config = loadConfigSync): 
       last = fromConfig(load());
     } catch (e) {
       // Config mid-edit or malformed: keep serving the last good snapshot rather than failing /api/meta, but tell the user why roles look stale.
-      // A sync error takes precedence: it is the older, more fundamental problem.
-      error ??= `config.json is invalid: ${e instanceof Error ? e.message : String(e)}; showing last valid roles`;
+      // The config message goes first: it is actionable, while a sync error caused by the same broken file is only a vaguer echo of it.
+      const config = `${e instanceof Error ? e.message : String(e)} — fix it or run claude-manager doctor`;
+      error = state.error ? `${config}; sync also failed: ${state.error}` : config;
     }
     return { ...state, error, ...last };
   };
