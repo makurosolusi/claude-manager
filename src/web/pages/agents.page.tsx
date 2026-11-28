@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, ShieldCheck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { PageProps } from "@/lib/page.props.ts";
 import type { AgentRow, AgentsResponse } from "../../server/agents.types.ts";
@@ -12,6 +12,7 @@ import { buttonVariants } from "@/components/ui/button.tsx";
 import { holdNotice, useNotice, useWriteMode, READ_ONLY_REASON } from "@/lib/agent.write.ts";
 import { AgentBanner } from "@/components/agent.banner.tsx";
 import { AgentsHierarchy } from "@/components/agents.hierarchy.tsx";
+import { PolicyBanner } from "@/components/policy.banner.tsx";
 import { NoticeBar } from "@/components/notice.bar.tsx";
 import { TierEditorHost } from "@/components/tier.editor.host.tsx";
 import { AGENT_HIDEABLE, agentColumns } from "@/components/agents.columns.tsx";
@@ -19,6 +20,7 @@ import { ClientTable, type ClientGrouping } from "@/components/client.table.tsx"
 import { CostCell } from "@/components/cost.cell.tsx";
 import { PageHeader } from "@/components/page.header.tsx";
 import { useApi } from "@/lib/api.client.ts";
+import { usePolicy } from "@/lib/policy.use.ts";
 import { AGENTS_DEFAULT_GROUP, AGENTS_PATH, AGENTS_SPEC, TIER_PINNED, agentGroupKey, agentTableOptions, levelLabel, orderByGroup } from "@/lib/agents.table.ts";
 import { fmtInt } from "@/lib/format.ts";
 import { hashHref, withParams } from "@/lib/hash.route.ts";
@@ -61,6 +63,7 @@ export function AgentsPage({ dataVersion, params, tiers, roles }: PageProps) {
   const view = useAgentsView(params);
   const { state } = view;
   const { data, error, loading, stale } = useApi<AgentsResponse>("/api/agents", {}, dataVersion + retry);
+  const policy = usePolicy(dataVersion + retry).data;
   const tiersApi = useApi<TiersResponse>("/api/tiers", {}, dataVersion + retry);
   const [editing, setEditing] = useState<{ tier: Tier; preselect?: string } | null>(null);
   const [tierSaved, setTierSaved] = useState<string | null>(null);
@@ -70,7 +73,7 @@ export function AgentsPage({ dataVersion, params, tiers, roles }: PageProps) {
     return { ...r, filtered: orderByGroup(r.filtered, state.group) };
   }, [data, JSON.stringify(state)]);
   const showRerouted = !!data?.items.some((r) => (r.usage.rerouted_pct ?? 0) > 0);
-  const columns = useMemo(() => agentColumns(roles, data?.tiers ?? tiers, showRerouted, state.group !== "tier"), [roles, data?.tiers, tiers, showRerouted, state.group]);
+  const columns = useMemo(() => agentColumns(roles, data?.tiers ?? tiers, showRerouted, state.group !== "tier", policy), [roles, data?.tiers, tiers, showRerouted, state.group, policy]);
 
   const grouping: ClientGrouping<AgentRow> = {
     options: [{ value: "tier", label: "Tier" }, { value: "kind", label: "Kind" }, { value: "scope", label: "Scope" }, { value: NO_GROUP, label: "No grouping" }],
@@ -88,13 +91,17 @@ export function AgentsPage({ dataVersion, params, tiers, roles }: PageProps) {
       {creating
         ? <AgentFormHeader backHref={`#${AGENTS_PATH}`} backLabel="Agents" title="New agent" />
         : <PageHeader title="Agents" icon={NAV_ICON.agents} description={SUBTITLE}
-            actions={write === false ? <ReadOnlyBadge /> : write ? <a href="#/agents?new=1" className={buttonVariants()}><Plus aria-hidden />New agent</a> : undefined} />}
+            actions={<>
+              <a href="#/policy" className={buttonVariants({ variant: "outline" })}><ShieldCheck aria-hidden />Policy</a>
+              {write === false ? <ReadOnlyBadge /> : write ? <a href="#/agents?new=1" className={buttonVariants()}><Plus aria-hidden />New agent</a> : undefined}
+            </>} />}
       <AgentNotice notice={notice} onClose={() => setNotice(null)} />
       {tierSaved && (
         <NoticeBar tone="success" onClose={() => setTierSaved(null)}>
           {tierSaved}<span className="mt-0.5 block text-xs opacity-80">{TIER_LIVE_NOTE}</span>
         </NoticeBar>
       )}
+      {!creating && <PolicyBanner policy={policy} readOnly={write === false} />}
       {data && <AgentBanner data={data} />}
       {!creating && <AgentsHierarchy items={data?.items ?? []} tiers={tiersApi.data} tiersError={tiersApi.error} onRetry={() => setRetry((n) => n + 1)} write={write === true} onEdit={(tier, preselect) => setEditing({ tier, preselect })} />}
       {editing && tiersApi.data && data && (

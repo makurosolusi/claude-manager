@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from "react";
 import type { PageProps } from "@/lib/page.props.ts";
-import { TriangleAlert } from "lucide-react";
+import { OverviewError } from "@/components/overview.error.tsx";
+import { PolicyBannerHost } from "@/components/policy.banner.tsx";
 import { ModelDot } from "@/components/model.badge.tsx";
 import { NAV_ICON, KPI_ICON } from "@/lib/icon.map.ts";
 import { cacheLevel } from "@/lib/status.level.ts";
 import type { Overview, Page, ProjectRow, SessionRow, Totals } from "../../server/dashboard.types.ts";
-import { Button } from "@/components/ui/button.tsx";
 import { PageHeader } from "@/components/page.header.tsx";
 import { Panel } from "@/components/panel.tsx";
 import { ReroutedLink } from "@/components/reroute.badge.tsx";
@@ -79,12 +79,7 @@ export function OverviewPage({ since, range, dataVersion, tiers }: PageProps) {
     return (
       <>
         {header}
-        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-4 text-[13px]">
-          <TriangleAlert aria-hidden className="size-4 text-destructive" />
-          <span className="font-medium text-foreground">Couldn't load overview.</span>
-          <span className="min-w-0 break-words text-muted-foreground">{ov.error.message}</span>
-          <Button size="xs" variant="outline" onClick={onRetry}>Retry</Button>
-        </div>
+        <OverviewError message={ov.error.message} onRetry={onRetry} />
       </>
     );
   }
@@ -123,6 +118,7 @@ export function OverviewPage({ since, range, dataVersion, tiers }: PageProps) {
   return (
     <>
       {header}
+      <PolicyBannerHost tick={tick} />
       <div aria-busy={stale || undefined} className={cn("flex flex-col gap-6 transition-opacity", stale && "opacity-60")}>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={KPI_ICON.cost} label="Cost (est.)" value={kpi(fmtUsd(totalCost))} delta={delta(deltas?.cost, "pct")} hint={d?.total.unpriced ? `${plural(d.total.unpriced, "request")} unpriced` : undefined} />
