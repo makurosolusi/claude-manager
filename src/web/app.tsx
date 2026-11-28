@@ -18,6 +18,8 @@ import { AgentsPage } from "@/pages/agents.page.tsx";
 import { AgentDetailPage } from "@/pages/agent-detail.page.tsx";
 import { RolesPage } from "@/pages/roles.page.tsx";
 import { LivePage } from "@/pages/live.page.tsx";
+import { PolicyPage } from "@/pages/policy.page.tsx";
+import { PolicyAuditPage } from "@/pages/policy-audit.page.tsx";
 
 /** Shared by header, main and footer so their left/right edges line up exactly. */
 const CONTAINER = "mx-auto w-full max-w-[1280px] px-4 sm:px-6";
@@ -28,7 +30,7 @@ const NAV = [
   { path: "/", label: "Overview", icon: NAV_ICON.overview, match: (p: string) => p === "/" },
   { path: "/projects", label: "Projects", icon: NAV_ICON.projects, match: (p: string) => p.startsWith("/projects") },
   { path: "/sessions", label: "Sessions", icon: NAV_ICON.sessions, match: (p: string) => p.startsWith("/sessions") },
-  { path: "/agents", label: "Agents", icon: NAV_ICON.agents, match: (p: string) => p.startsWith("/agents") },
+  { path: "/agents", label: "Agents", icon: NAV_ICON.agents, match: (p: string) => p.startsWith("/agents") || p.startsWith("/policy") },
   { path: "/roles", label: "Roles", icon: NAV_ICON.roles, match: (p: string) => p.startsWith("/roles") },
   { path: "/live", label: "Live", icon: NAV_ICON.live, match: (p: string) => p.startsWith("/live") },
 ];
@@ -52,7 +54,7 @@ export function App() {
   const { tiers, roles } = meta ?? {};
   const sessionId = path.match(/^\/sessions\/(.+)$/)?.[1];
   const agentName = path.match(/^\/agents\/(.+)$/)?.[1];
-  const timeless = !!sessionId || path.startsWith("/live") || path.startsWith("/agents");
+  const timeless = !!sessionId || path.startsWith("/live") || path.startsWith("/agents") || path.startsWith("/policy");
 
   let page;
   if (sessionId) page = <SessionDetailPage id={decodeURIComponent(sessionId)} since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
@@ -60,6 +62,8 @@ export function App() {
   else if (path === "/sessions") page = <SessionsPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
   else if (agentName) page = <AgentDetailPage name={decodeURIComponent(agentName)} since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
   else if (path === "/agents") page = <AgentsPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
+  else if (path === "/policy") page = <PolicyPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
+  else if (path === "/policy/audit") page = <PolicyAuditPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
   else if (path === "/roles") page = <RolesPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
   else if (path === "/live") page = <LivePage range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
   else if (path === "/") page = <OverviewPage since={since} range={range} dataVersion={dataVersion} params={params} tiers={tiers} roles={roles} />;
