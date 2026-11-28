@@ -17,6 +17,8 @@ export interface PolicyConfig {
   overrides: Record<string, Partial<Record<Capability, Decision>>>;
   defaultMode?: "acceptEdits" | null;
   testCommands?: string[];
+  /** Worker `ask` outcomes become `deny` with "report to the manager" (v0.4.1); absent = false. */
+  escalate?: boolean;
 }
 
 export type PolicyMatrix = Record<string, Record<Capability, Decision>>;
@@ -38,6 +40,8 @@ export interface PolicySnapshot {
   /** Managed agent file path (absolute) → sha256 hex of its content. */
   owned: Record<string, string>;
   projectDir?: string;
+  /** Copied from `PolicyConfig.escalate`; `parseSnapshot` reads a missing field as false. */
+  escalate: boolean;
 }
 
 /** PreToolUse stdin fields the policy reads (§3); everything else is ignored. All untrusted. */

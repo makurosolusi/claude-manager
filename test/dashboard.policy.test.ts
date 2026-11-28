@@ -156,7 +156,7 @@ describe("PUT /api/policy", () => {
     const r = (await res.json()) as PolicyWriteResult;
     expect(r.policy.status).toBe("enforced");
     expect(r.etag).toBe((await get()).body.etag);
-    expect(JSON.parse(text(configPath())).policy).toEqual({ enabled: true, preset: "balanced", scope: "user", overrides: {} });
+    expect(JSON.parse(text(configPath())).policy).toEqual({ enabled: true, preset: "balanced", scope: "user", overrides: {}, escalate: true });
     const s = JSON.parse(text(settingsFile()));
     expect(s.permissions.ask).toEqual([...OWNER_ASK_RULES]);
     expect(s.hooks.PreToolUse).toHaveLength(1);

@@ -1,6 +1,7 @@
 import { lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { bashCap, isOwnerOnly, isUncertain, SECRET_CMD_RE, unquote } from "./policy.bash.ts";
+import { escalate } from "./policy.escalate.ts";
 import { absDir, isShadowed } from "./policy.shadow.ts";
 import { isCellAllowed, isDecision, MAIN_ROW, OWNER_ONLY_TOKENS, RESERVED_ROWS, UNKNOWN_ROW } from "./policy.presets.ts";
 import type { Capability, Decision, HookInput, PolicyEnv, PolicyFs, PolicyResult, PolicySnapshot } from "./policy.types.ts";
@@ -20,7 +21,8 @@ export function parseSnapshot(text: string): PolicySnapshot {
   if (!isStrings(s.testCommands) || !isStrings(s.ownerOnly)) throw new Error("policy snapshot: bad testCommands/ownerOnly");
   if (!isRecord(s.owned) || !Object.values(s.owned).every((v) => typeof v === "string")) throw new Error("policy snapshot: bad owned");
   if (s.projectDir !== undefined && typeof s.projectDir !== "string") throw new Error("policy snapshot: bad projectDir");
-  return s as unknown as PolicySnapshot;
+  if (s.escalate !== undefined && typeof s.escalate !== "boolean") throw new Error("policy snapshot: bad escalate");
+  return { ...s, escalate: s.escalate === true } as unknown as PolicySnapshot;
 }
 
 /** §3 row selection: agent_type regex. */
@@ -110,10 +112,13 @@ const SECRET_REASON = "claude-manager policy: secrets (.env, keys, credentials) 
 const OWNER_REASON = "claude-manager policy: push, publish, deploy, release and rm -r are owner-only; the owner decides.";
 
 /**
- * PreToolUse decision for one hook input (§3), first match wins. No I/O except through `fs`.
- * `default` = no hook output. `reason` names row and capability only; it never echoes the input.
+ * PreToolUse decision for one hook input (§3), first match wins, then worker escalation (v0.4.1). No I/O except through
+ * `fs`. `default` = no hook output. `reason` names row and capability only; it never echoes the input.
  */
-export function decide(input: HookInput, snapshot: PolicySnapshot, fs: PolicyFs, env: PolicyEnv = {}): PolicyResult {
+export const decide = (input: HookInput, snapshot: PolicySnapshot, fs: PolicyFs, env: PolicyEnv = {}): PolicyResult =>
+  escalate(decideCell(input, snapshot, fs, env), snapshot);
+
+function decideCell(input: HookInput, snapshot: PolicySnapshot, fs: PolicyFs, env: PolicyEnv): PolicyResult {
   const cwd = absDir(input.cwd);
   const { row, shadowed } = selectRow(input, snapshot, fs, env, cwd);
   const out = (decision: Decision, cap: Capability | null, rule: string, reason = ""): PolicyResult =>

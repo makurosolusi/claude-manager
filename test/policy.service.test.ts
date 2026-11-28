@@ -61,7 +61,7 @@ describe("pure transforms", () => {
     expect((await reasonOf(() => disablePolicy(base))).reason).toBe("conflict");
     const custom = setTestCommands(setCell(balanced(base), "coder", "shell", "allow"), ["make check"]);
     const reset = applyPreset(custom, "strict", "user");
-    expect(reset.policy).toEqual({ enabled: true, preset: "strict", scope: "user", overrides: {}, testCommands: ["make check"] });
+    expect(reset.policy).toEqual({ enabled: true, preset: "strict", scope: "user", overrides: {}, escalate: true, testCommands: ["make check"] });
     expect((await reasonOf(() => setTestCommands(reset, ["bun test; rm x"]))).reason).toBe("invalid");
     expect(enablePolicy(disablePolicy(reset)).policy).toEqual(reset.policy);
   });
