@@ -1,7 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Plus } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { PageProps } from "@/lib/page.props.ts";
 import type { AgentRow, AgentsResponse } from "../../server/agents.types.ts";
+import { AgentForm } from "@/components/agent.form.tsx";
+import { AgentFormHeader } from "@/components/agent.form.header.tsx";
+import { AgentNotice } from "@/components/agent.notice.tsx";
+import { ReadOnlyBadge } from "@/components/agent.readonly.tsx";
+import { buttonVariants } from "@/components/ui/button.tsx";
+import { holdNotice, useNotice, useWriteMode, READ_ONLY_REASON } from "@/lib/agent.write.ts";
 import { AgentBanner } from "@/components/agent.banner.tsx";
 import { AGENT_HIDEABLE, agentColumns } from "@/components/agents.columns.tsx";
 import { ClientTable, type ClientGrouping } from "@/components/client.table.tsx";
@@ -37,6 +44,15 @@ function useAgentsView(params: URLSearchParams): TableView {
 /** Agents list: presets, custom roles and external agents with model chain, tools, scope and 30-day usage; filtering runs in the browser over one fetch. */
 export function AgentsPage({ dataVersion, params, tiers, roles }: PageProps) {
   const [retry, setRetry] = useState(0);
+  const write = useWriteMode();
+  const newParam = params.get("new") === "1";
+  const creating = newParam && write === true;
+  const [notice, setNotice] = useNotice(AGENTS_PATH, String(params));
+  useEffect(() => {
+    if (!newParam || write !== false) return;
+    holdNotice({ tone: "info", text: `Creating agents is unavailable. ${READ_ONLY_REASON}` }, AGENTS_PATH);
+    location.replace(`#${AGENTS_PATH}`);
+  }, [newParam, write]);
   const view = useAgentsView(params);
   const { state } = view;
   const { data, error, loading, stale } = useApi<AgentsResponse>("/api/agents", {}, dataVersion + retry);
@@ -61,9 +77,16 @@ export function AgentsPage({ dataVersion, params, tiers, roles }: PageProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="Agents" icon={NAV_ICON.agents} description={SUBTITLE} />
+      {creating
+        ? <AgentFormHeader backHref={`#${AGENTS_PATH}`} backLabel="Agents" title="New agent" />
+        : <PageHeader title="Agents" icon={NAV_ICON.agents} description={SUBTITLE}
+            actions={write === false ? <ReadOnlyBadge /> : write ? <a href="#/agents?new=1" className={buttonVariants()}><Plus aria-hidden />New agent</a> : undefined} />}
+      <AgentNotice notice={notice} onClose={() => setNotice(null)} />
       {data && <AgentBanner data={data} />}
-      <ClientTable
+      {creating ? (data
+        ? <AgentForm tiers={data.tiers} knownTools={data.known_tools} etag={data.etag} onReload={() => setRetry((n) => n + 1)} />
+        : <p role="status" className="text-sm text-muted-foreground">Loading…</p>
+      ) : <ClientTable
         label="Agents" noun="agents" empty="No agents." view={view} columns={columns}
         facets={[
           facet("kind", "Kind", NAV_ICON.roles, opts(KIND_OPTS)),
@@ -75,7 +98,7 @@ export function AgentsPage({ dataVersion, params, tiers, roles }: PageProps) {
         summary={error ? undefined : `${fmtInt(result?.filtered.length ?? 0)} of ${fmtInt(total)} agents${data?.truncated ? " · list truncated" : ""} · last 30 days`}
         rowKey={(r) => r.name} rowHref={(r) => hashHref(`${AGENTS_PATH}/${encodeURIComponent(r.name)}`)}
         loading={loading} stale={stale} error={error && new Error(`Couldn't load agents. ${error.message}`)} onRetry={() => setRetry((n) => n + 1)}
-      />
+      />}
     </div>
   );
 }

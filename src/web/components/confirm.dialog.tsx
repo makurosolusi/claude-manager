@@ -9,6 +9,8 @@ interface Props {
   title: string;
   body: ReactNode;
   confirmLabel: string;
+  /** Label of the dismiss button; default "Cancel". */
+  cancelLabel?: string;
   destructive?: boolean;
   busy?: boolean;
   onConfirm: () => void;
@@ -19,7 +21,7 @@ interface Props {
  * Modal confirm built on native `<dialog>`; `open` is the single source of truth.
  * Esc cancels; a backdrop click deliberately does nothing so a stray click never dismisses a destructive prompt.
  */
-export function ConfirmDialog({ open, title, body, confirmLabel, destructive, busy, onConfirm, onCancel }: Props) {
+export function ConfirmDialog({ open, title, body, confirmLabel, cancelLabel = "Cancel", destructive, busy, onConfirm, onCancel }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
 
@@ -46,7 +48,7 @@ export function ConfirmDialog({ open, title, body, confirmLabel, destructive, bu
       <div id={`${id}-b`} className="mt-2 text-sm text-muted-foreground">{body}</div>
       <div className="mt-5 flex justify-end gap-2">
         <Button type="button" variant="outline" autoFocus disabled={busy} onClick={onCancel} className={FOCUS}>
-          Cancel
+          {cancelLabel}
         </Button>
         <Button
           type="button"
