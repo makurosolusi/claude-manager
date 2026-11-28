@@ -1,11 +1,12 @@
-import { link, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { hostname } from "node:os";
 import { dirname } from "node:path";
 import { CliError } from "../cli.error.ts";
+import { isStale, message, readSnapshot, sameFile, sameOwner, tryCreate, type LockOwner, type LockSnapshot } from "./file.lock.owner.ts";
 
 /** How long a writer waits for another process's lock before giving up with a conflict. */
 export const LOCK_TIMEOUT_MS = 10_000;
-/** A lock older than this is treated as abandoned (no config write takes anywhere near this long). */
+/** A lock older than this (other host, or owner unknown) is treated as abandoned; no config write takes this long. */
 export const LOCK_STALE_MS = 120_000;
 const RETRY_MIN_MS = 10;
 const RETRY_MAX_MS = 200;
@@ -15,114 +16,76 @@ export interface LockOptions {
   staleMs?: number;
 }
 
-/** What the lock file holds; pid + startedAt identify one acquisition. */
-export interface LockOwner {
-  pid: number;
-  hostname: string;
-  startedAt: string;
-}
+const stamp = (): LockOwner => ({ pid: process.pid, hostname: hostname(), startedAt: new Date().toISOString() });
 
-const code = (err: unknown) => (err as NodeJS.ErrnoException)?.code;
-const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
-const sameOwner = (a: LockOwner | null | undefined, b: LockOwner) => !!a && a.pid === b.pid && a.startedAt === b.startedAt;
-
-/** Exclusive create (O_CREAT|O_EXCL); false when someone else holds the lock. */
-async function tryCreate(path: string, owner: LockOwner): Promise<boolean> {
-  try {
-    await writeFile(path, JSON.stringify(owner), { flag: "wx" });
-    return true;
-  } catch (err) {
-    if (code(err) === "EEXIST") return false;
-    throw new Error(`create lock ${path}: ${message(err)}`, { cause: err });
-  }
-}
-
-/** undefined = no lock file; null = present but not (yet) valid JSON, e.g. caught between create and write. */
-async function readOwner(path: string): Promise<LockOwner | null | undefined> {
-  let text: string;
-  try {
-    text = await readFile(path, "utf8");
-  } catch (err) {
-    if (code(err) === "ENOENT") return undefined;
-    throw new Error(`read lock ${path}: ${message(err)}`, { cause: err });
-  }
-  try {
-    return JSON.parse(text) as LockOwner;
-  } catch {
-    return null; // half-written lock: judged by its mtime instead (see isStale)
-  }
-}
-
-/** kill(pid, 0) probes without signalling: ESRCH = gone, EPERM = alive but another user's. */
-function pidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    if (code(err) === "ESRCH") return false;
-    if (code(err) === "EPERM") return true;
-    throw new Error(`probe lock owner pid ${pid}: ${message(err)}`, { cause: err });
-  }
-}
-
-async function isStale(path: string, owner: LockOwner | null, staleMs: number): Promise<boolean> {
-  if (owner === null) {
-    const s = await stat(path).catch((err: unknown) => (code(err) === "ENOENT" ? undefined : Promise.reject(err)));
-    return s !== undefined && Date.now() - s.mtimeMs > staleMs;
-  }
-  if (Date.now() - Date.parse(owner.startedAt) > staleMs) return true;
-  return owner.hostname === hostname() && !pidAlive(owner.pid);
+/** Unlinks `path` only if it is still the very file judged stale (same inode, mtime and content). */
+async function removeIfSame(path: string, judged: LockSnapshot): Promise<void> {
+  const now = await readSnapshot(path);
+  if (!now || !sameFile(now, judged)) return; // already broken, released or re-taken: the caller re-reads it
+  await rm(path, { force: true }).catch((err: unknown) => {
+    throw new Error(`break stale lock ${path}: ${message(err)}`, { cause: err });
+  });
 }
 
 /**
- * Race-safe break: rename the stale file aside (only one breaker's rename succeeds), then check that what was moved is
- * the owner judged stale. If a fresh lock was moved instead (another breaker won and re-created in between), link it back.
- * ponytail: if a third process created a lock in that sub-millisecond window too, the link fails and the moved owner loses
- * its lock; needs three concurrent writers on an already-stale lock.
+ * Breaks a stale lock under a second lock, `<path>.break`, so breakers take turns. Inside it the lock is re-read and
+ * unlinked only if it is still the file judged stale. Without the guard, two breakers that judged the same stale file
+ * could each remove whatever sits at the path, including a fresh lock the other just created, and both then hold it.
+ * Nothing is ever moved away and put back, so a holder's release always finds its own lock.
+ * Returns false when another breaker holds the guard (the caller backs off); a guard left by a breaker that died is
+ * itself broken by the same staleness rules.
+ * ponytail: re-read and unlink are two syscalls, not one. A new lock is wrongly unlinked only if, in that gap, the
+ * "stale" file is removed by something outside the guard and a new lock is created: a live other-host holder that was
+ * aged out releasing at that instant, or two processes breaking a dead breaker's guard at once. Closing it fully needs
+ * flock(2), which Bun does not expose without FFI.
  */
-async function breakLock(path: string, stale: LockOwner | null): Promise<void> {
-  const aside = `${path}.stale-${process.pid}-${crypto.randomUUID()}`;
-  try {
-    await rename(path, aside);
-  } catch (err) {
-    if (code(err) === "ENOENT") return; // another breaker got there first
-    throw new Error(`break stale lock ${path}: ${message(err)}`, { cause: err });
+async function breakLock(path: string, judged: LockSnapshot, staleMs: number): Promise<boolean> {
+  const guard = `${path}.break`;
+  if (!(await tryCreate(guard, stamp()))) {
+    const g = await readSnapshot(guard);
+    if (g && isStale(g, staleMs)) await removeIfSame(guard, g);
+    return false;
   }
-  const moved = await readOwner(aside);
-  if (stale !== null && moved && !sameOwner(moved, stale)) {
-    await link(aside, path).catch((err: unknown) => {
-      if (code(err) !== "EEXIST") throw new Error(`restore lock ${path}: ${message(err)}`, { cause: err });
+  try {
+    await removeIfSame(path, judged);
+    return true;
+  } finally {
+    await rm(guard, { force: true }).catch((err: unknown) => {
+      throw new Error(`release break guard ${guard}: ${message(err)}`, { cause: err });
     });
   }
-  await rm(aside, { force: true });
 }
 
-/** Removes the lock only if it is still ours (it may have been broken as stale and re-taken by another process). */
+/**
+ * Removes the lock only if it is still ours. A same-host lock with a live pid is never broken, so this read-then-unlink
+ * can only lose to an other-host breaker that aged our lock out, which takes a write longer than staleMs.
+ */
 async function release(path: string, owner: LockOwner): Promise<void> {
-  if (sameOwner(await readOwner(path), owner)) await rm(path, { force: true });
+  if (!sameOwner((await readSnapshot(path))?.owner, owner)) return;
+  await rm(path, { force: true }).catch((err: unknown) => {
+    throw new Error(`release lock ${path}: ${message(err)}`, { cause: err });
+  });
 }
 
 /**
  * Cross-process advisory lock: runs `fn` while holding `path` (created exclusively, holding {pid, hostname, startedAt}).
- * Waits with backoff up to `timeoutMs`, breaking locks whose pid is dead (same host) or that are older than `staleMs`.
+ * Waits with backoff up to `timeoutMs`. Breaks a lock whose pid is dead (same host), or that is older than `staleMs`
+ * when its owner is on another host or unreadable (empty, half-written, wrong shape).
  */
 export async function withFileLock<T>(path: string, fn: () => Promise<T>, opts: LockOptions = {}): Promise<T> {
   const timeoutMs = opts.timeoutMs ?? LOCK_TIMEOUT_MS;
   const staleMs = opts.staleMs ?? LOCK_STALE_MS;
   await mkdir(dirname(path), { recursive: true });
-  const stamp = (): LockOwner => ({ pid: process.pid, hostname: hostname(), startedAt: new Date().toISOString() });
   let owner = stamp();
   const deadline = Date.now() + timeoutMs;
   let delay = RETRY_MIN_MS;
   while (!(await tryCreate(path, (owner = stamp())))) {
-    const current = await readOwner(path);
+    const current = await readSnapshot(path);
     if (current === undefined) continue; // released between our create and read
-    if (await isStale(path, current, staleMs)) {
-      await breakLock(path, current);
-      continue;
-    }
+    if (isStale(current, staleMs) && (await breakLock(path, current, staleMs))) continue;
     if (Date.now() >= deadline) {
-      throw new CliError(`another claude-manager process is changing config (pid ${current?.pid ?? "unknown"}); try again`, 1, "conflict");
+      const pid = current.owner?.pid ?? "unknown";
+      throw new CliError(`another claude-manager process is changing config (pid ${pid}); try again`, 1, "conflict");
     }
     await Bun.sleep(delay);
     delay = Math.min(delay * 2, RETRY_MAX_MS);
