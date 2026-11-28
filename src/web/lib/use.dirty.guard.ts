@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { registerNavBlocker, type NavBlocker } from "./hash.route.ts";
+import { proceedStep, registerNavBlocker, type NavBlocker, type NavKind } from "./hash.route.ts";
 
 const norm = (h: string) => h.replace(/^#/, "") || "/";
 
@@ -16,15 +16,15 @@ export interface Blocker {
 }
 
 /** Pure blocker core: blocks while `isDirty()`, reports the held target, and lets one navigation pass after `allowNext`. */
-export function createBlocker(isDirty: () => boolean, onBlock: (target: string) => void): Blocker {
+export function createBlocker(isDirty: () => boolean, onBlock: (target: string, kind: NavKind) => void): Blocker {
   let allow = false;
   return {
     allowNext: () => { allow = true; },
-    check: (prev, next) => {
+    check: (prev, next, kind) => {
       if (norm(prev) === norm(next)) return false;
       if (allow) { allow = false; return false; }
       if (!shouldBlock(prev, next, isDirty())) return false;
-      onBlock(next);
+      onBlock(next, kind);
       return true;
     },
   };
@@ -47,9 +47,10 @@ export function useDirtyGuard(dirty: boolean): DirtyGuard {
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const blocker = useRef<Blocker | null>(null);
+  const heldKind = useRef<NavKind>("push");
 
   useEffect(() => {
-    const b = createBlocker(() => dirtyRef.current, setPending);
+    const b = createBlocker(() => dirtyRef.current, (target, kind) => { heldKind.current = kind; setPending(target); });
     blocker.current = b;
     const off = registerNavBlocker(b.check);
     return () => { off(); blocker.current = null; };
@@ -67,7 +68,9 @@ export function useDirtyGuard(dirty: boolean): DirtyGuard {
     if (pending === null) return;
     blocker.current?.allowNext();
     setPending(null);
-    location.hash = pending;
+    // Repeat a blocked Back/Forward as the same traversal so history stays linear; only a link click needs a new entry.
+    const step = proceedStep(heldKind.current);
+    if (step === "assign") location.hash = pending; else history[step]();
   }, [pending]);
   const keepEditing = useCallback(() => setPending(null), []);
   return { pending, confirmDiscard, keepEditing, guard };

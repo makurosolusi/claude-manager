@@ -9,7 +9,7 @@ import { ToolFields } from "@/components/agent.form.tools.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { DESCRIPTION_MAX, PROMPT_MAX, emptyForm, fromDetail, isDirty, toInput, toPatch, validate, type FormErrors, type FormState } from "@/lib/agent.form.ts";
-import { appliedText, holdNotice, toFailure, type WriteFailure } from "@/lib/agent.write.ts";
+import { appliedText, holdNotice, toFailure, useFrozenEtag, type WriteFailure } from "@/lib/agent.write.ts";
 import { sendJson } from "@/lib/api.write.ts";
 import { TONE_CLASSES } from "@/lib/color.tokens.ts";
 import { cn } from "@/lib/cn.ts";
@@ -22,14 +22,15 @@ interface Props {
   agent?: AgentDetail;
   tiers: Record<Tier, string>;
   knownTools: string[];
-  /** `If-Match` value: the detail etag (edit) or the list etag (create). */
+  /** Latest `If-Match` value (detail etag for edit, list etag for create); the form freezes the one it mounted with and adopts a newer one only on Reload. */
   etag: string;
   /** Refetch list/detail so the next write uses the new etag. */
   onReload: () => void;
 }
 
 /** Create/edit form (spec 5.4): validates with `agent.form.ts`, writes through `sendJson`, guards unsaved edits. */
-export function AgentForm({ agent, tiers, knownTools, etag, onReload }: Props) {
+export function AgentForm({ agent, tiers, knownTools, etag: liveEtag, onReload }: Props) {
+  const [etag, thaw] = useFrozenEtag(liveEtag);
   const id = useId();
   const isCreate = !agent;
   const kind = agent?.kind ?? "custom";
@@ -89,7 +90,7 @@ export function AgentForm({ agent, tiers, knownTools, etag, onReload }: Props) {
         <div ref={banner} tabIndex={-1} role="alert" className={cn("flex flex-wrap items-start gap-2 rounded-md border p-3 text-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring", TONE_CLASSES.danger.badge)}>
           <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
           <p className="min-w-0 flex-1 break-words">{failure.text}</p>
-          {failure.reload && <Button type="button" size="xs" variant="outline" onClick={() => { onReload(); setFailure(null); }}>Reload</Button>}
+          {failure.reload && <Button type="button" size="xs" variant="outline" onClick={() => { thaw(); onReload(); setFailure(null); }}>Reload</Button>}
         </div>
       )}
       <div className="grid items-start gap-4 lg:grid-cols-2">

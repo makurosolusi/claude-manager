@@ -6,20 +6,18 @@ import { AgentActions } from "@/components/agent.actions.tsx";
 import { AgentForm } from "@/components/agent.form.tsx";
 import { AgentFormHeader } from "@/components/agent.form.header.tsx";
 import { AgentNotice } from "@/components/agent.notice.tsx";
-import { ReadOnlyBadge } from "@/components/agent.readonly.tsx";
+import { PermissionError, ReadOnlyBadge } from "@/components/agent.readonly.tsx";
 import { DisabledChip, KindCell } from "@/components/agent.cells.tsx";
 import { FilesPanel, ModelPanel, PromptPanel, ToolsPanel, UsagePanel, WarningsPanel } from "@/components/agent.panels.tsx";
 import { ToneBadge } from "@/components/tone.badge.tsx";
 import { RoleBadge } from "@/components/role.badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import { useApi } from "@/lib/api.client.ts";
+import { getJson, isNotFound, useApi } from "@/lib/api.client.ts";
 import { AGENT_LIVE_NOTE } from "@/lib/agent.copy.ts";
-import { holdNotice, useNotice, useWriteMode, READ_ONLY_REASON } from "@/lib/agent.write.ts";
+import { holdNotice, nextFrozen, useNotice, useWriteStatus, READ_ONLY_REASON, type WriteStatus } from "@/lib/agent.write.ts";
 import { AGENTS_PATH } from "@/lib/agents.table.ts";
 import { ROLE_ICON, UI_ICON } from "@/lib/icon.map.ts";
 
-/** Marker `getJson` puts in the error message of a 404 response. */
-const NOT_FOUND_MARKER = "(404)";
 const BACK = `#${AGENTS_PATH}`;
 
 const BackLink = () => <a href={BACK} className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><UI_ICON.back aria-hidden className="size-4" />Agents</a>;
@@ -37,7 +35,7 @@ function Skeleton() {
 }
 
 function Failure({ name, error, onRetry }: { name: string; error: Error; onRetry: () => void }) {
-  if (error.message.includes(NOT_FOUND_MARKER)) {
+  if (isNotFound(error)) {
     return <p className="p-6 text-center text-sm text-muted-foreground">Agent "{name}" not found. <a href={BACK} className="underline">Back to agents</a></p>;
   }
   return (
@@ -51,8 +49,9 @@ function Failure({ name, error, onRetry }: { name: string; error: Error; onRetry
 
 interface BodyProps extends Pick<PageProps, "tiers" | "roles"> {
   agent: AgentDetail;
-  /** Write mode: true shows actions, false the Read-only badge, null (unknown) neither. */
-  write: boolean | null;
+  /** Edit permission: `write` shows actions, `read-only` the badge, `error` a Retry; `loading` shows nothing. */
+  write: WriteStatus;
+  onRetryWrite: () => void;
   /** Replaces the detail grid while editing. */
   form?: React.ReactNode;
   actions?: React.ReactNode;
@@ -60,7 +59,7 @@ interface BodyProps extends Pick<PageProps, "tiers" | "roles"> {
   hideLiveNote?: boolean;
 }
 
-function Body({ agent, tiers, roles, write, form, actions, hideLiveNote }: BodyProps) {
+function Body({ agent, tiers, roles, write, onRetryWrite, form, actions, hideLiveNote }: BodyProps) {
   return (
     <>
       {!form && <div className="flex flex-col gap-2">
@@ -70,7 +69,7 @@ function Body({ agent, tiers, roles, write, form, actions, hideLiveNote }: BodyP
           {agent.main_agent && <ToneBadge tone="info" icon={ROLE_ICON.main!}>Main agent</ToneBadge>}
           {agent.status === "disabled" && <DisabledChip />}
           {agent.kind !== "external" && !form && (
-            <div className="flex flex-wrap items-center gap-2 sm:ml-auto max-sm:w-full">{write ? actions : write === false && <ReadOnlyBadge />}</div>
+            <div className="flex flex-wrap items-center gap-2 sm:ml-auto max-sm:w-full">{write === "write" ? actions : write === "read-only" ? <ReadOnlyBadge /> : write === "error" && <PermissionError onRetry={onRetryWrite} />}</div>
           )}
         </div>
         {agent.description && <p className="max-w-prose text-sm text-muted-foreground">{agent.description}</p>}
@@ -92,28 +91,38 @@ function Body({ agent, tiers, roles, write, form, actions, hideLiveNote }: BodyP
 export function AgentDetailPage({ name, dataVersion, params, tiers, roles }: PageProps & { name: string }) {
   const [retry, setRetry] = useState(0);
   const reload = () => setRetry((n) => n + 1);
-  const [formKey, setFormKey] = useState(0);
-  const write = useWriteMode();
+  const { status: write, retry: retryWrite } = useWriteStatus();
   const path = `${AGENTS_PATH}/${encodeURIComponent(name)}`;
   const editParam = params.get("edit") === "1";
   const [notice, setNotice] = useNotice(path, `${path}?${params}`);
-  const { data, error } = useApi<AgentDetail>(`/api/agents/${encodeURIComponent(name)}`, {}, dataVersion + retry);
-  const editing = editParam && write === true && !!data && data.kind !== "external";
+  const apiPath = `/api/agents/${encodeURIComponent(name)}`;
+  const { data, error } = useApi<AgentDetail>(apiPath, {}, dataVersion + retry);
+  const editing = editParam && write === "write" && !!data && data.kind !== "external";
   const list = useApi<AgentsResponse>(editing ? "/api/agents" : null, {}, dataVersion + retry);
+  // The form works from a snapshot taken when editing starts: sync ticks keep refreshing `data`, but the etag and the
+  // starting values must not follow, or a change made elsewhere would never answer 412.
+  const [frozen, setFrozen] = useState<AgentDetail | null>(null);
+  const [formKey, setFormKey] = useState(0);
+  useEffect(() => { setFrozen((f) => nextFrozen(f, editing, data)); }, [editing, data, frozen]);
+  // Reload (412 banner): fetch the newest detail now and restart the form from it.
+  const restart = () => {
+    reload();
+    getJson<AgentDetail>(apiPath).then(setFrozen, (e: unknown) => { console.warn("agent reload failed", e); setFrozen(null); }).finally(() => setFormKey((n) => n + 1));
+  };
   useEffect(() => {
-    if (!editParam || write !== false) return;
+    if (!editParam || write !== "read-only") return;
     holdNotice({ tone: "info", text: `Editing is unavailable. ${READ_ONLY_REASON}` }, path);
     location.replace(`#${path}`);
   }, [editParam, write, path]);
-  const form = editing && data ? (list.data
-    ? <AgentForm key={formKey} agent={data} tiers={list.data.tiers} knownTools={list.data.known_tools} etag={data.etag} onReload={() => { reload(); setFormKey((n) => n + 1); }} />
+  const form = editing && frozen ? (list.data
+    ? <AgentForm key={formKey} agent={frozen} tiers={list.data.tiers} knownTools={list.data.known_tools} etag={frozen.etag} onReload={restart} />
     : <Skeleton />) : undefined;
   return (
     <div className="flex flex-col gap-4">
       {form ? <AgentFormHeader backHref={`#${path}`} backLabel={name} title={`Edit ${name}`} /> : <BackLink />}
       <AgentNotice notice={notice} onClose={() => setNotice(null)} />
       {!data && error ? <Failure name={name} error={error} onRetry={reload} />
-        : !data ? <Skeleton /> : <Body agent={data} tiers={tiers} roles={roles} write={write} form={form} hideLiveNote={!!notice?.live} actions={<AgentActions agent={data} onNotice={setNotice} onReload={reload} />} />}
+        : !data ? <Skeleton /> : <Body agent={data} tiers={tiers} roles={roles} write={write} onRetryWrite={retryWrite} form={form} hideLiveNote={!!notice?.live} actions={<AgentActions agent={data} onNotice={setNotice} onReload={reload} />} />}
     </div>
   );
 }

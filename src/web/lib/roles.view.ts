@@ -38,7 +38,8 @@ export function groupRows(rows: readonly TieredRow[], view: RolesView): { key: s
   const m = new Map<string, TieredRow[]>();
   for (const r of rows) {
     const k = groupKeyOf(view, r);
-    m.set(k, [...(m.get(k) ?? []), r]);
+    const g = m.get(k);
+    if (g) g.push(r); else m.set(k, [r]);
   }
   const groups = [...m].map(([key, rs]) => ({ key, rows: rs }));
   if (view === "tier") return groups.sort((a, b) => TIER_ORDER.indexOf(a.key as TierKey) - TIER_ORDER.indexOf(b.key as TierKey));
