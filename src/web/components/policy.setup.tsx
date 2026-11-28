@@ -1,11 +1,12 @@
+import type { ReactNode } from "react";
 import { Panel } from "@/components/panel.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { cn } from "@/lib/cn.ts";
 import { PRESET_LABEL, PRESET_NAMES, RECOMMENDED_PRESET } from "../../policy/policy.presets.ts";
 import type { PolicyConfig, PolicyInput, PresetName } from "../../server/policy.types.ts";
 
-export interface SetupForm { preset: PresetName; scope: PolicyInput["scope"]; acceptEdits: boolean; ack: boolean }
-export const DEFAULT_SETUP: SetupForm = { preset: RECOMMENDED_PRESET, scope: "user", acceptEdits: false, ack: false };
+export interface SetupForm { preset: PresetName; scope: PolicyInput["scope"]; acceptEdits: boolean; escalate: boolean; ack: boolean }
+export const DEFAULT_SETUP: SetupForm = { preset: RECOMMENDED_PRESET, scope: "user", acceptEdits: false, escalate: true, ack: false };
 
 const PRESET_TEXT: Record<PresetName, string> = {
   strict: "Workers read freely and ask before they edit, run tests or use the shell. Analysts never edit.",
@@ -16,6 +17,7 @@ const SCOPE_TEXT = {
   user: ["User", "All projects, written to ~/.claude/settings.json."],
   project: ["This project", "Only this git root, written to .claude/settings.local.json (personal, never committed)."],
 } as const;
+export const ESCALATE_HINT = "Workers never prompt you. When a worker needs something marked Ask, it reports back to the manager, and only the manager asks you.";
 const FOCUS = "has-focus-visible:outline-2 has-focus-visible:outline-solid has-focus-visible:outline-ring";
 
 function Choice({ name, checked, onChange, title, text, badge }: { name: string; checked: boolean; onChange: () => void; title: string; text: string; badge?: string }) {
@@ -54,6 +56,12 @@ export function PolicySetup({ form, onChange, onPreview, busy }: Props) {
           <span className="block text-xs text-muted-foreground">Writes permissions.defaultMode to the same settings file, so it changes every session at that scope.</span>
         </span>
       </label>
+      <label className="flex min-h-11 items-start gap-2.5 text-sm sm:min-h-0">
+        <input type="checkbox" checked={form.escalate} onChange={(e) => set({ escalate: e.target.checked })} className="mt-1 accent-[var(--foreground)]" />
+        <span>Escalate to manager (recommended)
+          <span className="block text-xs text-muted-foreground">{ESCALATE_HINT}</span>
+        </span>
+      </label>
       {form.preset === "autonomous" && (
         <label className="flex min-h-11 items-start gap-2.5 text-sm sm:min-h-0">
           <input type="checkbox" checked={form.ack} onChange={(e) => set({ ack: e.target.checked })} className="mt-1 accent-[var(--foreground)]" />
@@ -69,15 +77,16 @@ export function PolicySetup({ form, onChange, onPreview, busy }: Props) {
 export const summaryLine = (c: PolicyConfig): string =>
   `Preset: ${PRESET_LABEL[c.preset]} · Scope: ${c.scope} · Accept edits: ${c.defaultMode === "acceptEdits" ? "on" : "off"}`;
 
-/** Compact stand-in for the setup card once a policy exists; "Change preset" (when allowed) opens the full card. */
-export function PolicySummary({ config, onChange }: { config: PolicyConfig; onChange?: () => void }) {
+/** Compact stand-in for the setup card once a policy exists; "Change preset" (when allowed) opens the full card; `extra` sits beside it. */
+export function PolicySummary({ config, onChange, extra }: { config: PolicyConfig; onChange?: () => void; extra?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border px-3 py-2 text-sm">
       <span className="min-w-0 flex-1 text-muted-foreground">{summaryLine(config)}</span>
+      {extra}
       {onChange && <Button variant="outline" size="sm" className="max-sm:min-h-11 max-sm:w-full" onClick={onChange}>Change preset</Button>}
     </div>
   );
 }
 
 /** Setup form seeded from the stored policy, so changing a preset starts from what is applied. */
-export const formFromConfig = (c: PolicyConfig): SetupForm => ({ preset: c.preset, scope: c.scope, acceptEdits: c.defaultMode === "acceptEdits", ack: false });
+export const formFromConfig = (c: PolicyConfig): SetupForm => ({ preset: c.preset, scope: c.scope, acceptEdits: c.defaultMode === "acceptEdits", escalate: !!c.escalate, ack: false });

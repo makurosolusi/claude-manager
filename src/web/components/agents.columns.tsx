@@ -47,7 +47,7 @@ function PermissionCell({ row, policy }: { row: AgentRow; policy: PolicyResponse
   if (!policy) return <span className="text-fg-subtle">—</span>;
   const pr = rowForAgent(policy.rows, row);
   const off = policy.status !== "enforced";
-  return <span title={pr ? cellsTitle(pr) : undefined} className={cn("line-clamp-2 whitespace-normal text-[13px]", off ? "text-fg-subtle" : "text-muted-foreground")}>{effectiveLine(pr, policy.status)}</span>;
+  return <span title={pr ? cellsTitle(pr) : undefined} className={cn("line-clamp-2 whitespace-normal text-[13px]", off ? "text-fg-subtle" : "text-muted-foreground")}>{effectiveLine(pr, policy.status, policy.config?.escalate)}</span>;
 }
 
 /** Agents table columns. Column visibility is tuned so the table fits without scrolling: md-lg shows Agent (description inline), Model, Requests and Cost; lg-2xl adds When to use and Last used; 2xl adds Tools, Permission and Rerouted. `rerouted` adds the Rerouted column (only when some agent was rerouted); `showMain` adds the Main chip (off when grouped by level); `policy` fills the Effective permission column. */

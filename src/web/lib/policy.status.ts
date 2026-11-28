@@ -59,8 +59,11 @@ export const needsAttention = (p: PolicyResponse | null): boolean => !!p && p.st
 const ASK_DENY_CAPS = CAPABILITIES.filter((c) => c !== "read" && c !== "push");
 const list = (row: PolicyRow, d: string, caps: readonly Capability[]) => caps.filter((c) => row.cells[c].decision === d).map((c) => CAP_NOUN[c]);
 
-/** Agents-list column text, e.g. "Edits + tests · asks shell · push → owner". `row` undefined = not covered by the policy. */
-export function effectiveLine(row: PolicyRow | undefined, status: PolicyStatus | null): string {
+/** Escalation applies to every row but the manager's own (`main`), which still prompts the owner. */
+export const isEscalated = (row: Pick<PolicyRow, "kind">, escalate: boolean | undefined): boolean => !!escalate && row.kind !== "main";
+
+/** Agents-list column text, e.g. "Edits + tests · asks shell · push → owner"; with `escalate`, a worker's asks go "to manager". `row` undefined = not covered by the policy. */
+export function effectiveLine(row: PolicyRow | undefined, status: PolicyStatus | null, escalate = false): string {
   if (status !== "enforced") return "Off";
   if (!row) return "Unknown policy";
   const allow = list(row, "allow", CAPABILITIES.filter((c) => c !== "push"));
@@ -69,8 +72,9 @@ export function effectiveLine(row: PolicyRow | undefined, status: PolicyStatus |
   const deny = list(row, "deny", ASK_DENY_CAPS);
   const parts: string[] = [];
   if (shown.length) parts.push(shown.join(" + ").replace(/^./, (ch) => ch.toUpperCase()));
-  if (ask.length) parts.push(`asks ${ask.join(", ")}`);
+  const viaManager = isEscalated(row, escalate);
+  if (ask.length) parts.push(`asks ${viaManager ? "manager for " : ""}${ask.join(", ")}`);
   if (deny.length) parts.push(`no ${deny.join(", ")}`);
-  parts.push(row.cells.push.decision === "deny" ? "push denied" : "push → owner");
+  parts.push(row.cells.push.decision === "deny" ? "push denied" : viaManager ? "push → owner via manager" : "push → owner");
   return parts.join(" · ");
 }
