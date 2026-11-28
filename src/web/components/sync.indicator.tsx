@@ -28,7 +28,7 @@ export function SyncIndicator({ meta, now }: { meta: SyncMeta | undefined; now: 
   const body = (
     <span title={text} className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground tabular-nums">
       <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", state === "ok" && meta?.warnings?.length ? "bg-warn" : DOT[state])} />
-      <span aria-hidden className="max-sm:hidden">{text}</span>
+      <span aria-hidden className="max-xl:hidden">{text}</span>
       {/* Announce status changes only, not the ticking age. */}
       <span role="status" className="sr-only">
         {STATUS[state]}

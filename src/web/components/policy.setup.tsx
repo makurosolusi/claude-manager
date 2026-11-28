@@ -10,7 +10,7 @@ export const DEFAULT_SETUP: SetupForm = { preset: RECOMMENDED_PRESET, scope: "us
 const PRESET_TEXT: Record<PresetName, string> = {
   strict: "Workers read freely and ask before they edit, run tests or use the shell. Analysts never edit.",
   balanced: "Workers read, edit and run tests without asking; shell, web and commits still ask. Edit and test can run code.",
-  autonomous: "Workers also commit, use the shell and the web without asking. Edit and test can run code.",
+  autonomous: "Workers also commit, use the shell and the web without asking. Balanced is safer: shell still asks there.",
 };
 const SCOPE_TEXT = {
   user: ["User", "All projects, written to ~/.claude/settings.json."],
@@ -57,7 +57,7 @@ export function PolicySetup({ form, onChange, onPreview, busy }: Props) {
       {form.preset === "autonomous" && (
         <label className="flex min-h-11 items-start gap-2.5 text-sm sm:min-h-0">
           <input type="checkbox" checked={form.ack} onChange={(e) => set({ ack: e.target.checked })} className="mt-1 accent-[var(--foreground)]" />
-          <span>I understand workers can run any shell command without asking.</span>
+          <span>I understand workers can run any shell command without asking. Push, publish and deploy are detected from the command text, so unusual forms may not be caught.</span>
         </label>
       )}
       <div><Button className="min-h-11 w-full sm:min-h-0 sm:w-auto" disabled={busy || (form.preset === "autonomous" && !form.ack)} onClick={onPreview}>Preview changes</Button></div>

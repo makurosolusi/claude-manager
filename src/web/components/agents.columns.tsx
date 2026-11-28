@@ -50,7 +50,7 @@ function PermissionCell({ row, policy }: { row: AgentRow; policy: PolicyResponse
   return <span title={pr ? cellsTitle(pr) : undefined} className={cn("line-clamp-2 whitespace-normal text-[13px]", off ? "text-fg-subtle" : "text-muted-foreground")}>{effectiveLine(pr, policy.status)}</span>;
 }
 
-/** Agents table columns. `rerouted` adds the Rerouted column (only when some agent was rerouted); `showMain` adds the Main chip (off when grouped by level); `policy` fills the Effective permission column. */
+/** Agents table columns. Column visibility is tuned so the table fits without scrolling: md-lg shows Agent (description inline), Model, Requests and Cost; lg-2xl adds When to use and Last used; 2xl adds Tools, Permission and Rerouted. `rerouted` adds the Rerouted column (only when some agent was rerouted); `showMain` adds the Main chip (off when grouped by level); `policy` fills the Effective permission column. */
 export function agentColumns(roles: readonly RoleMeta[] | undefined, tiers: Tiers | undefined, rerouted: boolean, showMain: boolean, policy?: PolicyResponse): Column<AgentRow>[] {
   const cols: Column<AgentRow>[] = [
     {
@@ -58,18 +58,18 @@ export function agentColumns(roles: readonly RoleMeta[] | undefined, tiers: Tier
       cell: (r) => (
         <span className="block min-w-0">
           <AgentNameCell row={r} roles={roles} showMain={showMain} />
-          {r.description && <span className="mt-0.5 line-clamp-1 whitespace-normal text-xs text-muted-foreground md:hidden">{r.description}</span>}
+          {r.description && <span className="mt-0.5 line-clamp-1 whitespace-normal text-xs text-muted-foreground lg:hidden">{r.description}</span>}
         </span>
       ),
     },
-    { id: "description", header: "When to use", fill: true, hideBelow: "md", width: "min-w-48", cell: (r) => <span title={r.description ?? undefined} className="line-clamp-2 whitespace-normal text-[13px] text-muted-foreground">{r.description ?? "—"}</span> },
-    { id: "model", header: "Model", width: "w-24 md:w-56 2xl:w-72", cell: (r) => <ModelCell row={r} tiers={tiers} /> },
-    { id: "tools", header: "Tools", hideBelow: "lg", width: "w-40", cell: (r) => <ToolsCell row={r} /> },
+    { id: "description", header: "When to use", fill: true, hideBelow: "lg", width: "min-w-48", cell: (r) => <span title={r.description ?? undefined} className="line-clamp-2 whitespace-normal text-[13px] text-muted-foreground">{r.description ?? "—"}</span> },
+    { id: "model", header: "Model", width: "w-24 md:w-52 2xl:w-72", cell: (r) => <ModelCell row={r} tiers={tiers} /> },
+    { id: "tools", header: "Tools", hideBelow: "2xl", width: "w-40", cell: (r) => <ToolsCell row={r} /> },
     { id: "permission", header: "Effective permission", hideBelow: "2xl", width: "w-56", cell: (r) => <PermissionCell row={r} policy={policy} /> },
     { id: "requests", header: "Requests (30d)", align: "right", sortKey: "requests", hideBelow: "sm", width: "w-24", cell: (r) => fmtInt(r.usage.requests) },
     { id: "cost", header: "Cost (est.)", align: "right", sortKey: "cost", hideBelow: "md", width: "w-24", cell: (r) => <CostCell usd={r.usage.cost_usd} unpriced={r.usage.unpriced} /> },
-    { id: "last", header: "Last used", align: "right", sortKey: "last", hideBelow: "md", width: "w-20", cell: (r) => <RelativeTime iso={r.usage.last_ts} /> },
+    { id: "last", header: "Last used", align: "right", sortKey: "last", hideBelow: "lg", width: "w-20", cell: (r) => <RelativeTime iso={r.usage.last_ts} /> },
   ];
-  if (rerouted) cols.push({ id: "rerouted", header: <span title={REROUTE_COLUMN_NOTE}>Rerouted</span>, align: "right", hideBelow: "lg", width: "w-20", cell: (r) => <Rerouted row={r} /> });
+  if (rerouted) cols.push({ id: "rerouted", header: <span title={REROUTE_COLUMN_NOTE}>Rerouted</span>, align: "right", hideBelow: "2xl", width: "w-20", cell: (r) => <Rerouted row={r} /> });
   return cols;
 }
