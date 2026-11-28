@@ -1,5 +1,6 @@
 import { CliError } from "../cli.error.ts";
 import { type Config, isTier } from "../config/config.store.ts";
+import { BUILTIN_AGENT_INFO } from "./roles.builtins.ts";
 import { KNOWN_TOOLS, PRESET_ROLES, type Role } from "./roles.presets.ts";
 
 const ROLE_NAME = /^[a-z][a-z0-9-]{0,39}$/;
@@ -26,7 +27,7 @@ export function assertTools(tools: string[]): void {
 }
 
 /** Claude Code's built-in subagents (docs verified 2026-11-27); listed read-only on the Agents page. */
-export const BUILTIN_AGENTS = ["Explore", "Plan", "general-purpose", "claude", "statusline-setup", "claude-code-guide", "web-fetch"];
+export const BUILTIN_AGENTS = Object.keys(BUILTIN_AGENT_INFO);
 
 export type RoleEntry = Role & { disabled: boolean };
 

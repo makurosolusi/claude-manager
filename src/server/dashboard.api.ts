@@ -9,6 +9,7 @@ import type { ApiError, DashboardMeta, LiveSession, Overview, SessionGroups, Ses
 import { FAVICON_PATHS, faviconResponse } from "./favicon.ts";
 import { isAgentsPath, routeAgents } from "./agents.api.ts";
 import { isAgentsWriteRoute, routeAgentsWrite } from "./agents.write.api.ts";
+import { isTiersPath, isTiersWriteRoute, routeTiersRead, routeTiersWrite } from "./tiers.api.ts";
 import { LOCAL_HOSTS, type WriteSession } from "./write.guard.ts";
 import { routeSessionDetail } from "./session.detail.api.ts";
 import { PRESET_ROLES } from "../roles/roles.presets.ts";
@@ -96,13 +97,13 @@ function route(db: Database, url: URL, meta: MetaProvider): unknown {
   throw new HttpError(HTTP.notFound, `unknown endpoint ${path}`);
 }
 
-/** Host allowlist first, then GET-only (plus the agents write routes); undefined when the request may proceed. */
+/** Host allowlist first, then GET-only (plus the agents and tier write routes); undefined when the request may proceed. */
 function guard(req: Request, url: URL, port: number): Response | undefined {
   // DNS rebinding guard: a foreign page resolving its own name to 127.0.0.1 still sends its own Host.
   // Bun.serve builds req.url from Host, so url.host is the fallback when the header is absent.
   const host = req.headers.get("host") ?? url.host;
   if (!LOCAL_HOSTS.some((h) => host === `${h}:${port}`)) return fail(HTTP.forbidden, "forbidden host");
-  if (req.method !== "GET" && !isAgentsWriteRoute(req.method, url.pathname)) return fail(HTTP.notAllowed, "method not allowed");
+  if (req.method !== "GET" && !isAgentsWriteRoute(req.method, url.pathname) && !isTiersWriteRoute(req.method, url.pathname)) return fail(HTTP.notAllowed, "method not allowed");
   return undefined;
 }
 
@@ -129,6 +130,11 @@ export function handleRequest(req: Request, db: Database, port = DEFAULT_DASHBOA
   const url = new URL(req.url);
   if (url.pathname.replace(/\/+$/, "") === "/api/session") {
     return guard(req, url, port) ?? Response.json({ write: !session.readOnly, token: session.token }, { headers: { "Cache-Control": "no-store" } });
+  }
+  if (isTiersPath(url.pathname)) {
+    const refused = guard(req, url, port);
+    if (refused) return refused;
+    return req.method === "GET" ? routeTiersRead(db, url.pathname) : routeTiersWrite(req, url.pathname, session, port);
   }
   if (!isAgentsPath(url.pathname)) return handleApi(req, db, port, meta);
   const denied = guard(req, url, port);

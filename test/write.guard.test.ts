@@ -86,6 +86,13 @@ describe("checkWrite body", () => {
     expect(out).toEqual({ ok: true, body: { a: 1 } });
   });
 
+  test("PUT is handled like PATCH: body parsed, read-only 403", async () => {
+    expect(await checkWrite(req({ method: "PUT", body: '{"model":"m"}' }), OPTS)).toEqual({ ok: true, body: { model: "m" } });
+    expect((await fail(req({ method: "PUT" }), { ...OPTS, readOnly: true })).status).toBe(403);
+    expect((await fail(req({ method: "PUT", headers: { "content-type": "text/plain" } }))).status).toBe(415);
+    expect((await fail(req({ method: "PUT", body: "{" }))).status).toBe(400);
+  });
+
   test("PATCH with a valid body is ok", async () => {
     expect(await checkWrite(req({ method: "PATCH", body: '{"b":[2]}' }), OPTS)).toEqual({ ok: true, body: { b: [2] } });
   });

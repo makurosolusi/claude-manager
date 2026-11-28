@@ -9,8 +9,8 @@ const JSON_TYPE = "application/json";
 const TOKEN_BYTES = 32;
 /** Loopback host names the dashboard answers to (Host allowlist) and accepts as write Origin. */
 export const LOCAL_HOSTS = ["127.0.0.1", "localhost"];
-const WRITE_METHODS = ["POST", "PATCH", "DELETE"];
-const BODY_METHODS = ["POST", "PATCH"];
+const WRITE_METHODS = ["POST", "PATCH", "PUT", "DELETE"];
+const BODY_METHODS = ["POST", "PATCH", "PUT"];
 const STATUS = { badRequest: 400, forbidden: 403, notAllowed: 405, tooLarge: 413, unsupported: 415 } as const;
 
 /** Per-process write settings; `token` is null in read-only mode. */

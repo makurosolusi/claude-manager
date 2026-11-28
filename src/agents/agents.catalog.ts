@@ -11,12 +11,19 @@ import { sha256 } from "../storage/json.file.ts";
 import type {
   AgentDetail, AgentRow, AgentScope, AgentsResponse, AgentUsage, ExternalSource,
 } from "../server/agents.types.ts";
+import { BUILTIN_AGENT_INFO } from "../roles/roles.builtins.ts";
 import { parseAgentFile } from "./agent.frontmatter.ts";
 
 /** Cap on rows returned by the list; the table paginates client-side. */
 export const MAX_AGENTS = 500;
 const MAX_FILE_BYTES = 256 * 1024;
 const PIN_ALIASES: string[] = Object.values(TIER_ALIAS);
+
+/** Model ID behind a Claude Code alias (opus/sonnet/haiku) per the tier map; null for other values. */
+function aliasModelId(config: Config, alias: string | null | undefined): string | null {
+  const tier = (Object.keys(TIER_ALIAS) as Tier[]).find((t) => TIER_ALIAS[t] === alias);
+  return tier ? config.tiers[tier] : null;
+}
 
 /** One row of `agentUsage(db, since)` (src/db/agents.repository.ts). */
 export interface UsageRow {
@@ -177,7 +184,7 @@ async function build(config: Config, usage: UsageRow[], opts: CatalogOptions): P
     const m = meta.meta;
     rows.push(row({
       ...empty(), name, kind: "external", source: "file", status: "enabled",
-      description: m.description ?? null, color: m.color ?? null, alias: m.model ?? null,
+      description: m.description ?? null, color: m.color ?? null, alias: m.model ?? null, model_id: aliasModelId(config, m.model),
       tools: m.tools ?? null, disallowed_tools: m.disallowedTools ?? null,
     }));
     extras.set(name, { prompt: meta.body, prompt_source: "file", file_path: file.path, warnings: meta.warning ? [`${file.path}: ${meta.warning}`] : [] });
@@ -187,7 +194,9 @@ async function build(config: Config, usage: UsageRow[], opts: CatalogOptions): P
   const addNamed = (name: string, source: ExternalSource) => {
     if (known.has(name)) return;
     known.add(name);
-    rows.push(row({ ...empty(), name, kind: "external", source, status: "enabled" }));
+    const info = source === "builtin" ? BUILTIN_AGENT_INFO[name] : undefined;
+    const alias = info && info.model !== "inherit" ? info.model : null;
+    rows.push(row({ ...empty(), name, kind: "external", source, status: "enabled", description: info?.description ?? null, alias, model_id: aliasModelId(config, alias) }));
     extras.set(name, { prompt: null, prompt_source: null, file_path: null, warnings: [] });
   };
   for (const name of BUILTIN_AGENTS) addNamed(name, "builtin");

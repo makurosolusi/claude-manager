@@ -21,6 +21,20 @@ const byName = async (u: UsageRow[] = []) => {
   return { res, get: (n: string) => res.items.find((r) => r.name === n)! };
 };
 
+describe("builtin and file agents follow the tiers", () => {
+  test("claude-code-guide tracks tiers.basic; file agents map opus/sonnet/haiku", async () => {
+    const config = await loadConfig();
+    config.tiers.basic = "claude-haiku-9";
+    await saveConfig(config);
+    write(join(cwd(), ".claude", "agents"), "scout.md", "---\nname: scout\ndescription: d\nmodel: sonnet\n---\nbody");
+    write(join(cwd(), ".claude", "agents"), "odd.md", "---\nname: odd\ndescription: d\nmodel: claude-x-1\n---\nbody");
+    const { get } = await byName();
+    expect(get("claude-code-guide").model_id).toBe("claude-haiku-9");
+    expect(get("scout")).toMatchObject({ alias: "sonnet", model_id: config.tiers.work });
+    expect(get("odd").model_id).toBeNull();
+  });
+});
+
 describe("allRoles", () => {
   test("flags disabled; resolveRoles still drops them", async () => {
     const config = await loadConfig();
@@ -46,6 +60,10 @@ describe("agents catalog kinds", () => {
     expect(get("docs")).toMatchObject({ kind: "custom", tools: ["Read"], tier: "basic" });
     expect(get("reviewer").status).toBe("disabled");
     expect(get("Explore")).toMatchObject({ kind: "external", source: "builtin", tier: null });
+    expect(get("Explore").description).toContain("read-only agent for searching");
+    expect(get("Explore")).toMatchObject({ alias: "opus", model_id: config.tiers.think });
+    expect(get("claude-code-guide")).toMatchObject({ alias: "haiku", model_id: config.tiers.basic });
+    expect(get("Plan")).toMatchObject({ alias: null, model_id: null });
     expect(get("acme:linter").source).toBe("plugin");
     expect(get("ghost").source).toBe("unknown");
     expect(res.items.some((r) => r.name === "main")).toBe(false);

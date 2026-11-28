@@ -105,6 +105,17 @@ describe("service transforms", () => {
     });
     expect(setTierModel(config, "think", "claude-x-1").tiers.think).toBe("claude-x-1");
   });
+
+  test("setTierModel rejects aliases and over-long ids", async () => {
+    const config = await loadConfig();
+    expect(await reason(() => setTierModel(config, "work", "sonnet"))).toEqual({
+      message: 'model must be a full model ID, not the alias "sonnet"',
+      reason: "invalid",
+    });
+    expect((await reason(() => setTierModel(config, "work", "Opusplan"))).message).toContain("alias");
+    expect((await reason(() => setTierModel(config, "work", "x".repeat(129)))).message).toContain("invalid model id");
+    expect(setTierModel(config, "work", "x".repeat(128)).tiers.work).toHaveLength(128);
+  });
 });
 
 describe("applyConfig", () => {

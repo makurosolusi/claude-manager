@@ -11,6 +11,9 @@ const PIN = /^[\w.\-:\[\]]+$/;
 const MAX_DESCRIPTION = 1000;
 const MAX_PROMPT = 20_000;
 const MAX_TOOLS = 64;
+const MAX_MODEL_ID = 128;
+/** Claude Code aliases and sentinels: a tier must hold a full model ID, or the alias env would point at itself. */
+const MODEL_ALIASES = ["opus", "sonnet", "haiku", "fable", "best", "opusplan", "default", "inherit"];
 /** Tier stored for a custom role created with a pinned model (the pin wins at render time). */
 const PINNED_CUSTOM_TIER: Tier = "work";
 const INPUT_KEYS = ["name", "description", "model", "tools", "prompt"];
@@ -176,9 +179,11 @@ export function disableRole(config: Config, name: string, manifest: Manifest): C
   return fail(`role "${name}" not found`, "not_found");
 }
 
+/** Points a tier at a full model ID; rejects aliases (opus, sonnet, ...) and ids over 128 characters. */
 export function setTierModel(config: Config, tier: string, model: string): Config {
   if (!isTier(tier)) fail(`unknown tier "${tier}": use ${TIERS.join(", ")}`);
-  if (!PIN.test(model)) fail(`invalid model id "${model}"`);
+  if (!PIN.test(model) || model.length > MAX_MODEL_ID) fail(`invalid model id "${model.slice(0, MAX_MODEL_ID)}"`);
+  if (MODEL_ALIASES.includes(model.toLowerCase())) fail(`model must be a full model ID, not the alias "${model}"`);
   const next = structuredClone(config);
   next.tiers[tier as Tier] = model;
   return next;
