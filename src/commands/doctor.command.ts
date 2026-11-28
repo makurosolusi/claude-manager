@@ -4,6 +4,7 @@ import { parseSettings, readText } from "../install/install.target.ts";
 import { resolveRoles } from "../roles/roles.registry.ts";
 import { sha256 } from "../storage/json.file.ts";
 import type { Command } from "./command.types.ts";
+import { checkPolicy } from "./doctor.policy.ts";
 import { checkRouting } from "./doctor.routing.ts";
 
 type Check = { ok: boolean | "warn"; label: string };
@@ -57,15 +58,17 @@ export const doctorCommand: Command = {
   async run() {
     const config = await loadConfig();
     const roles = resolveRoles(config);
+    const manifest = await loadManifest();
     const checks = [
       await checkClaude(),
       { ok: true, label: `${resolveRoles(config).length} roles enabled` } as Check,
       ...(await checkInstalls()),
       checkProvider(),
       ...(await checkRouting(
-        Object.values((await loadManifest()).installs),
+        Object.values(manifest.installs),
         roles.map((r) => r.name),
       )),
+      ...(await checkPolicy(config, manifest.policy)),
     ];
     for (const c of checks) console.log(`${c.ok === true ? "ok  " : c.ok === "warn" ? "warn" : "FAIL"}  ${c.label}`);
     return checks.some((c) => c.ok === false) ? 1 : 0;
