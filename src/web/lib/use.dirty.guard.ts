@@ -1,10 +1,33 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { registerNavBlocker, type NavBlocker } from "./hash.route.ts";
 
 const norm = (h: string) => h.replace(/^#/, "") || "/";
 
 /** True when leaving `prevHash` for a different `nextHash` would discard unsaved changes (query-only changes count; identical hashes do not). */
 export function shouldBlock(prevHash: string, nextHash: string, dirty: boolean): boolean {
   return dirty && norm(prevHash) !== norm(nextHash);
+}
+
+export interface Blocker {
+  /** The router-facing check: true holds the navigation and reports its target through `onBlock`. */
+  check: NavBlocker;
+  /** Let exactly the next navigation through (Discard). */
+  allowNext: () => void;
+}
+
+/** Pure blocker core: blocks while `isDirty()`, reports the held target, and lets one navigation pass after `allowNext`. */
+export function createBlocker(isDirty: () => boolean, onBlock: (target: string) => void): Blocker {
+  let allow = false;
+  return {
+    allowNext: () => { allow = true; },
+    check: (prev, next) => {
+      if (norm(prev) === norm(next)) return false;
+      if (allow) { allow = false; return false; }
+      if (!shouldBlock(prev, next, isDirty())) return false;
+      onBlock(next);
+      return true;
+    },
+  };
 }
 
 export interface DirtyGuard {
@@ -14,33 +37,22 @@ export interface DirtyGuard {
   confirmDiscard: () => void;
   /** Keep editing: drop `pending`. */
   keepEditing: () => void;
-  /** Navigate to `target` (a hash such as "#/agents") now if clean, otherwise set `pending`. */
+  /** Navigate to `target` (a hash such as "#/agents"); the router blocker holds it while dirty. */
   guard: (target: string) => void;
 }
 
-/** Warns before losing unsaved edits: `beforeunload` while dirty, and hash navigation is held until the user confirms. */
+/** Warns before losing unsaved edits: `beforeunload` while dirty, and a router blocker holds hash navigation until the user confirms. */
 export function useDirtyGuard(dirty: boolean): DirtyGuard {
   const [pending, setPending] = useState<string | null>(null);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
-  const prev = useRef(location.hash);
-  const allow = useRef(false);
+  const blocker = useRef<Blocker | null>(null);
 
   useEffect(() => {
-    // Capture phase + stopImmediatePropagation so the router never sees a blocked hash and keeps showing this page.
-    const onHash = (e: Event) => {
-      const next = location.hash;
-      if (allow.current) allow.current = false;
-      else if (shouldBlock(prev.current, next, dirtyRef.current)) {
-        e.stopImmediatePropagation();
-        history.replaceState(null, "", prev.current || "#/");
-        setPending(next);
-        return;
-      }
-      prev.current = next;
-    };
-    addEventListener("hashchange", onHash, true);
-    return () => removeEventListener("hashchange", onHash, true);
+    const b = createBlocker(() => dirtyRef.current, setPending);
+    blocker.current = b;
+    const off = registerNavBlocker(b.check);
+    return () => { off(); blocker.current = null; };
   }, []);
 
   useEffect(() => {
@@ -50,13 +62,10 @@ export function useDirtyGuard(dirty: boolean): DirtyGuard {
     return () => removeEventListener("beforeunload", onUnload);
   }, [dirty]);
 
-  const guard = useCallback((target: string) => {
-    if (shouldBlock(location.hash, target, dirtyRef.current)) setPending(target);
-    else location.hash = target;
-  }, []);
+  const guard = useCallback((target: string) => { location.hash = target; }, []);
   const confirmDiscard = useCallback(() => {
     if (pending === null) return;
-    allow.current = true;
+    blocker.current?.allowNext();
     setPending(null);
     location.hash = pending;
   }, [pending]);
