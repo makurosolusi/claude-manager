@@ -11,8 +11,8 @@ import {
   countLine, diffToPatches, discardStaging, isDirty, newStaging, rowsForDisplay, stageCell, stagedRows, summarizeRow, type Staging,
 } from "@/lib/policy.matrix.ts";
 import { useDirtyGuard } from "@/lib/use.dirty.guard.ts";
-import { CAPABILITIES } from "../../policy/policy.presets.ts";
-import type { PolicyResponse } from "../../server/policy.types.ts";
+import { CAPABILITIES, PRESET_LABEL, presetRow } from "../../policy/policy.presets.ts";
+import type { Capability, PolicyResponse, PolicyRow } from "../../server/policy.types.ts";
 
 const TH = "px-2 py-2 text-left text-xs font-medium text-muted-foreground";
 const KIND_NOTE: Record<string, string> = { main: "your own session", unknown: "built-in and other agents" };
@@ -32,6 +32,8 @@ export function PolicyMatrix({ policy, editable, roles, onSaved, onFailure }: Pr
   useEffect(() => { if (!dirty) setStaging(newStaging(policy.rows)); }, [policy.rows, dirty]);
   const tiers = Object.fromEntries((roles ?? []).map((r) => [r.name, r.tier]));
   const rows = stagedRows(staging);
+  const presetName = policy.config?.preset ?? "balanced";
+  const presetOf = (r: PolicyRow, c: Capability) => ({ label: PRESET_LABEL[presetName], decision: presetRow(presetName, r.row, r.kind, tiers[r.row])[c] });
   const patches = diffToPatches(staging.initial, rows);
   const cellCount = patches.reduce((n, p) => n + Object.keys(p.body).length, 0);
 
@@ -59,7 +61,7 @@ export function PolicyMatrix({ policy, editable, roles, onSaved, onFailure }: Pr
                 </th>
                 {CAPABILITIES.map((c) => (
                   <td key={c} className="border-t px-2 py-1.5">
-                    <PolicyCell row={r} cap={c} editable={editable} staged={staging.edits[r.row]?.[c] !== undefined} onChange={(d) => setStaging(stageCell(staging, r.row, c, d))} />
+                    <PolicyCell row={r} cap={c} preset={presetOf(r, c)} editable={editable} staged={staging.edits[r.row]?.[c] !== undefined} onChange={(d) => setStaging(stageCell(staging, r.row, c, d))} />
                   </td>
                 ))}
               </tr>
@@ -79,7 +81,7 @@ export function PolicyMatrix({ policy, editable, roles, onSaved, onFailure }: Pr
               {CAPABILITIES.map((c) => (
                 <li key={c} className="flex items-center justify-between gap-2 px-3 py-1">
                   <span className={cn("text-sm", c === "mcp" ? "uppercase" : "capitalize")}>{c}</span>
-                  <PolicyCell row={r} cap={c} editable={editable} staged={staging.edits[r.row]?.[c] !== undefined} onChange={(d) => setStaging(stageCell(staging, r.row, c, d))} />
+                  <PolicyCell row={r} cap={c} preset={presetOf(r, c)} editable={editable} staged={staging.edits[r.row]?.[c] !== undefined} onChange={(d) => setStaging(stageCell(staging, r.row, c, d))} />
                 </li>
               ))}
             </ul>

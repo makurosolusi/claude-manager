@@ -2,7 +2,7 @@ import { Panel } from "@/components/panel.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { cn } from "@/lib/cn.ts";
 import { PRESET_LABEL, PRESET_NAMES, RECOMMENDED_PRESET } from "../../policy/policy.presets.ts";
-import type { PolicyInput, PresetName } from "../../server/policy.types.ts";
+import type { PolicyConfig, PolicyInput, PresetName } from "../../server/policy.types.ts";
 
 export interface SetupForm { preset: PresetName; scope: PolicyInput["scope"]; acceptEdits: boolean; ack: boolean }
 export const DEFAULT_SETUP: SetupForm = { preset: RECOMMENDED_PRESET, scope: "user", acceptEdits: false, ack: false };
@@ -64,3 +64,20 @@ export function PolicySetup({ form, onChange, onPreview, busy }: Props) {
     </Panel>
   );
 }
+
+/** "Preset: Balanced · Scope: user · Accept edits: off" for a stored policy. */
+export const summaryLine = (c: PolicyConfig): string =>
+  `Preset: ${PRESET_LABEL[c.preset]} · Scope: ${c.scope} · Accept edits: ${c.defaultMode === "acceptEdits" ? "on" : "off"}`;
+
+/** Compact stand-in for the setup card once a policy exists; "Change preset" (when allowed) opens the full card. */
+export function PolicySummary({ config, onChange }: { config: PolicyConfig; onChange?: () => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border px-3 py-2 text-sm">
+      <span className="min-w-0 flex-1 text-muted-foreground">{summaryLine(config)}</span>
+      {onChange && <Button variant="outline" size="sm" className="max-sm:min-h-11 max-sm:w-full" onClick={onChange}>Change preset</Button>}
+    </div>
+  );
+}
+
+/** Setup form seeded from the stored policy, so changing a preset starts from what is applied. */
+export const formFromConfig = (c: PolicyConfig): SetupForm => ({ preset: c.preset, scope: c.scope, acceptEdits: c.defaultMode === "acceptEdits", ack: false });

@@ -7,8 +7,15 @@ const state = (qs: string) => parseTableQuery(new URLSearchParams(qs), AUDIT_SPE
 test("auditApi maps table state to size/page and repeatable facets", () => {
   const { path, query } = auditApi("2026-11-01T00:00:00.000Z", state("q=bash&decision=deny&decision=ask&role=coder&page=2&size=25"), "7d");
   expect(path).toBe("/api/policy/audit");
-  expect(query).toMatchObject({ since: "2026-11-01T00:00:00.000Z", q: "bash", page: 2, size: 25, decision: ["deny", "ask"], role: ["coder"], tool: [] });
+  expect(query).toMatchObject({ since: "2026-11-01T00:00:00.000Z", q: "bash", page: 2, size: 25, decision: ["deny", "ask"], role: ["coder"], tool: [], cap: [] });
   expect(query).not.toHaveProperty("pageSize");
+});
+
+test("cap is a repeatable facet read from the capability counts", () => {
+  expect(state("cap=shell&cap=edit").filters.cap).toEqual(["shell", "edit"]);
+  expect(auditApi("s", state("cap=shell"), "7d").query).toMatchObject({ cap: ["shell"] });
+  const data = { facets: { decision: [], role: [], capability: [{ value: "shell", count: 2 }], tool: [] } } as never;
+  expect(auditFacet(data, "cap")).toEqual([{ value: "shell", count: 2 }]);
 });
 
 test("unknown decision values are dropped from the URL state", () => {

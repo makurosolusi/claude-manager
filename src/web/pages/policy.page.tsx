@@ -8,7 +8,7 @@ import { PolicyFloors } from "@/components/policy.floors.tsx";
 import { inputFromConfig, usePolicyFlow } from "@/components/policy.flow.tsx";
 import { PolicyActions } from "@/components/policy.header.tsx";
 import { PolicyMatrix } from "@/components/policy.matrix.tsx";
-import { DEFAULT_SETUP, PolicySetup, type SetupForm } from "@/components/policy.setup.tsx";
+import { DEFAULT_SETUP, formFromConfig, PolicySetup, PolicySummary, type SetupForm } from "@/components/policy.setup.tsx";
 import { Panel } from "@/components/panel.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { useApi } from "@/lib/api.client.ts";
@@ -54,8 +54,8 @@ export function PolicyPage({ dataVersion, params, roles }: PageProps) {
       )}
       {data && <PolicyCause policy={data} readOnly={readOnly} busy={flow.busy} onReapply={reapply} />}
       {readOnly && status !== "enforced" && <p className="font-mono text-xs text-muted-foreground">{CLI_HINT}</p>}
-      {data && write === true && stored && !showSetup && status !== "blocked" && (
-        <div><Button variant="outline" size="sm" onClick={() => setChanging(true)}>Change preset</Button></div>
+      {stored && !showSetup && !flow.pending && (
+        <PolicySummary config={stored} onChange={write === true && status !== "blocked" ? () => { setForm(formFromConfig(stored)); setChanging(true); } : undefined} />
       )}
       {showSetup && !flow.pending && <PolicySetup form={form} onChange={setForm} busy={flow.busy} onPreview={() => flow.fromForm(form)} />}
       {flow.pending && <PolicyDiff preview={flow.pending.data} title="Confirm & apply" busy={flow.busy} onApply={() => flow.setAsk("apply")} onCancel={() => flow.setPending(null)} />}

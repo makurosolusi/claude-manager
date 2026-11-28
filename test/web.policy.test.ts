@@ -129,3 +129,10 @@ test("applyPatches chains the etag from each result", async () => {
   expect(hdr(second!, "If-Match")).toMatch(/^e\d+$/);
   expect(await applyPatches([], "E0")).toBeNull();
 });
+
+test("summaryLine names preset, scope and Accept edits for the collapsed setup row", async () => {
+  const { summaryLine } = await import("../src/web/components/policy.setup.tsx");
+  const base = { enabled: true, preset: "balanced", scope: "user", overrides: {}, testCommands: [] } as never;
+  expect(summaryLine(base)).toBe("Preset: Balanced · Scope: user · Accept edits: off");
+  expect(summaryLine({ ...(base as object), defaultMode: "acceptEdits", scope: "project" } as never)).toBe("Preset: Balanced · Scope: project · Accept edits: on");
+});

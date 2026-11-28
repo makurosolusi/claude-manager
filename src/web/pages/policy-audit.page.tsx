@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ScrollText } from "lucide-react";
+import { ScrollText, Shield } from "lucide-react";
 import type { AuditResponse } from "../../server/policy.types.ts";
 import type { PageProps } from "@/lib/page.props.ts";
 import { NoMatchState } from "@/components/client.table.tsx";
@@ -15,8 +15,8 @@ import { roleIcon } from "@/lib/role.icon.ts";
 import { AUDIT_FACET_IDS, AUDIT_SPEC, auditApi, auditCountLabel, auditFacet, auditHref } from "@/lib/policy.audit.query.ts";
 import { parseTableQuery, patchTable, type TableState } from "@/lib/table.query.ts";
 
-const FACET_LABEL = { decision: "Decision", role: "Role", tool: "Tool" } as const;
-const FACET_ICON = { decision: ScrollText, role: NAV_ICON.roles, tool: toolIcon("") };
+const FACET_LABEL = { decision: "Decision", role: "Role", cap: "Capability", tool: "Tool" } as const;
+const FACET_ICON = { decision: ScrollText, role: NAV_ICON.roles, cap: Shield, tool: toolIcon("") };
 
 /** Policy audit: every decision the hook made; server-side search, facets and paging, state in the URL hash. */
 export function PolicyAuditPage({ since, range, dataVersion, params, roles }: PageProps) {
@@ -49,7 +49,7 @@ export function PolicyAuditPage({ since, range, dataVersion, params, roles }: Pa
         summary={<span className="tabular-nums">{auditCountLabel(data?.total, !!error)}</span>}
       />
       <DataTable
-        label="Policy decisions" rows={data?.items} columns={columns} rowKey={(r) => `${r.ts}|${r.session_id}|${r.tool}|${r.rule}`}
+        label="Policy decisions" rows={data?.items} columns={columns} rowKey={(r) => r.id}
         loading={loading} stale={stale} error={error && new Error(`Couldn't load the audit. ${error.message}`)} onRetry={() => setRetry((n) => n + 1)}
         empty={filtered ? <NoMatchState noun="decisions" onReset={reset} /> : "No decisions yet. They appear here after workers run with the policy on."}
       />

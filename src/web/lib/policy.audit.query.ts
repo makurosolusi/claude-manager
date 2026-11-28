@@ -6,14 +6,14 @@ import { DEFAULT_RANGE, type Range } from "@/lib/range.ts";
 import { tableParams, type TableSpec, type TableState } from "@/lib/table.query.ts";
 
 export const POLICY_AUDIT_PATH = "/policy/audit";
-/** Facet ids; each is the URL key and the API param. Capability is not offered: the API has no filter for it. */
-export const AUDIT_FACET_IDS = ["decision", "role", "tool"] as const;
+/** Facet ids; each is the URL key and the API param (`cap` is served from `facets.capability`). */
+export const AUDIT_FACET_IDS = ["decision", "role", "cap", "tool"] as const;
 export const AUDIT_DECISIONS = ["allow", "ask", "deny", "error"] as const;
 
 /** URL contract of the audit table (no sorting or grouping: the server orders by time). */
 export const AUDIT_SPEC: TableSpec = {
   sorts: [], defaultSort: "ts", defaultDir: "desc", groups: [],
-  facets: { decision: AUDIT_DECISIONS, role: "free", tool: "free" },
+  facets: { decision: AUDIT_DECISIONS, role: "free", cap: "free", tool: "free" },
 };
 
 /** `/api/policy/audit` request for the table state; the endpoint takes `size`, not `pageSize`. `range` is ignored by the server and keeps a range change a new resource. */
@@ -28,7 +28,7 @@ export const auditHref = (s: TableState, range: Range): string =>
 
 /** Facet options (with server counts) for one dimension. */
 export function auditFacet(data: AuditResponse | undefined, id: (typeof AUDIT_FACET_IDS)[number]): { value: string; count: number }[] {
-  return (data?.facets[id] ?? []).map((f) => ({ value: f.value, count: f.count }));
+  return (data?.facets[id === "cap" ? "capability" : id] ?? []).map((f) => ({ value: f.value, count: f.count }));
 }
 
 /** Subtitle count; "—" on error so a stale total is never shown. */

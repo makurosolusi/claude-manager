@@ -64,11 +64,10 @@ export function ModelPanel({ agent, tiers }: { agent: AgentDetail; tiers?: Tiers
   );
 }
 
-/** Tool chips with icons, or the inherit-all note; followed by the Permissions panel (agent-detail.page.tsx isn't wired to it separately). */
+/** Tool chips with icons, or the inherit-all note. */
 export function ToolsPanel({ agent }: { agent: AgentDetail }) {
   const note: ReactNode = agent.disallowed_tools?.length ? `All tools except ${agent.disallowed_tools.join(", ")}` : ALL_TOOLS;
   return (
-    <>
     <Panel title="Tools" count={agent.tools?.length}>
       {!agent.tools ? <p className="text-sm text-muted-foreground">{note}</p> : (
         <ul className="flex flex-wrap gap-1.5">
@@ -76,8 +75,6 @@ export function ToolsPanel({ agent }: { agent: AgentDetail }) {
         </ul>
       )}
     </Panel>
-    <PermissionsPanel agent={agent} />
-    </>
   );
 }
 
@@ -124,8 +121,8 @@ const DECISION_VIEW: Record<Decision, { tone: ToneKey; icon: typeof Check }> = {
 };
 
 /** Permission cells that apply to this agent (its own policy row, or the unknown row for externals), one chip per capability; overrides are marked "edited". */
-export function PermissionsPanel({ agent }: { agent: Pick<AgentDetail, "name" | "kind"> }) {
-  const { data } = usePolicy(0);
+export function PermissionsPanel({ agent, tick }: { agent: Pick<AgentDetail, "name" | "kind">; tick: number }) {
+  const { data } = usePolicy(tick);
   const row = rowForAgent(data?.rows, agent);
   if (!data || !row) return null;
   const off = data.status !== "enforced";

@@ -8,7 +8,8 @@ import { AgentFormHeader } from "@/components/agent.form.header.tsx";
 import { AgentNotice } from "@/components/agent.notice.tsx";
 import { PermissionError, ReadOnlyBadge } from "@/components/agent.readonly.tsx";
 import { DisabledChip, KindCell } from "@/components/agent.cells.tsx";
-import { FilesPanel, ModelPanel, PromptPanel, ToolsPanel, UsagePanel, WarningsPanel } from "@/components/agent.panels.tsx";
+import { FilesPanel, ModelPanel, PermissionsPanel, PromptPanel, ToolsPanel, UsagePanel, WarningsPanel } from "@/components/agent.panels.tsx";
+import { PolicyBannerHost } from "@/components/policy.banner.tsx";
 import { ToneBadge } from "@/components/tone.badge.tsx";
 import { RoleBadge } from "@/components/role.badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -48,6 +49,8 @@ function Failure({ name, error, onRetry }: { name: string; error: Error; onRetry
 }
 
 interface BodyProps extends Pick<PageProps, "tiers" | "roles"> {
+  /** Refresh tick (`dataVersion + retry`) for the policy-backed panel. */
+  tick: number;
   agent: AgentDetail;
   /** Edit permission: `write` shows actions, `read-only` the badge, `error` a Retry; `loading` shows nothing. */
   write: WriteStatus;
@@ -59,7 +62,7 @@ interface BodyProps extends Pick<PageProps, "tiers" | "roles"> {
   hideLiveNote?: boolean;
 }
 
-function Body({ agent, tiers, roles, write, onRetryWrite, form, actions, hideLiveNote }: BodyProps) {
+function Body({ tick, agent, tiers, roles, write, onRetryWrite, form, actions, hideLiveNote }: BodyProps) {
   return (
     <>
       {!form && <div className="flex flex-col gap-2">
@@ -78,7 +81,7 @@ function Body({ agent, tiers, roles, write, onRetryWrite, form, actions, hideLiv
       {form ?? <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 max-lg:order-2"><PromptPanel agent={agent} /></div>
         <div className="flex min-w-0 flex-col gap-4 max-lg:contents [&>*]:min-w-0">
-          <div className="max-lg:order-1 flex flex-col gap-4"><WarningsPanel warnings={agent.warnings} /><ModelPanel agent={agent} tiers={tiers} /><ToolsPanel agent={agent} /></div>
+          <div className="max-lg:order-1 flex flex-col gap-4"><WarningsPanel warnings={agent.warnings} /><ModelPanel agent={agent} tiers={tiers} /><ToolsPanel agent={agent} /><PermissionsPanel agent={agent} tick={tick} /></div>
           <div className="max-lg:order-3 flex flex-col gap-4"><FilesPanel agent={agent} /><UsagePanel agent={agent} /></div>
         </div>
       </div>}
@@ -120,9 +123,10 @@ export function AgentDetailPage({ name, dataVersion, params, tiers, roles }: Pag
   return (
     <div className="flex flex-col gap-4">
       {form ? <AgentFormHeader backHref={`#${path}`} backLabel={name} title={`Edit ${name}`} /> : <BackLink />}
+      {!form && <PolicyBannerHost tick={dataVersion + retry} />}
       <AgentNotice notice={notice} onClose={() => setNotice(null)} />
       {!data && error ? <Failure name={name} error={error} onRetry={reload} />
-        : !data ? <Skeleton /> : <Body agent={data} tiers={tiers} roles={roles} write={write} onRetryWrite={retryWrite} form={form} hideLiveNote={!!notice?.live} actions={<AgentActions agent={data} onNotice={setNotice} onReload={reload} />} />}
+        : !data ? <Skeleton /> : <Body tick={dataVersion + retry} agent={data} tiers={tiers} roles={roles} write={write} onRetryWrite={retryWrite} form={form} hideLiveNote={!!notice?.live} actions={<AgentActions agent={data} onNotice={setNotice} onReload={reload} />} />}
     </div>
   );
 }
