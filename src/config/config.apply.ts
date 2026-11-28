@@ -4,6 +4,8 @@ import { CliError } from "../cli.error.ts";
 import { install, reapplyAll } from "../install/install.service.ts";
 import { backupPath, loadManifest, type Manifest } from "../install/install.manifest.ts";
 import { readText } from "../install/install.target.ts";
+import { policySnapshotPath } from "../policy/policy.paths.ts";
+import { compileSnapshot } from "../policy/policy.service.ts";
 import { sha256, writeJson } from "../storage/json.file.ts";
 import { type Config, configPath, loadConfig } from "./config.store.ts";
 
@@ -40,7 +42,8 @@ export interface ApplyResult { applied: number; config: Config; etag: string }
 
 // ponytail: in-process lock; cross-process races are caught by the etag
 let tail: Promise<unknown> = Promise.resolve();
-function withConfigLock<T>(fn: () => Promise<T>): Promise<T> {
+/** Serialises every config.json writer in this process (config apply and policy apply share it). */
+export function withConfigLock<T>(fn: () => Promise<T>): Promise<T> {
   const run = tail.then(fn, fn);
   tail = run.catch(() => undefined);
   return run;
@@ -79,8 +82,11 @@ async function restore(path: string, text: string | undefined): Promise<void> {
   }
 }
 
-/** Restores config.json, then best-effort re-renders every install with the old config; never loses the original error. */
-async function rollback(err: unknown, path: string, before: string | undefined, previous: Config): Promise<Error> {
+/**
+ * Restores config.json, then best-effort re-renders every install with the old config, then puts the previous policy
+ * snapshot bytes back (they match the old agent files again); never loses the original error.
+ */
+async function rollback(err: unknown, path: string, before: string | undefined, previous: Config, snapshotBefore: string | undefined): Promise<Error> {
   const failures: string[] = [];
   try {
     await restore(path, before);
@@ -88,6 +94,8 @@ async function rollback(err: unknown, path: string, before: string | undefined, 
   } catch (e) {
     failures.push(`restore ${path}: ${message(e)}`); // config.json may still hold the new config: don't re-render the old one over it
   }
+  const snapshot = policySnapshotPath();
+  await restore(snapshot, snapshotBefore).catch((e: unknown) => failures.push(`restore ${snapshot}: ${message(e)}`));
   if (!failures.length && err instanceof CliError) return err;
   const suffix = failures.length ? `; rollback failed: ${failures.join("; ")}` : "";
   return new Error(`apply config: ${message(err)}${suffix}`, { cause: err });
@@ -100,8 +108,17 @@ async function pruneConfigBackups(dir: string): Promise<void> {
 }
 
 /**
+ * With the policy applied (`manifest.policy`), recompiles the hook snapshot so `owned` hashes and rows follow the
+ * re-rendered agent files. Settings stay as they are: `desiredSettings` depends only on the policy, not on roles.
+ */
+async function refreshPolicySnapshot(next: Config): Promise<void> {
+  const manifest = await loadManifest();
+  if (manifest.policy && next.policy?.enabled) await writeJson(policySnapshotPath(), compileSnapshot(next, manifest));
+}
+
+/**
  * Under the config lock: check the etag, load config + manifest, build the next config, dry-run (conflict = nothing written),
- * back up config.json, write it atomically, re-render every install, roll back on I/O failure.
+ * back up config.json, write it atomically, re-render every install, recompile the policy snapshot, roll back on I/O failure.
  */
 export function applyConfig(build: ConfigBuild, opts: ApplyOptions = {}): Promise<ApplyResult> {
   return withConfigLock(async () => {
@@ -117,12 +134,14 @@ export function applyConfig(build: ConfigBuild, opts: ApplyOptions = {}): Promis
       await Bun.write(backup, before);
       await pruneConfigBackups(dirname(backup));
     }
+    const snapshotBefore = await readText(policySnapshotPath());
     try {
       await writeJson(path, next);
       const applied = (await reapplyAll(next)).length;
+      await refreshPolicySnapshot(next);
       return { applied, config: next, etag: configEtag(await readText(path)) };
     } catch (err) {
-      throw await rollback(err, path, before, config);
+      throw await rollback(err, path, before, config, snapshotBefore);
     }
   });
 }
