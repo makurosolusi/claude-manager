@@ -52,6 +52,16 @@ const GROUP_KEY: Record<string, (r: AgentRow) => string> = { kind: (r) => r.kind
 /** Group key of a row for the `group` URL value (NO_GROUP and unknown values yield one "all" bucket). */
 export const agentGroupKey = (group: string, r: AgentRow): string => GROUP_KEY[group]?.(r) ?? "all";
 
+const GROUP_ORDER: Record<string, readonly string[]> = { kind: KINDS, tier: TIERS, scope: SCOPES };
+
+/** Stable reorder so groups appear in the declared order (Preset, Custom, External…) instead of first-row-seen; rows keep their sort inside a group. */
+export function orderByGroup(rows: AgentRow[], group: string): AgentRow[] {
+  const order = GROUP_ORDER[group];
+  if (!order) return rows;
+  const rank = (r: AgentRow) => { const i = order.indexOf(agentGroupKey(group, r)); return i < 0 ? order.length : i; };
+  return [...rows].sort((a, b) => rank(a) - rank(b));
+}
+
 /** Pieces of the model chain, shared by `chainText` and the ModelChain component. */
 export type ChainInput = Pick<AgentRow, "tier" | "pin" | "alias" | "model_id"> & { name?: string };
 

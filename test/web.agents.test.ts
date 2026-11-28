@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AgentRow } from "../src/server/agents.types.ts";
-import { AGENTS_SPEC, agentGroupKey, agentTableOptions, chainText, scopeKey, tierKey } from "../src/web/lib/agents.table.ts";
+import { AGENTS_SPEC, agentGroupKey, agentTableOptions, chainText, orderByGroup, scopeKey, tierKey } from "../src/web/lib/agents.table.ts";
 import { runClientTable, type ClientTableState } from "../src/web/lib/table.client.ts";
 
 const usage = { requests: 0, cost_usd: 0, unpriced: 0, last_ts: null, rerouted_pct: null };
@@ -64,4 +64,13 @@ test("chainText for tier-routed, pinned and external rows", () => {
   expect(chainText(rows[3]!)).toBe("Explore → haiku");
   expect(chainText(rows[4]!)).toBe("plain → inherit");
   expect(chainText({ tier: "think", pin: null, alias: "opus", model_id: "claude-opus-5-5" })).toBe("think → opus → claude-opus-5-5");
+});
+
+test("orderByGroup ranks groups explicitly and keeps the row order inside a group", () => {
+  const keys = (g: string) => [...new Set(orderByGroup(rows, g).map((r) => agentGroupKey(g, r)))];
+  expect(keys("kind")).toEqual(["preset", "custom", "external"]);
+  expect(keys("tier")).toEqual(["think", "work", "pinned", "none"]);
+  expect(keys("scope")).toEqual(["user", "both", "none"]);
+  expect(names(orderByGroup(rows, "kind")).slice(-2)).toEqual(["Explore", "plain"]);
+  expect(orderByGroup(rows, "all")).toBe(rows);
 });
