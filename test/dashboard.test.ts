@@ -263,7 +263,7 @@ describe("dashboard api: session sort, search and model", () => {
 
 describe("dashboard api: meta", () => {
   test("without a provider reports never synced and the default tiers", async () => {
-    expect(await get<DashboardMeta>("/api/meta")).toEqual({ synced_at: null, changed_at: null, error: null, interval_ms: SYNC_INTERVAL_MS, tiers: DEFAULT_TIER_MODELS, roles: PRESET_ROLES.map((r) => ({ name: r.name, tier: r.tier, source: "preset" })) });
+    expect(await get<DashboardMeta>("/api/meta")).toEqual({ synced_at: null, changed_at: null, error: null, warnings: [], interval_ms: SYNC_INTERVAL_MS, tiers: DEFAULT_TIER_MODELS, roles: PRESET_ROLES.map((r) => ({ name: r.name, tier: r.tier, source: "preset" })) });
   });
 
   test("returns the provider's sync state and configured tiers", async () => {
@@ -271,6 +271,7 @@ describe("dashboard api: meta", () => {
       synced_at: "2026-11-27T10:00:00.000Z",
       changed_at: "2026-11-27T09:59:00.000Z",
       error: "disk full",
+      warnings: [],
       interval_ms: 1000,
       tiers: { think: "claude-opus-test", work: "claude-sonnet-test", basic: "claude-haiku-test" }, // test-only
       roles: [{ name: "coder", tier: "work", source: "preset" }, { name: "qa", tier: "basic", source: "custom" }],

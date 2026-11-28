@@ -14,10 +14,12 @@ export function useTempHome() {
     process.env.HOME = ctx.home;
     process.env.CLAUDE_CONFIG_DIR = ctx.claude;
     process.env.CLAUDE_MANAGER_HOME = ctx.app;
+    // Source-run tests apply policies; product code allows a source hook only with this opt-in.
+    process.env.CLAUDE_MANAGER_DEV_POLICY = "1";
   });
   afterEach(() => {
     rmSync(ctx.home, { recursive: true, force: true });
-    for (const k of ["HOME", "CLAUDE_CONFIG_DIR", "CLAUDE_MANAGER_HOME"]) {
+    for (const k of ["HOME", "CLAUDE_CONFIG_DIR", "CLAUDE_MANAGER_HOME", "CLAUDE_MANAGER_DEV_POLICY"]) {
       if (saved[k] === undefined) delete process.env[k];
       else process.env[k] = saved[k];
     }

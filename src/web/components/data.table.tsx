@@ -19,7 +19,7 @@ export interface Column<T> {
   primary?: boolean;
   /** Takes the leftover width and truncates (`w-full max-w-0`); default = the primary column. Give the primary column a `width` when another column fills. */
   fill?: boolean;
-  hideBelow?: "sm" | "md" | "lg";
+  hideBelow?: "sm" | "md" | "lg" | "2xl";
   hideable?: boolean; // default true; the primary column is never hideable
   total?: (rows: T[]) => ReactNode; // present on any column = a footer row with totals
 }

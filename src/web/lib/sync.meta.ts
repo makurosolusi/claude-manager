@@ -30,7 +30,7 @@ export function trackVersion(t: VersionTracker, changedAt: string | null): Versi
 /** Meta for SyncIndicator with a failed poll folded into `error`, so it shows "Sync failed" even before the first success. */
 export function withPollError(meta: SyncMeta | undefined, error: Error | undefined): SyncMeta | undefined {
   if (!error) return meta;
-  return { synced_at: null, changed_at: null, interval_ms: META_POLL_FALLBACK_MS, ...meta, error: error.message };
+  return { synced_at: null, changed_at: null, warnings: [], interval_ms: META_POLL_FALLBACK_MS, ...meta, error: error.message };
 }
 
 /** Error from a failed poll, guaranteed to name the endpoint (fetch network errors don't). */

@@ -61,10 +61,10 @@ test("trackVersion sets a baseline, then bumps only when changed_at moves", () =
 });
 
 test("withPollError surfaces a failed poll even without prior meta", () => {
-  const meta = { synced_at: "2026-11-27T10:00:00Z", changed_at: null, error: null, interval_ms: 2000 };
+  const meta = { synced_at: "2026-11-27T10:00:00Z", changed_at: null, error: null, warnings: [], interval_ms: 2000 };
   expect(withPollError(meta, undefined)).toBe(meta);
   expect(withPollError(meta, new Error("GET /api/meta failed (500): boom"))).toEqual({ ...meta, error: "GET /api/meta failed (500): boom" });
-  expect(withPollError(undefined, new Error("x"))).toEqual({ synced_at: null, changed_at: null, interval_ms: META_POLL_FALLBACK_MS, error: "x" });
+  expect(withPollError(undefined, new Error("x"))).toEqual({ synced_at: null, changed_at: null, warnings: [], interval_ms: META_POLL_FALLBACK_MS, error: "x" });
 });
 
 test("getJson names the endpoint on network failure and keeps the cause", async () => {

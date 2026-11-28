@@ -37,7 +37,7 @@ export interface TimelineItem extends Usage { uuid: string; ts: string; source: 
 export interface RoleRow extends Usage { role: string; model: string; rerouted: number }
 export interface LiveSession { id: string; title: string | null; project_cwd: string | null; model: string; last_ts: string; context_used: number; context_window: number; context_left_pct: number; cost_usd: number }
 /** Background sync state of the running dashboard. */
-export interface SyncMeta { synced_at: string | null; changed_at: string | null; error: string | null; interval_ms: number }
+export interface SyncMeta { synced_at: string | null; changed_at: string | null; error: string | null; /** Non-fatal sync notes (e.g. the policy audit was not ingested); empty when clean. */ warnings: string[]; interval_ms: number }
 /** /api/meta body: sync state, configured model ID per tier, and the role roster. */
 export type DashboardMeta = SyncMeta & { tiers: Record<Tier, string>; roles: MetaRole[] };
 /** A resolved role: preset vs custom decides how the web renders its badge. */

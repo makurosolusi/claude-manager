@@ -1,10 +1,10 @@
 import pkg from "../package.json" with { type: "json" };
 import { CliError, formatError } from "./cli.error.ts";
-import { commands } from "./commands/commands.registry.ts";
+import type { Command } from "./commands/command.types.ts";
 
 const BIN = "claude-manager";
 
-function renderHelp(): string {
+function renderHelp(commands: Command[]): string {
   const width = Math.max(...commands.map((c) => c.name.length), 4);
   const lines = commands.map((c) => `  ${c.name.padEnd(width)}  ${c.summary}`);
   return [
@@ -22,7 +22,7 @@ function renderHelp(): string {
   ].join("\n");
 }
 
-function findCommand(name: string) {
+function findCommand(commands: Command[], name: string) {
   const command = commands.find((c) => c.name === name);
   if (!command) throw new CliError(`unknown command "${name}". Run "${BIN} --help".`);
   return command;
@@ -30,8 +30,11 @@ function findCommand(name: string) {
 
 export async function run(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
+  // Fast path: the hook runs on every tool call, so it must not load the registry, sqlite, the dashboard or React.
+  if (cmd === "hook") return (await import("./commands/hook.command.ts")).runHook(rest);
+  const { commands } = await import("./commands/commands.registry.ts");
   if (!cmd || cmd === "-h" || cmd === "--help") {
-    console.log(renderHelp());
+    console.log(renderHelp(commands));
     return 0;
   }
   if (cmd === "-v" || cmd === "--version") {
@@ -39,10 +42,10 @@ export async function run(argv: string[]): Promise<number> {
     return 0;
   }
   if (cmd === "help") {
-    console.log(rest[0] ? findCommand(rest[0]).usage : renderHelp());
+    console.log(rest[0] ? findCommand(commands, rest[0]).usage : renderHelp(commands));
     return 0;
   }
-  const command = findCommand(cmd);
+  const command = findCommand(commands, cmd);
   if (rest.includes("-h") || rest.includes("--help")) {
     console.log(command.usage);
     return 0;

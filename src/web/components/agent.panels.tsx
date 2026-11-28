@@ -1,18 +1,23 @@
-import { TriangleAlert } from "lucide-react";
+import { Ban, Check, CircleHelp, Minus, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import type { AgentDetail } from "../../server/agents.types.ts";
 import { CopyButton } from "@/components/agent.copy.tsx";
 import { ScopeChip } from "@/components/agent.cells.tsx";
 import { CostCell } from "@/components/cost.cell.tsx";
 import { ModelChain } from "@/components/model.chain.tsx";
+import { ToneBadge } from "@/components/tone.badge.tsx";
 import { Panel } from "@/components/panel.tsx";
 import { RelativeTime } from "@/components/relative.time.tsx";
-import { TONE_CLASSES } from "@/lib/color.tokens.ts";
+import { TONE_CLASSES, type ToneKey } from "@/lib/color.tokens.ts";
 import { cn } from "@/lib/cn.ts";
 import { fmtInt } from "@/lib/format.ts";
 import { hashHref } from "@/lib/hash.route.ts";
 import { toolIcon } from "@/lib/icon.map.ts";
 import type { Tiers } from "@/lib/model.tier.ts";
+import { CAPABILITIES } from "../../policy/policy.presets.ts";
+import { usePolicy, rowForAgent } from "@/lib/policy.use.ts";
+import { CAP_NOUN, DECISION_LABEL } from "@/lib/policy.matrix.ts";
+import type { Decision } from "../../server/policy.types.ts";
 
 /** Where the system prompt came from, in words. */
 const PROMPT_SOURCE = { default: "default prompt", config: "from config", file: "from file" } as const;
@@ -107,6 +112,30 @@ export function UsagePanel({ agent }: { agent: AgentDetail }) {
       <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-[13px]">
         {rows.map(([k, v]) => <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd className="text-right tabular-nums">{v}</dd></div>)}
       </dl>
+    </Panel>
+  );
+}
+
+const DECISION_VIEW: Record<Decision, { tone: ToneKey; icon: typeof Check }> = {
+  allow: { tone: "success", icon: Check }, ask: { tone: "warning", icon: CircleHelp }, deny: { tone: "danger", icon: Ban }, default: { tone: "neutral", icon: Minus },
+};
+
+/** Permission cells that apply to this agent (its own policy row, or the unknown row for externals), one chip per capability; overrides are marked "edited". */
+export function PermissionsPanel({ agent, tick }: { agent: Pick<AgentDetail, "name" | "kind">; tick: number }) {
+  const { data } = usePolicy(tick);
+  const row = rowForAgent(data?.rows, agent);
+  if (!data || !row) return null;
+  const off = data.status !== "enforced";
+  return (
+    <Panel title="Permissions" action={<a href="#/policy" className="text-xs underline-offset-2 hover:underline">Edit in policy</a>}>
+      {off && <p className="text-xs text-muted-foreground">Policy is not enforced, so workers ask for every tool. Cells below apply once it is.</p>}
+      {agent.kind === "external" && <p className="text-sm text-muted-foreground">Uses the unknown row</p>}
+      <ul className="flex flex-wrap gap-1.5">
+        {CAPABILITIES.map((c) => {
+          const cell = row.cells[c], v = DECISION_VIEW[cell.decision];
+          return <li key={c}><ToneBadge tone={v.tone} icon={v.icon} className={cn(off && "opacity-60")}>{`${CAP_NOUN[c]}: ${DECISION_LABEL[cell.decision]}${cell.source === "override" ? " · edited" : ""}`}</ToneBadge></li>;
+        })}
+      </ul>
     </Panel>
   );
 }

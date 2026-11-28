@@ -27,16 +27,18 @@ export function SyncIndicator({ meta, now }: { meta: SyncMeta | undefined; now: 
   const text = state === "connecting" ? "Connecting…" : state === "ok" ? `Synced ${age} ago` : state === "stalled" ? `Sync stalled · ${age}` : "Sync failed";
   const body = (
     <span title={text} className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground tabular-nums">
-      <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", DOT[state])} />
-      <span aria-hidden className="max-sm:hidden">{text}</span>
+      <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", state === "ok" && meta?.warnings?.length ? "bg-warn" : DOT[state])} />
+      <span aria-hidden className="max-xl:hidden">{text}</span>
       {/* Announce status changes only, not the ticking age. */}
       <span role="status" className="sr-only">
         {STATUS[state]}
       </span>
     </span>
   );
-  return state === "failed" ? (
-    <Tooltip focusable side="bottom" content={meta?.error}>
+  // A failed sync shows its error; a successful one with warnings (e.g. audit not ingested) lists them instead.
+  const note = state === "failed" ? meta?.error : state === "ok" && meta?.warnings?.length ? `Sync warnings: ${meta.warnings.join("; ")}` : undefined;
+  return note ? (
+    <Tooltip focusable side="bottom" content={note}>
       {body}
     </Tooltip>
   ) : (

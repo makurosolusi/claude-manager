@@ -27,9 +27,33 @@ export interface InstallRecord {
   installedAt: string;
 }
 
+export type PolicyList = "permissions.allow" | "permissions.ask" | "permissions.deny";
+
+export interface PolicyEntry {
+  list: PolicyList;
+  value: string;
+}
+
+/** What the permission policy wrote into one settings file; reverted before the install on uninstall. */
+export interface PolicyRecord {
+  settingsPath: string;
+  /** Copy taken before the first policy write; absent = file did not exist. */
+  backup?: string;
+  /** Only entries claude-manager added; ones the user already had are never recorded. */
+  entries: PolicyEntry[];
+  /** The exact PreToolUse group appended; null = none (or the user already had an identical one). */
+  hook: { group: unknown } | null;
+  /** Scalar keys, e.g. "permissions.defaultMode". */
+  keys: Record<string, KeyRecord>;
+  compiledPath: string;
+  appliedAt: string;
+}
+
 export interface Manifest {
   version: 1;
   installs: Record<string, InstallRecord>;
+  /** Absent = no policy applied. Optional so v0.3.0 manifests stay valid. */
+  policy?: PolicyRecord;
 }
 
 const manifestPath = () => join(appDir(), "manifest.json");

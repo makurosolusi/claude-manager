@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { openDb } from "../src/db/db.schema.ts";
+import { openDb, SCHEMA_VERSION } from "../src/db/db.schema.ts";
 import { sessionsPage } from "../src/db/sessions.repository.ts";
 import { FAMILY_SQL, usageTotal } from "../src/db/stats.repository.ts";
 import { handleApi } from "../src/server/dashboard.api.ts";
@@ -165,10 +165,10 @@ describe("meta, favicon, migration, family sql", () => {
   test("migrations create the v2 indexes and re-opening is a no-op", () => {
     const version = () => db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
     const indexes = () => db.query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'index'").all().map((r) => r.name);
-    expect(version()).toBe(3);
+    expect(version()).toBe(SCHEMA_VERSION);
     for (const name of ["sessions_last_ts", "sessions_project", "agents_session", "tool_calls_session"]) expect(indexes()).toContain(name);
     const again = openDb(join(ctx.app, "data.db"));
-    expect(again.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(3);
+    expect(again.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(SCHEMA_VERSION);
     again.close();
   });
 

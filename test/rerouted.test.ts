@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { run } from "../src/cli.ts";
-import { openDb } from "../src/db/db.schema.ts";
+import { openDb, SCHEMA_VERSION } from "../src/db/db.schema.ts";
 import { NORMALIZE_SQL, usageTotal } from "../src/db/stats.repository.ts";
 import { parseEntry } from "../src/ingest/ingest.parser.ts";
 import { sync } from "../src/ingest/ingest.service.ts";
@@ -51,7 +51,7 @@ describe("migration v3", () => {
     db.run("PRAGMA user_version = 2");
     db.close();
     db = openDb(); // column is already there; ADD COLUMN would throw "duplicate column"
-    expect(version()).toBe(3);
+    expect(version()).toBe(SCHEMA_VERSION);
   });
 
   test("adds the column to a v2 database and resets file offsets", () => {

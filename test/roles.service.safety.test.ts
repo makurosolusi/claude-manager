@@ -42,6 +42,11 @@ describe("prototype keys", () => {
     expect((await reason(async () => addRole(await loadConfig(), { ...valid, name } as AgentInput))).reason).toBe("invalid");
   });
 
+  test.each(["main", "unknown"])("addRole %s is 400: reserved for a permission policy row", async (name) => {
+    const err = await reason(async () => addRole(await loadConfig(), { ...valid, name } as AgentInput));
+    expect(err).toEqual({ message: `invalid role name "${name}": reserved for the permission policy`, reason: "invalid" });
+  });
+
   test.each(PROTO_NAMES)("updateRole/removeRole/disableRole %s are 404 and Object.prototype stays clean", async (name) => {
     const config = await loadConfig();
     expect((await reason(() => updateRole(config, name, { prompt: "x" }))).reason).toBe("not_found");

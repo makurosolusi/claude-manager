@@ -61,7 +61,21 @@ const MIGRATIONS: Migration[] = [
     // file as replaced and re-read it from 0 (inserts are idempotent; the upsert only fills a NULL requested_model).
     db.run("UPDATE files SET ino = -1");
   },
+  `
+  -- v0.4.0: hook decisions for the Policy audit table; line_hash makes re-reads after rotation idempotent.
+  -- Deliberately no tool input, path, command, cwd or prompt column: the hook never records them.
+  -- Rollback: binaries older than 0.4.0 refuse a schema v4 DB (see the guard in openDb); delete data.db to downgrade (it is rebuilt by sync).
+  CREATE TABLE IF NOT EXISTS policy_decisions (
+    line_hash TEXT PRIMARY KEY, ts TEXT NOT NULL, session_id TEXT, agent_id TEXT, role TEXT NOT NULL,
+    tool TEXT NOT NULL, cap TEXT, decision TEXT NOT NULL, rule TEXT NOT NULL, mode TEXT
+  );
+  CREATE INDEX IF NOT EXISTS policy_decisions_ts ON policy_decisions(ts);
+  CREATE INDEX IF NOT EXISTS policy_decisions_role ON policy_decisions(role, decision, ts);
+  CREATE INDEX IF NOT EXISTS policy_decisions_facets ON policy_decisions(decision, cap, tool);
+  `,
 ];
+/** Latest `user_version` after all migrations; tests use it instead of hardcoding a number. */
+export const SCHEMA_VERSION = MIGRATIONS.length;
 
 /** Opens (and migrates) the analytics DB; file is owner-only since it may hold prompt text. */
 export function openDb(path = dbPath()): Database {

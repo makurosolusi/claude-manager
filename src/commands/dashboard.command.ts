@@ -41,10 +41,12 @@ function serve(db: Database, port: number, meta: MetaProvider, session: WriteSes
 }
 
 /** Records a sync outcome in `state` for /api/meta. */
-function recordSync(state: SyncMeta, r: SyncResult) {
+export function recordSync(state: SyncMeta, r: SyncResult) {
   state.synced_at = new Date().toISOString();
-  if (r.newRequests > 0 || r.changed > 0) state.changed_at = state.synced_at;
+  // New policy audit rows count as a change too, so the audit table and the policy-backed surfaces refetch.
+  if (r.newRequests > 0 || r.changed > 0 || (r.policyAudit?.added ?? 0) > 0) state.changed_at = state.synced_at;
   state.error = null;
+  state.warnings = r.warnings;
 }
 
 function startSyncLoop(db: Database, state: SyncMeta) {
@@ -82,7 +84,7 @@ Options:
     const { values } = parseArgs({ args, options: { port: { type: "string" }, "read-only": { type: "boolean" } } });
     const config = await loadConfig();
     const port = values.port ? parsePort(values.port) : (config.dashboardPort ?? DEFAULT_DASHBOARD_PORT);
-    const state: SyncMeta = { synced_at: null, changed_at: null, error: null, interval_ms: SYNC_INTERVAL_MS };
+    const state: SyncMeta = { synced_at: null, changed_at: null, error: null, warnings: [], interval_ms: SYNC_INTERVAL_MS };
     const meta = liveMeta(state);
     const readOnly = values["read-only"] ?? false;
     const session: WriteSession = { readOnly, token: readOnly ? null : createSessionToken() };

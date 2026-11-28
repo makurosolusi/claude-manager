@@ -15,7 +15,7 @@ export function RangePicker({ value, onChange, disabled }: { value: Range; onCha
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value as Range)}
-        className="h-11 rounded-md border bg-background px-2 text-xs font-medium text-foreground outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 sm:hidden"
+        className="h-11 rounded-md border bg-background px-2 text-xs font-medium text-foreground outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 lg:hidden"
       >
         {(Object.keys(RANGES) as Range[]).map((r) => (
           <option key={r} value={r}>{LABEL[r]}</option>
@@ -24,7 +24,7 @@ export function RangePicker({ value, onChange, disabled }: { value: Range; onCha
     <div
       role="group"
       aria-label="Time range"
-      className={cn("hidden shrink-0 rounded-md border p-0.5 sm:inline-flex", disabled && "opacity-50")}
+      className={cn("hidden shrink-0 rounded-md border p-0.5 lg:inline-flex", disabled && "opacity-50")}
     >
       {(Object.keys(RANGES) as Range[]).map((r) => (
         <button

@@ -43,7 +43,7 @@ export function nextTheme(c: ThemeChoice): ThemeChoice {
   return OPTIONS[(OPTIONS.findIndex((o) => o.value === c) + 1) % OPTIONS.length]!.value;
 }
 
-/** System / light / dark control for the app header: one cycle button below sm, a segmented group from sm up. */
+/** System / light / dark control for the app header: one cycle button below lg, a segmented group from lg up. */
 export function ThemeToggle() {
   const [choice, setChoice] = useState<ThemeChoice>(readTheme);
   const current = OPTIONS.find((o) => o.value === choice)!;
@@ -55,11 +55,11 @@ export function ThemeToggle() {
       aria-label={`Theme: ${current.label}. Activate to change`}
       title={current.label}
       onClick={() => set(nextTheme(choice))}
-      className="inline-flex size-11 shrink-0 items-center justify-center rounded-md border text-muted-foreground outline-hidden hover:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring sm:hidden"
+      className="inline-flex size-11 shrink-0 items-center justify-center rounded-md border text-muted-foreground outline-hidden hover:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring lg:hidden"
     >
       <current.Icon aria-hidden className="size-4" />
     </button>
-    <div role="group" aria-label="Theme" className="hidden shrink-0 rounded-md border p-0.5 sm:inline-flex">
+    <div role="group" aria-label="Theme" className="hidden shrink-0 rounded-md border p-0.5 lg:inline-flex">
       {OPTIONS.map(({ value, label, Icon }) => (
         <button
           key={value}

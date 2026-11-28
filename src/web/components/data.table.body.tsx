@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn.ts";
 
 const DEFAULT_SKELETON_ROWS = 8;
 // Static strings so Tailwind's scanner sees every class.
-const HIDE = { sm: "max-sm:hidden", md: "max-md:hidden", lg: "max-lg:hidden" } as const;
+const HIDE = { sm: "max-sm:hidden", md: "max-md:hidden", lg: "max-lg:hidden", "2xl": "max-2xl:hidden" } as const;
 const ROW_H = { compact: "h-9", comfortable: "h-11" } as const;
 
 /** Alignment, width and responsive-hide classes shared by header and body cells. */

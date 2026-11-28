@@ -6,7 +6,7 @@ import type { SyncMeta } from "../src/server/dashboard.types.ts";
 import { useTempHome } from "./test.home.ts";
 
 const ctx = useTempHome();
-const state: SyncMeta = { synced_at: null, changed_at: null, error: null, interval_ms: 1 };
+const state: SyncMeta = { synced_at: null, changed_at: null, error: null, warnings: [], interval_ms: 1 };
 const save = (data: unknown) => {
   Bun.spawnSync(["mkdir", "-p", ctx.app]);
   writeFileSync(configPath(), typeof data === "string" ? data : JSON.stringify(data));
