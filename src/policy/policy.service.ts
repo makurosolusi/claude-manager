@@ -59,14 +59,14 @@ const withPolicy = (config: Config, policy: PolicyConfig): Config => {
 
 /**
  * Sets the preset and scope and turns the policy on. Resets overrides (§7). `defaultMode`/`testCommands` left out keep
- * their stored value; `projectDir` is required for project scope. `escalate` is on unless the caller passes false.
+ * their stored value; `projectDir` is required for project scope. `escalate` keeps the caller's value, else the stored one, else on (first setup, or a v0.4.0 policy without the field).
  */
 export function applyPreset(
   config: Config, preset: PresetName, scope: "user" | "project",
   extra: { projectDir?: string; defaultMode?: "acceptEdits" | null; testCommands?: string[]; escalate?: boolean } = {},
 ): Config {
   const prev = config.policy;
-  const policy: PolicyConfig = { enabled: true, preset, scope, overrides: {}, escalate: extra.escalate ?? true };
+  const policy: PolicyConfig = { enabled: true, preset, scope, overrides: {}, escalate: extra.escalate ?? prev?.escalate ?? true };
   if (scope === "project") policy.projectDir = extra.projectDir;
   const defaultMode = extra.defaultMode !== undefined ? extra.defaultMode : prev?.defaultMode;
   if (defaultMode !== undefined) policy.defaultMode = defaultMode;

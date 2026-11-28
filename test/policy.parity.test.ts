@@ -89,6 +89,11 @@ test("CLI apply/set/disable and PUT/PATCH/DELETE leave identical config, setting
   await api(b, "PATCH", "/api/policy/rows/coder", { shell: "allow" });
   expect(files(b)).toEqual(files(a));
 
+  await cli(a, ["policy", "escalate", "off"]);
+  await api(b, "PATCH", "/api/policy", { escalate: false });
+  expect(files(b)).toEqual(files(a));
+  expect(JSON.parse(files(a).snapshot).escalate).toBe(false);
+
   await cli(a, ["policy", "disable"]);
   await api(b, "DELETE", "/api/policy");
   expect(files(b)).toEqual(files(a));

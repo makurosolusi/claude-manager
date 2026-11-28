@@ -251,6 +251,53 @@ describe("PATCH /api/policy/rows/:row", () => {
   });
 });
 
+describe("PATCH /api/policy (escalate)", () => {
+  test("200 toggles escalate, re-applies the snapshot; GET reports false when the field is missing", async () => {
+    await put();
+    expect((await get()).body.config!.escalate).toBe(true);
+    const res = await send("PATCH", "/api/policy", { escalate: false });
+    expect(res.status).toBe(200);
+    const r = (await res.json()) as PolicyWriteResult;
+    expect(r.policy.config!.escalate).toBe(false);
+    expect(JSON.parse(text(policySnapshotPath())).escalate).toBe(false);
+    expect((await get()).body.config!.escalate).toBe(false);
+    const stored = JSON.parse(text(configPath()));
+    delete stored.policy.escalate;
+    writeFileSync(configPath(), JSON.stringify(stored));
+    expect((await get()).body.config!.escalate).toBe(false);
+  });
+
+  test("PUT keeps the stored escalate and accepts an explicit one", async () => {
+    await put();
+    await send("PATCH", "/api/policy", { escalate: false });
+    await put({ preset: "strict", scope: "user" });
+    expect(JSON.parse(text(configPath())).policy.escalate).toBe(false);
+    await put({ ...BALANCED, escalate: true });
+    expect(JSON.parse(text(configPath())).policy.escalate).toBe(true);
+    expect((await put({ ...BALANCED, escalate: "yes" })).status).toBe(400);
+  });
+
+  test("400 unknown key, non-boolean, empty body; 409 before set up; 428 and 412", async () => {
+    expect((await send("PATCH", "/api/policy", { escalate: true })).status).toBe(409);
+    await put();
+    for (const body of [{ escalate: "no" }, { escalate: false, extra: 1 }, {}, [], { enabled: true }]) {
+      expect((await send("PATCH", "/api/policy", body)).status).toBe(400);
+    }
+    expect((await send("PATCH", "/api/policy", { escalate: false }, { match: null })).status).toBe(428);
+    expect((await send("PATCH", "/api/policy", { escalate: false }, { match: "0".repeat(64) })).status).toBe(412);
+    expect(JSON.parse(text(configPath())).policy.escalate).toBe(true);
+  });
+
+  test("403 when read-only, and without the token", async () => {
+    await put();
+    const res = await send("PATCH", "/api/policy", { escalate: false }, { session: RO });
+    expect(res.status).toBe(403);
+    expect(await error(res)).toBe(READ_ONLY_ERROR);
+    expect((await send("PATCH", "/api/policy", { escalate: false }, { headers: { "x-cm-token": "" } })).status).toBe(403);
+    expect(JSON.parse(text(configPath())).policy.escalate).toBe(true);
+  });
+});
+
 describe("DELETE /api/policy", () => {
   test("200 disables: settings back to the install bytes, snapshot removed, matrix kept; PATCH still works", async () => {
     const installed = text(settingsFile());
@@ -281,6 +328,7 @@ test("--read-only: every policy write is 403 and nothing changes", async () => {
     ["POST", "/api/policy/preview", BALANCED],
     ["PUT", "/api/policy", { ...BALANCED, confirm: true }],
     ["PATCH", "/api/policy/rows/coder", { edit: "ask" }],
+    ["PATCH", "/api/policy", { escalate: false }],
     ["DELETE", "/api/policy", undefined],
   ] as const;
   for (const [method, path, body] of writes) {

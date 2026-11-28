@@ -34,9 +34,13 @@ export interface PolicyInput {
   overrides?: PolicyConfig["overrides"];
   defaultMode?: "acceptEdits" | null;
   testCommands?: string[];
+  escalate?: boolean;
 }
 
 export type PolicyPutInput = PolicyInput & { confirm: true };
+
+/** PATCH /api/policy body: worker escalation on or off. */
+export interface PolicyEscalatePatch { escalate: boolean }
 
 /** PATCH /api/policy/rows/:row body. */
 export type PolicyRowPatch = Partial<Record<Capability, Decision>>;

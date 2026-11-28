@@ -70,7 +70,7 @@ export async function policyResponse(db: Database): Promise<PolicyResponse> {
   const hook = (rec?.hook?.group as HookGroup | undefined)?.hooks?.[0];
   return {
     ...(await status(config, manifest)),
-    config: config.policy ?? null,
+    config: config.policy ? { ...config.policy, escalate: config.policy.escalate === true } : null,
     rows: effectivePolicy(config),
     settings_path: rec?.settingsPath ?? null,
     hook_command: hook ? [hook.command, ...(hook.args ?? [])].join(" ") : null,

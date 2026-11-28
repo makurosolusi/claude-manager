@@ -104,6 +104,31 @@ describe("policy command", () => {
     expect(json.rows.find((r: { row: string }) => r.row === "coder").cells.edit).toEqual({ decision: "deny", source: "override" });
   });
 
+  test("escalate off/on writes the snapshot, show reports it, a re-apply keeps it", async () => {
+    await installUser();
+    await run("apply", "balanced", "--yes");
+    expect(snapshot().escalate).toBe(true);
+    expect((await run("show")).out).toContain("escalate: on\n  worker asks are sent back to the manager; only the manager prompts you");
+    expect((await run("escalate", "off")).out).toContain("Escalation turned off.");
+    expect(snapshot().escalate).toBe(false);
+    const off = (await run("show")).out;
+    expect(off).toContain("escalate: off");
+    expect(off).not.toContain("only the manager prompts you");
+    await run("apply", "strict", "--yes");
+    expect(snapshot().escalate).toBe(false);
+    await run("escalate", "on");
+    expect(snapshot().escalate).toBe(true);
+  });
+
+  test("apply --no-escalate starts with escalation off; escalate needs a policy and on|off", async () => {
+    await installUser();
+    expect(await fail("escalate", "off")).toContain("policy apply balanced");
+    expect(await fail("escalate", "maybe")).toContain("usage");
+    await run("apply", "balanced", "--yes", "--no-escalate");
+    expect(snapshot().escalate).toBe(false);
+    expect(JSON.parse((await run("show", "--json")).out).policy.escalate).toBe(false);
+  });
+
   test("show before any apply says so", async () => {
     const { out } = await run("show");
     expect(out).toContain("not set up");
