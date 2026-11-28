@@ -1,3 +1,4 @@
+import type { ProjectPath } from "./project.path.ts";
 import type { Tier } from "../config/config.store.ts";
 import type { DayModelRow, Totals, UsageRow } from "../db/stats.repository.ts";
 export type { DayModelRow, Totals, UsageRow };
@@ -5,7 +6,10 @@ export type Usage = Omit<UsageRow, "key">;
 export interface Page<T> { items: T[]; page: number; pageSize: number; total: number }
 /** `prev` covers the same-length window right before `since`; null for all-time. */
 export interface Overview { since: string; total: Totals; prev: Totals | null; byDay: UsageRow[]; byDayModel: DayModelRow[]; byModel: UsageRow[]; byRole: UsageRow[] }
-export interface ProjectRow extends Usage { project: string; sessions: number; last_ts: string | null }
+/** Usage per project cwd, as the SQL returns it. */
+export interface ProjectUsageRow extends Usage { project: string; sessions: number; last_ts: string | null }
+/** `project` is the full cwd; the rest classify it for display (see project.path.ts). */
+export interface ProjectRow extends ProjectUsageRow, ProjectPath {}
 /** `model` = most-used main-agent model (else most-used overall); `models` = distinct models used; `rerouted` = requests served by another model than requested. */
 export interface SessionRow extends Usage { id: string; title: string | null; project_cwd: string | null; git_branch: string | null; main_agent: string | null; first_ts: string | null; last_ts: string | null; agents: number; model: string | null; models: number; rerouted: number }
 /** Sort keys accepted by /api/sessions?sort=. */

@@ -12,7 +12,7 @@ import { isAgentsWriteRoute, routeAgentsWrite } from "./agents.write.api.ts";
 import type { WriteSession } from "./write.guard.ts";
 import { routeSessionDetail } from "./session.detail.api.ts";
 import { PRESET_ROLES } from "../roles/roles.presets.ts";
-
+import { withProjectPaths } from "./project.env.ts";
 /** Port the dashboard listens on unless config or --port says otherwise. */
 export const DEFAULT_DASHBOARD_PORT = 5757;
 /** How often the running dashboard re-imports new transcript bytes. */
@@ -84,7 +84,7 @@ function groups(db: Database, url: URL, now = Date.now()): SessionGroups {
 function route(db: Database, url: URL, meta: MetaProvider): unknown {
   const path = url.pathname.replace(/\/+$/, "");
   if (path === "/api/overview") return overview(db, filter(url));
-  if (path === "/api/projects") return repo.projectsPage(db, filter(url), pageQuery(url));
+  if (path === "/api/projects") return withProjectPaths(repo.projectsPage(db, filter(url), pageQuery(url)));
   if (path === "/api/sessions") return sessions(db, url);
   if (path === "/api/sessions/groups") return groups(db, url); // before /api/sessions/:id, which would read "groups" as an id
   if (path === "/api/roles") return repo.rolesPage(db, filter(url), pageQuery(url));

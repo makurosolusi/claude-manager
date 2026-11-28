@@ -1,14 +1,14 @@
-import { FolderOpen } from "lucide-react";
 import type { ProjectRow } from "../../server/dashboard.types.ts";
 import { CostCell } from "@/components/cost.cell.tsx";
 import type { Column } from "@/components/data.table.tsx";
+import { CopyPath, ProjectCell } from "@/components/project.cells.tsx";
 import { RelativeTime } from "@/components/relative.time.tsx";
 import { ShareBar } from "@/components/share.bar.tsx";
 import { SessionStatusBadge } from "@/components/status.badge.tsx";
 import { TokenCell } from "@/components/token.cell.tsx";
 import { TONE_CLASSES } from "@/lib/color.tokens.ts";
 import { cn } from "@/lib/cn.ts";
-import { cacheHitRate, fmtInt, fmtPct, fmtProject } from "@/lib/format.ts";
+import { cacheHitRate, fmtInt, fmtPct } from "@/lib/format.ts";
 import { CACHE_GOOD, CACHE_POOR, cacheLevel } from "@/lib/status.level.ts";
 
 /** Columns the View menu may hide (the Project column always stays). */
@@ -26,16 +26,8 @@ export function CacheText({ ratio }: { ratio: number }) {
 /** Projects table columns; `totalCost` is the cost sum of every loaded project (denominator of Share) and `now` drives status. */
 export function projectColumns(totalCost: number, now: number): Column<ProjectRow>[] {
   return [
-    {
-      id: "project",
-      header: "Project",
-      cell: (r) => (
-        <span className="flex min-w-0 items-center gap-2" title={r.project}>
-          <FolderOpen aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-          <span className="truncate font-mono text-xs">{fmtProject(r.project)}</span>
-        </span>
-      ),
-    },
+    { id: "project", header: "Project", cell: (r) => <ProjectCell r={r} /> },
+    { id: "copy", header: <span className="sr-only">Copy path</span>, cell: (r) => <CopyPath r={r} />, width: "w-10", hideable: false, hideBelow: "sm" },
     { id: "status", header: "Status", cell: (r) => <SessionStatusBadge lastTs={r.last_ts} now={now} />, width: "w-24", hideBelow: "sm" },
     { id: "sessions", header: "Sessions", cell: (r) => fmtInt(r.sessions), align: "right", sortKey: "sessions", width: "w-20", hideBelow: "sm" },
     { id: "requests", header: "Requests", cell: (r) => fmtInt(r.requests), align: "right", sortKey: "requests", width: "w-24", hideBelow: "md" },
