@@ -1,5 +1,5 @@
 import { ArrowRight, Crown, UserRound } from "lucide-react";
-import { useId } from "react";
+import { useId, useState } from "react";
 import type { AgentRow } from "../../server/agents.types.ts";
 import type { TiersResponse } from "../../server/tiers.types.ts";
 import { RoleBadge } from "@/components/role.badge.tsx";
@@ -9,7 +9,7 @@ import { FAMILY_CLASSES } from "@/lib/color.tokens.ts";
 import { cn } from "@/lib/cn.ts";
 import { TIER_ICON } from "@/lib/icon.map.ts";
 import { modelFamily, tierFamily, type Tier } from "@/lib/model.tier.ts";
-import { newerInFamily } from "@/lib/tier.models.ts";
+import { newerInFamily, normalizeModelId } from "@/lib/tier.models.ts";
 
 interface Props {
   items: AgentRow[];
@@ -33,18 +33,37 @@ function MainNode({ a, multiple }: { a: AgentRow; multiple: boolean }) {
   );
 }
 
+function Chips({ agents }: { agents: AgentRow[] }) {
+  return (
+    <ul className="flex flex-wrap gap-1.5">
+      {agents.map((a) => (
+        <li key={a.name} className={a.status === "disabled" ? "opacity-60" : undefined}>
+          <a href={`#/agents/${encodeURIComponent(a.name)}`}><RoleBadge role={a.name} /></a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Lane({ title, agents }: { title: string; agents: AgentRow[] }) {
   return (
     <div className="flex flex-col gap-1.5">
       <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
-      <ul className="flex flex-wrap gap-1.5">
-        {agents.map((a) => (
-          <li key={a.name} className={a.status === "disabled" ? "opacity-60" : undefined}>
-            <a href={`#/agents/${encodeURIComponent(a.name)}`}><RoleBadge role={a.name} /></a>
-          </li>
-        ))}
-      </ul>
+      <Chips agents={agents} />
     </div>
+  );
+}
+
+/** One collapsible lane (one heading for screen readers): open on sm+ screens, closed on phones. */
+function Unmanaged({ agents }: { agents: AgentRow[] }) {
+  const [open, setOpen] = useState(() => typeof matchMedia === "function" && matchMedia("(min-width: 40rem)").matches);
+  return (
+    <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)} className="flex flex-col gap-1.5">
+      <summary className="cursor-pointer rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring">
+        <h3 className="inline text-xs font-medium text-muted-foreground">Not managed ({agents.length})</h3>
+      </summary>
+      <div className="mt-1.5"><Chips agents={agents} /></div>
+    </details>
   );
 }
 
@@ -71,7 +90,7 @@ export function AgentsHierarchy({ items, tiers, write, onEdit }: Props) {
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         {TIER_LIST.map((t) => {
           const summary = tiers?.tiers.find((s) => s.tier === t);
-          const price = summary && tiers?.models.find((m) => m.id === summary.model);
+          const price = summary && tiers?.models.find((m) => m.id === normalizeModelId(summary.model));
           return loading ? (
             <div key={t} aria-hidden className="h-40 animate-pulse rounded-lg border border-border bg-muted" />
           ) : (
@@ -89,15 +108,7 @@ export function AgentsHierarchy({ items, tiers, write, onEdit }: Props) {
         })}
       </div>
       {h.pinned.length > 0 && <Lane title="Pinned (not affected by tier edits)" agents={h.pinned} />}
-      {h.unmanaged.length > 0 && (
-        <>
-          <div className="max-sm:hidden"><Lane title="Not managed" agents={h.unmanaged} /></div>
-          <details className="sm:hidden">
-            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Not managed ({h.unmanaged.length})</summary>
-            <Lane title="Not managed" agents={h.unmanaged} />
-          </details>
-        </>
-      )}
+      {h.unmanaged.length > 0 && <Unmanaged agents={h.unmanaged} />}
     </section>
   );
 }

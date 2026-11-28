@@ -8,7 +8,7 @@ import { affectedBy } from "@/lib/agents.hierarchy.ts";
 import { TONE_CLASSES } from "@/lib/color.tokens.ts";
 import { cn } from "@/lib/cn.ts";
 import { FAMILY_LABEL, modelFamily } from "@/lib/model.tier.ts";
-import { validateModelId } from "@/lib/tier.models.ts";
+import { normalizeModelId, validateModelId } from "@/lib/tier.models.ts";
 
 const FOCUS = "outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring";
 
@@ -36,20 +36,21 @@ const Warn = ({ children }: { children: string }) => (
 export function TierEditor({ open, tier, models, items, preselect, onSave, onClose, error, onReload }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
-  const [sel, setSel] = useState(preselect ?? tier.model);
+  const current = normalizeModelId(tier.model);
+  const [sel, setSel] = useState(normalizeModelId(preselect ?? tier.model));
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) { setSel(preselect ?? tier.model); setBusy(false); d.showModal(); }
+    if (open && !d.open) { setSel(normalizeModelId(preselect ?? tier.model)); setBusy(false); d.showModal(); }
     else if (!open && d.open) d.close();
   }, [open, preselect, tier.model]);
 
   const valid = !validateModelId(sel);
-  const changed = valid && sel !== tier.model;
+  const changed = valid && normalizeModelId(sel) !== current;
   const family = modelFamily(sel);
-  const priced = models.find((m) => m.id === sel);
+  const priced = models.find((m) => m.id === normalizeModelId(sel));
   const noPrice = valid && (!priced || priced.input_usd == null || priced.output_usd == null);
   const save = async () => {
     setBusy(true);
@@ -72,7 +73,7 @@ export function TierEditor({ open, tier, models, items, preselect, onSave, onClo
         </div>
       )}
       <div className="mt-3">
-        <ModelPicker models={models} current={tier.model} value={sel} estimate={tier.estimate_30d} onChange={setSel} />
+        <ModelPicker models={models} current={current} value={sel} estimate={tier.estimate_30d} onChange={setSel} />
       </div>
       <p className="mt-1 text-xs text-muted-foreground">Same tokens re-priced; a different model may use more or fewer tokens.</p>
       <section aria-label="Affects" className="mt-3">

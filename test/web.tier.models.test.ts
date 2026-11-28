@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { fmtPrice, groupByFamily, isAliasValue, modelVersion, newerInFamily, validateModelId } from "../src/web/lib/tier.models.ts";
+import { normalizeModelId as serverNormalize } from "../src/tiers/tiers.catalog.ts";
+import { fmtPrice, normalizeModelId, groupByFamily, isAliasValue, modelVersion, newerInFamily, validateModelId } from "../src/web/lib/tier.models.ts";
 
 const ids = (...a: string[]) => a.map((id) => ({ id }));
 
@@ -35,5 +36,11 @@ describe("tier.models", () => {
   test("fmtPrice", () => {
     expect(fmtPrice(4, 20)).toBe("$4 in · $20 out / MTok");
     expect(fmtPrice(null, 20)).toBe("No price known");
+  });
+  test("normalizeModelId agrees with the server on sample ids", () => {
+    for (const id of ["claude-sonnet-5-5", "Claude-Opus-5-5[1m]", "claude-haiku-4-5-20251001", " claude-sonnet-4-5-20250929[1m] ", "fable", "gpt-4"]) {
+      expect(normalizeModelId(id)).toBe(serverNormalize(id));
+    }
+    expect(normalizeModelId("Claude-Haiku-4-5-20251001[1m]")).toBe("claude-haiku-4-5");
   });
 });

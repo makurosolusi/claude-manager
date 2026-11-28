@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { AgentRow } from "../src/server/agents.types.ts";
-import { AGENTS_SPEC, agentGroupKey, agentTableOptions, chainText, orderByGroup, scopeKey, tierKey } from "../src/web/lib/agents.table.ts";
+import { AGENTS_DEFAULT_GROUP, AGENTS_SPEC, agentGroupKey, agentTableOptions, chainText, levelKey, levelLabel, orderByGroup, scopeKey, tierKey, toolsLabel, toolsTitle } from "../src/web/lib/agents.table.ts";
+import { agentRerouteNote } from "../src/web/lib/reroute.ts";
 import { runClientTable, type ClientTableState } from "../src/web/lib/table.client.ts";
 
 const usage = { requests: 0, cost_usd: 0, unpriced: 0, last_ts: null, rerouted_pct: null };
@@ -70,7 +71,55 @@ test("orderByGroup ranks groups explicitly and keeps the row order inside a grou
   const keys = (g: string) => [...new Set(orderByGroup(rows, g).map((r) => agentGroupKey(g, r)))];
   expect(keys("kind")).toEqual(["preset", "custom", "external"]);
   expect(keys("tier")).toEqual(["think", "work", "pinned", "none"]);
+  expect(AGENTS_DEFAULT_GROUP).toBe("tier");
   expect(keys("scope")).toEqual(["user", "both", "none"]);
   expect(names(orderByGroup(rows, "kind")).slice(-2)).toEqual(["Explore", "plain"]);
   expect(orderByGroup(rows, "all")).toBe(rows);
+});
+
+test("level grouping puts the managed main agent first, then think, work, basic, pinned, none", () => {
+  const lv = [
+    mk({ name: "ext", kind: "external", tier: null, main_agent: true }),
+    mk({ name: "pin", tier: null, pin: "claude-opus-5-5" }),
+    mk({ name: "b", tier: "basic" }),
+    mk({ name: "w" }),
+    mk({ name: "t", tier: "think" }),
+    mk({ name: "boss", tier: "think", main_agent: true }),
+  ];
+  expect(levelKey(lv[0]!)).toBe("none");
+  expect(levelKey(lv[5]!)).toBe("main");
+  expect(agentGroupKey("tier", lv[5]!)).toBe("main");
+  expect(tierKey(lv[5]!)).toBe("think"); // the tier facet keeps tierKey
+  const ordered = orderByGroup(lv, "tier");
+  expect([...new Set(ordered.map((r) => agentGroupKey("tier", r)))]).toEqual(["main", "think", "work", "basic", "pinned", "none"]);
+});
+
+test("level labels read from the tiers data", () => {
+  const t = { think: "claude-opus-5-5", work: "claude-sonnet-5-5", basic: "claude-haiku-4-5" };
+  expect(levelLabel("main", t)).toBe("Main agent");
+  expect(levelLabel("think", t)).toBe("Think · opus → claude-opus-5-5");
+  expect(levelLabel("basic", t)).toBe("Basic · haiku → claude-haiku-4-5");
+  expect(levelLabel("work")).toBe("Work · sonnet");
+  expect(levelLabel("pinned", t)).toBe("Pinned");
+  expect(levelLabel("none", t)).toBe("Not managed");
+});
+
+test("toolsLabel cases", () => {
+  const t = (o: Partial<AgentRow>) => toolsLabel(mk({ name: "x", ...o }));
+  expect(t({ tools: null, disallowed_tools: ["Agent"] })).toBe("All except Agent");
+  expect(t({ tools: null })).toBe("All tools");
+  expect(t({ tools: ["Read", "Grep", "Glob"] })).toBe("Read-only · 3");
+  expect(t({ tools: ["Read", "Edit"] })).toBe("Read, Edit");
+  expect(t({ tools: ["Read", "Edit", "Bash", "Write"] })).toBe("Read, Edit +2");
+  expect(t({ tools: [] })).toBe("None");
+  expect(t({ name: "Explore", kind: "external", source: "builtin", tools: null })).toBe("Read-only");
+  expect(t({ name: "general-purpose", kind: "external", source: "builtin", tools: null })).toBe("All tools");
+  expect(t({ name: "statusline-setup", kind: "external", source: "builtin", tools: null })).toBe("—");
+  expect(toolsTitle(mk({ name: "x", tools: ["Read", "Edit", "Bash"] }))).toBe("Read, Edit, Bash");
+});
+
+test("agentRerouteNote spells out the share and the usual causes", () => {
+  const n = agentRerouteNote(12, 200);
+  expect(n.startsWith("≈24 of 200 requests were answered by a different model than requested. Cost uses the model that answered.")).toBe(true);
+  expect(n).toContain("a gateway or proxy (ANTHROPIC_BASE_URL) remapping models, or Claude Code's automatic fallback. Run `claude-manager doctor`.");
 });

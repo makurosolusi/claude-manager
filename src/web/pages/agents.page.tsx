@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { PageProps } from "@/lib/page.props.ts";
 import type { AgentRow, AgentsResponse } from "../../server/agents.types.ts";
+import type { TiersResponse } from "../../server/tiers.types.ts";
 import { AgentForm } from "@/components/agent.form.tsx";
 import { AgentFormHeader } from "@/components/agent.form.header.tsx";
 import { AgentNotice } from "@/components/agent.notice.tsx";
@@ -10,16 +11,20 @@ import { ReadOnlyBadge } from "@/components/agent.readonly.tsx";
 import { buttonVariants } from "@/components/ui/button.tsx";
 import { holdNotice, useNotice, useWriteMode, READ_ONLY_REASON } from "@/lib/agent.write.ts";
 import { AgentBanner } from "@/components/agent.banner.tsx";
+import { AgentsHierarchy } from "@/components/agents.hierarchy.tsx";
+import { NoticeBar } from "@/components/notice.bar.tsx";
+import { TierEditorHost } from "@/components/tier.editor.host.tsx";
 import { AGENT_HIDEABLE, agentColumns } from "@/components/agents.columns.tsx";
 import { ClientTable, type ClientGrouping } from "@/components/client.table.tsx";
 import { CostCell } from "@/components/cost.cell.tsx";
 import { PageHeader } from "@/components/page.header.tsx";
 import { useApi } from "@/lib/api.client.ts";
-import { AGENTS_DEFAULT_GROUP, AGENTS_PATH, AGENTS_SPEC, TIER_PINNED, agentGroupKey, agentTableOptions, orderByGroup } from "@/lib/agents.table.ts";
+import { AGENTS_DEFAULT_GROUP, AGENTS_PATH, AGENTS_SPEC, TIER_PINNED, agentGroupKey, agentTableOptions, levelLabel, orderByGroup } from "@/lib/agents.table.ts";
 import { fmtInt } from "@/lib/format.ts";
 import { hashHref, withParams } from "@/lib/hash.route.ts";
 import { NAV_ICON, TIER_ICON, UI_ICON } from "@/lib/icon.map.ts";
-import type { TierKey } from "@/lib/model.tier.ts";
+import type { Tier, TierKey } from "@/lib/model.tier.ts";
+import { TIER_LIVE_NOTE, tierSavedText } from "@/lib/tier.write.ts";
 import { runClientTable } from "@/lib/table.client.ts";
 import { NO_GROUP, patchTable, tableParams, type TableState } from "@/lib/table.query.ts";
 import { facetOptions, useTableView, type TableView } from "@/lib/use.table.view.ts";
@@ -30,7 +35,7 @@ const KIND_OPTS = ["preset", "custom", "external"], TIER_OPTS = ["think", "work"
 const SCOPE_OPTS = ["user", "project", "both", "none"], STATUS_OPTS = ["enabled", "disabled"];
 const opts = (vs: string[]) => vs.map((value) => ({ value, label: value === TIER_PINNED ? "Pinned" : cap(value), icon: Object.hasOwn(TIER_ICON, value) ? TIER_ICON[value as TierKey] : undefined }));
 
-/** Table view whose default group is Kind: the URL carries `group` only when it differs, so "No grouping" is written out as `group=none`. */
+/** Table view whose default group is the level (main agent, then tiers): the URL carries `group` only when it differs, so "No grouping" is written out as `group=none`. */
 function useAgentsView(params: URLSearchParams): TableView {
   const base = useTableView({ id: "agents", path: AGENTS_PATH, params, spec: AGENTS_SPEC, hideable: AGENT_HIDEABLE });
   const state: TableState = { ...base.state, group: params.has("group") ? base.state.group : AGENTS_DEFAULT_GROUP };
@@ -56,17 +61,20 @@ export function AgentsPage({ dataVersion, params, tiers, roles }: PageProps) {
   const view = useAgentsView(params);
   const { state } = view;
   const { data, error, loading, stale } = useApi<AgentsResponse>("/api/agents", {}, dataVersion + retry);
+  const tiersApi = useApi<TiersResponse>("/api/tiers", {}, dataVersion + retry);
+  const [editing, setEditing] = useState<{ tier: Tier; preselect?: string } | null>(null);
+  const [tierSaved, setTierSaved] = useState<string | null>(null);
   const result = useMemo(() => {
     if (!data) return undefined;
     const r = runClientTable(data.items, state, agentTableOptions);
     return { ...r, filtered: orderByGroup(r.filtered, state.group) };
   }, [data, JSON.stringify(state)]);
-  const showRerouted = !!data?.items.some((r) => r.usage.rerouted_pct !== null);
-  const columns = useMemo(() => agentColumns(roles, data?.tiers ?? tiers, showRerouted), [roles, data?.tiers, tiers, showRerouted]);
+  const showRerouted = !!data?.items.some((r) => (r.usage.rerouted_pct ?? 0) > 0);
+  const columns = useMemo(() => agentColumns(roles, data?.tiers ?? tiers, showRerouted, state.group !== "tier"), [roles, data?.tiers, tiers, showRerouted, state.group]);
 
   const grouping: ClientGrouping<AgentRow> = {
-    options: [{ value: "kind", label: "Kind" }, { value: "tier", label: "Tier" }, { value: "scope", label: "Scope" }, { value: NO_GROUP, label: "No grouping" }],
-    of: (r) => { const key = agentGroupKey(state.group, r); return { key, label: key === TIER_PINNED ? "Pinned" : cap(key) }; },
+    options: [{ value: "tier", label: "Tier" }, { value: "kind", label: "Kind" }, { value: "scope", label: "Scope" }, { value: NO_GROUP, label: "No grouping" }],
+    of: (r) => { const key = agentGroupKey(state.group, r); return { key, label: state.group === "tier" ? levelLabel(key, data?.tiers) : cap(key) }; },
     totals: (rows) => ({ requests: fmtInt(rows.reduce((a, r) => a + r.usage.requests, 0)), cost: <CostCell usd={rows.reduce((a, r) => a + r.usage.cost_usd, 0)} /> }),
   };
   const facet = (id: string, label: string, icon: LucideIcon, values: ReturnType<typeof opts>) => ({
@@ -82,7 +90,20 @@ export function AgentsPage({ dataVersion, params, tiers, roles }: PageProps) {
         : <PageHeader title="Agents" icon={NAV_ICON.agents} description={SUBTITLE}
             actions={write === false ? <ReadOnlyBadge /> : write ? <a href="#/agents?new=1" className={buttonVariants()}><Plus aria-hidden />New agent</a> : undefined} />}
       <AgentNotice notice={notice} onClose={() => setNotice(null)} />
+      {tierSaved && (
+        <NoticeBar tone="success" onClose={() => setTierSaved(null)}>
+          {tierSaved}<span className="mt-0.5 block text-xs opacity-80">{TIER_LIVE_NOTE}</span>
+        </NoticeBar>
+      )}
       {data && <AgentBanner data={data} />}
+      {!creating && <AgentsHierarchy items={data?.items ?? []} tiers={tiersApi.data} write={write === true} onEdit={(tier, preselect) => setEditing({ tier, preselect })} />}
+      {editing && tiersApi.data && data && (
+        <TierEditorHost
+          tier={editing.tier} preselect={editing.preselect} data={tiersApi.data} items={data.items}
+          onClose={() => setEditing(null)} onReload={() => setRetry((n) => n + 1)}
+          onSaved={(r) => { setEditing(null); setTierSaved(tierSavedText(r)); setRetry((n) => n + 1); }}
+        />
+      )}
       {creating ? (data
         ? <AgentForm tiers={data.tiers} knownTools={data.known_tools} etag={data.etag} onReload={() => setRetry((n) => n + 1)} />
         : <p role="status" className="text-sm text-muted-foreground">Loading…</p>

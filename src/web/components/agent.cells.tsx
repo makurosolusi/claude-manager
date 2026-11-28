@@ -2,14 +2,14 @@ import type { AgentKind, AgentRow, AgentScope } from "../../server/agents.types.
 import { ToneBadge } from "@/components/tone.badge.tsx";
 import { TONE_CLASSES } from "@/lib/color.tokens.ts";
 import { cn } from "@/lib/cn.ts";
-import { CUSTOM_ROLE_ICON, NAV_ICON, ROLE_ICON, UI_ICON, toolIcon } from "@/lib/icon.map.ts";
+import { toolsLabel, toolsTitle } from "@/lib/agents.table.ts";
+import { CUSTOM_ROLE_ICON, NAV_ICON, ROLE_ICON, UI_ICON } from "@/lib/icon.map.ts";
 
-const MAX_TOOL_ICONS = 3;
 const KIND_LABEL: Record<AgentKind, string> = { preset: "Preset", custom: "Custom", external: "External" };
 const KIND_ICON = { preset: NAV_ICON.roles, custom: CUSTOM_ROLE_ICON, external: ROLE_ICON.subagent! };
 const NOT_MANAGED = "Not managed by claude-manager";
 /** Scope states that need attention (a warning dot beside the chip). */
-const ATTENTION: AgentScope["state"][] = ["edited", "shadowed", "missing"];
+export const ATTENTION: AgentScope["state"][] = ["edited", "shadowed", "missing"];
 
 /** Kind label with icon; external agents add only a lock whose tooltip says they are not managed. */
 export function KindCell({ kind }: { kind: AgentKind }) {
@@ -22,22 +22,9 @@ export function KindCell({ kind }: { kind: AgentKind }) {
   );
 }
 
-/** Tool list text: names, or "All tools" minus the disallowed ones. */
-export const toolsLabel = (r: Pick<AgentRow, "tools" | "disallowed_tools">): string =>
-  r.tools ? r.tools.join(", ") || "None" : r.disallowed_tools?.length ? `All − ${r.disallowed_tools.join(", ")}` : "All tools";
-
-/** Up to 3 tool icons plus "+N" (or the "All − Agent" text when tools are inherited); the title lists every tool. */
-export function ToolsCell({ row }: { row: Pick<AgentRow, "tools" | "disallowed_tools"> }) {
-  const label = toolsLabel(row);
-  if (!row.tools) return <span title={label} className="text-xs whitespace-nowrap text-muted-foreground">{label}</span>;
-  const extra = row.tools.length - MAX_TOOL_ICONS;
-  return (
-    <span title={label} className="inline-flex items-center gap-1 text-muted-foreground">
-      {row.tools.slice(0, MAX_TOOL_ICONS).map((t) => { const I = toolIcon(t); return <I key={t} aria-hidden className="size-3.5" />; })}
-      {extra > 0 && <span className="text-xs tabular-nums">+{extra}</span>}
-      <span className="sr-only">{label}</span>
-    </span>
-  );
+/** Tools as text ("All tools", "Read-only · 3", "Read, Edit +1"); the title lists every tool. */
+export function ToolsCell({ row }: { row: Pick<AgentRow, "name" | "source" | "tools" | "disallowed_tools"> }) {
+  return <span title={toolsTitle(row)} className="block truncate text-[13px] text-muted-foreground">{toolsLabel(row)}</span>;
 }
 
 /** One scope chip; edited, shadowed or missing files get a warning dot and say why in the title. */

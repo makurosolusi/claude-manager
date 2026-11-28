@@ -33,7 +33,7 @@ const send = (method: string, path: string, body: unknown, etag: string, token: 
   });
 
 /** Sends a guarded write; on 403 "invalid token" re-fetches the session once and retries once. Non-2xx throws ApiWriteError. */
-export async function sendJson<T>(method: "POST" | "PATCH" | "DELETE", path: string, body: unknown | undefined, etag: string): Promise<T> {
+export async function sendJson<T>(method: "POST" | "PATCH" | "PUT" | "DELETE", path: string, body: unknown | undefined, etag: string): Promise<T> {
   const run = async () => {
     try {
       return await send(method, path, body, etag, (session ?? (await loadSession())).token);

@@ -14,6 +14,9 @@ export function modelVersion(id: string): ModelVersion | null {
   return m ? { family: m[1] as ModelFamily, major: Number(m[2]), minor: Number(m[3] ?? 0) } : null;
 }
 
+/** Same normalization as the server's `normalizeModelId` (tiers.catalog.ts): keys of `estimate_30d` and `models[].id`. */
+export const normalizeModelId = normalizeModel;
+
 const cmp = (a: ModelVersion, b: ModelVersion) => a.major - b.major || a.minor - b.minor;
 
 /** True when `id` is a strictly newer version than `current` within the same family. */

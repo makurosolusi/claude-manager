@@ -1,4 +1,6 @@
+import { BUILTIN_AGENT_INFO } from "../../roles/roles.builtins.ts";
 import type { AgentRow } from "../../server/agents.types.ts";
+import { TIER_ALIAS } from "@/lib/agents.hierarchy.ts";
 import type { ClientTableOptions } from "@/lib/table.client.ts";
 import { NO_GROUP, type TableSpec } from "@/lib/table.query.ts";
 
@@ -14,7 +16,7 @@ const TIERS = ["think", "work", "basic", TIER_PINNED, TIER_NONE] as const;
 const SCOPES = ["user", "project", "both", "none"] as const;
 const STATUSES = ["enabled", "disabled"] as const;
 
-/** URL spec of the Agents table: name order, grouped by kind by default. */
+/** URL spec of the Agents table: name order, grouped by level (main agent, then tiers) by default. */
 export const AGENTS_SPEC: TableSpec = {
   sorts: ["name", "requests", "cost", "last"],
   defaultSort: "name",
@@ -24,7 +26,7 @@ export const AGENTS_SPEC: TableSpec = {
 };
 
 /** Default group of the Agents table. */
-export const AGENTS_DEFAULT_GROUP = "kind";
+export const AGENTS_DEFAULT_GROUP = "tier";
 
 /** Tier facet value: "pinned" wins over the tier, externals fall to "none". */
 export const tierKey = (r: Pick<AgentRow, "tier" | "pin">): string => (r.pin ? TIER_PINNED : r.tier ?? TIER_NONE);
@@ -47,12 +49,29 @@ export const agentTableOptions: ClientTableOptions<AgentRow> = {
   },
 };
 
-const GROUP_KEY: Record<string, (r: AgentRow) => string> = { kind: (r) => r.kind, tier: tierKey, scope: scopeKey };
+/** Group value for the managed main agent. */
+export const LEVEL_MAIN = "main";
+const LEVELS = [LEVEL_MAIN, ...TIERS] as const;
+
+/** Level group key: a managed main agent leads, everyone else falls into their tier bucket. */
+export const levelKey = (r: Pick<AgentRow, "main_agent" | "kind" | "tier" | "pin">): string => (r.main_agent && r.kind !== "external" ? LEVEL_MAIN : tierKey(r));
+
+/** Group header text of a level key: `Think · opus → claude-opus-5-5` when the tier's model is known. */
+export function levelLabel(key: string, tiers?: Partial<Record<keyof typeof TIER_ALIAS, string>>): string {
+  if (key === LEVEL_MAIN) return "Main agent";
+  if (key === TIER_PINNED) return "Pinned";
+  if (key === TIER_NONE) return "Not managed";
+  const t = key as keyof typeof TIER_ALIAS;
+  const model = tiers?.[t];
+  return `${key.charAt(0).toUpperCase()}${key.slice(1)} · ${TIER_ALIAS[t]}${model ? ` → ${model}` : ""}`;
+}
+
+const GROUP_KEY: Record<string, (r: AgentRow) => string> = { kind: (r) => r.kind, tier: levelKey, scope: scopeKey };
 
 /** Group key of a row for the `group` URL value (NO_GROUP and unknown values yield one "all" bucket). */
 export const agentGroupKey = (group: string, r: AgentRow): string => GROUP_KEY[group]?.(r) ?? "all";
 
-const GROUP_ORDER: Record<string, readonly string[]> = { kind: KINDS, tier: TIERS, scope: SCOPES };
+const GROUP_ORDER: Record<string, readonly string[]> = { kind: KINDS, tier: LEVELS, scope: SCOPES };
 
 /** Stable reorder so groups appear in the declared order (Preset, Custom, External…) instead of first-row-seen; rows keep their sort inside a group. */
 export function orderByGroup(rows: AgentRow[], group: string): AgentRow[] {
@@ -77,3 +96,25 @@ export function chainSegments(r: ChainInput): string[] {
 
 /** One-line chain for search, tooltips and aria-labels: "coder → work → sonnet → claude-sonnet-5-5". */
 export const chainText = (r: ChainInput): string => chainSegments(r).join(" → ");
+
+const READ_ONLY_TOOLS = new Set(["Read", "Grep", "Glob", "WebFetch", "WebSearch", "TodoWrite"]);
+const BUILTIN_TOOLS = { "read-only": "Read-only", all: "All tools" } as const;
+const SHOWN_TOOLS = 2;
+
+type ToolsInput = Pick<AgentRow, "name" | "source" | "tools" | "disallowed_tools">;
+
+/** Short Tools cell text: built-ins from the catalog, "All tools", "Read-only · N", or the first two names + "+N". */
+export function toolsLabel(r: ToolsInput): string {
+  if (r.source === "builtin") {
+    const t = BUILTIN_AGENT_INFO[r.name]?.tools;
+    return t ? BUILTIN_TOOLS[t] : "—";
+  }
+  if (!r.tools) return r.disallowed_tools?.length ? `All except ${r.disallowed_tools.join(", ")}` : "All tools";
+  if (!r.tools.length) return "None";
+  if (r.tools.every((t) => READ_ONLY_TOOLS.has(t))) return `Read-only · ${r.tools.length}`;
+  const extra = r.tools.length - SHOWN_TOOLS;
+  return `${r.tools.slice(0, SHOWN_TOOLS).join(", ")}${extra > 0 ? ` +${extra}` : ""}`;
+}
+
+/** Full tool list for the cell's tooltip. */
+export const toolsTitle = (r: ToolsInput): string => (r.tools ? r.tools.join(", ") || "None" : toolsLabel(r));

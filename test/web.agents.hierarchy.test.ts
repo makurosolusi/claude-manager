@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentRow } from "../src/server/agents.types.ts";
+import { BUILTIN_AGENT_INFO } from "../src/roles/roles.builtins.ts";
 import { affectedBy, buildHierarchy } from "../src/web/lib/agents.hierarchy.ts";
 
 const row = (o: Partial<AgentRow> & { name: string }): AgentRow => ({
@@ -51,5 +52,18 @@ describe("affectedBy", () => {
     expect(l).toContain("custom-ext");
     expect(l).not.toContain("pinned");
     expect(l).not.toContain("off");
+  });
+  test("built-ins come from BUILTIN_AGENT_INFO by alias; inherit built-ins never appear", () => {
+    for (const [tier, alias] of [["think", "opus"], ["work", "sonnet"], ["basic", "haiku"]] as const) {
+      const want = Object.entries(BUILTIN_AGENT_INFO).filter(([, i]) => i.model === alias).map(([n]) => n);
+      const got = affectedBy(tier, []).filter((i) => i.kind === "builtin").map((i) => i.label);
+      expect(got).toEqual(want);
+    }
+    expect(affectedBy("think", []).map((i) => i.label)).toContain("Explore");
+    expect(affectedBy("work", []).map((i) => i.label)).not.toContain("general-purpose");
+  });
+  test("an external named like a built-in is not listed twice", () => {
+    const l = affectedBy("think", [ext("Explore", "opus")]).filter((i) => i.label === "Explore");
+    expect(l).toHaveLength(1);
   });
 });

@@ -1,4 +1,5 @@
 import type { AgentRow } from "../../server/agents.types.ts";
+import { BUILTIN_AGENT_INFO } from "../../roles/roles.builtins.ts";
 import type { Tier } from "./model.tier.ts";
 
 export interface Hierarchy {
@@ -14,10 +15,6 @@ export const TIER_LIST: readonly Tier[] = ["think", "work", "basic"];
 /** Tier → model alias; mirrors `TIER_ALIAS` in config.store (not imported: that module pulls in node:fs). */
 export const TIER_ALIAS: Record<Tier, "opus" | "sonnet" | "haiku"> = { think: "opus", work: "sonnet", basic: "haiku" };
 
-// ponytail: hardcoded mirror of Claude Code's built-in subagent models; swap for BUILTIN_AGENT_INFO once roles.builtins.ts exists and is browser-safe.
-const BUILTIN_ALIAS: Record<string, "opus" | "sonnet" | "haiku"> = {
-  "statusline-setup": "sonnet", "claude-code-guide": "haiku", "web-fetch": "haiku", Explore: "opus",
-};
 const BACKGROUND_TEXT = "Claude Code background tasks (haiku alias)";
 
 const managed = (a: AgentRow) => a.kind !== "external";
@@ -44,9 +41,9 @@ export function affectedBy(tier: Tier, items: AgentRow[]): AffectedItem[] {
   for (const a of items) {
     if (managed(a) && a.status === "enabled" && a.tier === tier && !a.pin) out.push({ kind: "agent", label: a.name });
   }
-  for (const [name, al] of Object.entries(BUILTIN_ALIAS)) if (al === alias) out.push({ kind: "builtin", label: name });
+  for (const [name, info] of Object.entries(BUILTIN_AGENT_INFO)) if (info.model === alias) out.push({ kind: "builtin", label: name });
   for (const a of items) {
-    if (!managed(a) && a.alias === alias && !Object.hasOwn(BUILTIN_ALIAS, a.name)) out.push({ kind: "external", label: a.name });
+    if (!managed(a) && a.alias === alias && !Object.hasOwn(BUILTIN_AGENT_INFO, a.name)) out.push({ kind: "external", label: a.name });
   }
   if (tier === "basic") out.push({ kind: "text", label: BACKGROUND_TEXT });
   out.push({ kind: "text", label: `Any session started with /model ${alias} or --model ${alias}` });
