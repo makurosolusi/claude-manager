@@ -4,6 +4,42 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-11-28
+
+### Added
+
+- Escalate to manager. With escalate on, any Ask from a worker (a subagent, including built-in and unknown
+  agents) becomes a deny that tells the worker to stop and report to the manager. This includes owner-only
+  actions such as push.
+  - Only the manager's own session prompts you. Workers never prompt you, so there are fewer prompts and no
+    mis-clicks on worker prompts.
+  - The manager preset prompt has a new "Blocked workers" section: collect the requests, decide, and ask you once.
+  - Allow, deny and default cells and the secret floors are unchanged.
+  - Escalate is on by default for new setups. A 0.4.0 policy stays as it is until you re-apply it or turn escalate
+    on. Re-applying keeps your stored choice.
+  - CLI: `claude-manager policy escalate on|off` and `policy apply <preset> --no-escalate`. `policy show` prints
+    the state.
+  - Dashboard: a checkbox on setup, an Escalation switch, "→ manager" markers on escalated Ask cells, "asks
+    manager" in the effective permission text, and an "Escalated" badge in the audit.
+  - API: `PATCH /api/policy` with `{"escalate": true|false}`.
+
+### Fixed
+
+- CLI and dashboard writes no longer overwrite each other. Config, policy, `install` and `uninstall` writes now
+  take a lock file, `config.lock`, in `~/.claude-manager` (or `$CLAUDE_MANAGER_HOME`). A lock left by a dead
+  process, or older than 2 minutes, is cleared automatically. If another process holds the lock for more than
+  10 seconds, the command fails with "another claude-manager process is changing config (pid N); try again".
+- A broken `manifest.json` is now reported as a server error (500) that names the file, not as a bad request.
+
+### Notes
+
+- No database migration: the schema stays at v4.
+- Rollback to 0.4.0: 0.4.0 does not know the `policy.escalate` key and rejects it ("policy: unknown field
+  "escalate""), so its policy commands fail while the key is in `config.json`. Before downgrading, run
+  `claude-manager policy escalate off`, then remove the `escalate` line from `policy` in
+  `~/.claude-manager/config.json`. Or, after downgrading, delete that line and run `policy apply <preset>`.
+  With the key gone, 0.4.0 prompts you for worker asks again.
+
 ## [0.4.0] - 2026-11-28
 
 ### Added
