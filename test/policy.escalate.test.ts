@@ -44,21 +44,79 @@ describe("escalation on: worker ask → deny + report to the manager", () => {
   });
 });
 
+describe("escalation on: worker default → deny + report to the manager (except read and unknown tools)", () => {
+  test("unknown row (general-purpose): Edit and Bash ls are escalated", () => {
+    expect(call(on("balanced"), "general-purpose", "Edit", { file_path: `${ctx.project}/a.ts` })).toEqual({
+      decision: "deny", row: "unknown", cap: "edit", rule: "escalated:role:unknown.edit", reason: reasonFor("edit these files", "unknown"),
+    });
+    expect(bash(on("balanced"), "general-purpose", "ls")).toEqual({
+      decision: "deny", row: "unknown", cap: "shell", rule: "escalated:role:unknown.shell", reason: reasonFor("run shell commands", "unknown"),
+    });
+  });
+  test("unknown row: Read inside the project stays default", () => {
+    const r = call(on("balanced"), "general-purpose", "Read", { file_path: `${ctx.project}/a.ts` });
+    expect(r).toEqual(call(snapshotFor("balanced"), "general-purpose", "Read", { file_path: `${ctx.project}/a.ts` }));
+    expect(r).toMatchObject({ decision: "default", cap: "read", rule: "role:unknown.read" });
+  });
+  test("coder agents: default → Agent call escalated", () => {
+    expect(call(on("balanced"), "coder", "Agent", { prompt: "x" })).toMatchObject({
+      decision: "deny", cap: "agents", rule: "escalated:role:coder.agents", reason: reasonFor("manage agents"),
+    });
+  });
+  test("coder mcp: default → mcp__x__y escalated", () => {
+    expect(call(on("balanced"), "coder", "mcp__x__y", {})).toMatchObject({
+      decision: "deny", cap: "mcp", rule: "escalated:role:coder.mcp", reason: reasonFor("use MCP tools"),
+    });
+  });
+  test("allow downgraded outside the project → escalated", () => {
+    expect(call(on("balanced"), "coder", "Edit", { file_path: `${ctx.outside}/a.ts` })).toMatchObject({
+      decision: "deny", cap: "edit", rule: "escalated:outside-project", reason: reasonFor("edit these files"),
+    });
+  });
+  test("a `..` path → escalated", () => {
+    expect(call(on("balanced"), "coder", "Edit", { file_path: `${ctx.project}/sub/../a.ts` })).toMatchObject({
+      decision: "deny", cap: "edit", rule: "escalated:outside-project",
+    });
+  });
+  test("a read downgraded outside the project stays default", () => {
+    expect(call(on("balanced"), "coder", "Read", { file_path: `${ctx.outside}/a.ts` })).toMatchObject({ decision: "default", rule: "outside-project" });
+  });
+  test("an unknown tool with no capability stays default", () => {
+    expect(call(on("balanced"), "general-purpose", "SomeNewTool", { x: 1 })).toMatchObject({ decision: "default", cap: null, rule: "unknown-tool" });
+  });
+  test("escalation off: default stays default", () => {
+    expect(bash(snapshotFor("balanced"), "general-purpose", "ls")).toMatchObject({ decision: "default", rule: "role:unknown.shell" });
+    expect(call(snapshotFor("balanced"), "coder", "mcp__x__y", {})).toMatchObject({ decision: "default", rule: "role:coder.mcp" });
+  });
+});
+
 describe("escalation on: other outcomes unchanged", () => {
   test("main row (no agent_id) with push still asks", () => {
     const r = decide({ tool_name: "Bash", tool_input: { command: "git push" }, cwd: ctx.project }, on("balanced"), nodePolicyFs, { HOME: ctx.home });
     expect(r).toMatchObject({ row: "main", decision: "ask", rule: "owner-only:push" });
   });
-  test("allow, deny and default match escalation off", () => {
+  test("allow and deny match escalation off", () => {
     const edit = (snap: ReturnType<typeof on>, role: string) => call(snap, role, "Edit", { file_path: `${ctx.project}/a.ts` });
-    const mcp = (snap: ReturnType<typeof on>) => call(snap, "coder", "mcp__x__y", {});
     const off = snapshotFor("balanced");
     expect(edit(on("balanced"), "coder")).toEqual(edit(off, "coder"));
     expect(edit(on("balanced"), "coder").decision).toBe("allow");
     expect(edit(on("balanced"), "architect")).toEqual(edit(off, "architect"));
     expect(edit(on("balanced"), "architect").decision).toBe("deny");
-    expect(mcp(on("balanced"))).toEqual(mcp(off));
-    expect(mcp(on("balanced")).decision).toBe("default");
+  });
+  test("main row: every outcome matches escalation off", () => {
+    const main = (snap: ReturnType<typeof on>, tool_name: string, tool_input: unknown) =>
+      decide({ tool_name, tool_input, cwd: ctx.project }, snap, nodePolicyFs, { HOME: ctx.home });
+    const off = snapshotFor("balanced");
+    const cases: [string, unknown][] = [
+      ["Edit", { file_path: `${ctx.project}/a.ts` }], ["Edit", { file_path: `${ctx.outside}/a.ts` }], ["Bash", { command: "ls" }],
+      ["Bash", { command: "git push" }], ["Agent", {}], ["mcp__x__y", {}], ["Read", { file_path: `${ctx.home}/.env` }],
+    ];
+    for (const [tool, input] of cases) expect(main(on("balanced"), tool, input)).toEqual(main(off, tool, input));
+    expect(main(on("balanced"), "Bash", { command: "ls" }).decision).toBe("default");
+  });
+  test("secrets stay deny with the secret rule for edits and reads", () => {
+    expect(call(on("balanced"), "Explore", "Read", { file_path: `${ctx.project}/.env` })).toMatchObject({ decision: "deny", rule: "secret", cap: null });
+    expect(call(on("balanced"), "coder", "Edit", { file_path: `${ctx.project}/id_rsa` })).toMatchObject({ decision: "deny", rule: "secret" });
   });
   test("secrets stay deny with the secret rule", () => {
     expect(bash(on("balanced"), "coder", "cat .env")).toMatchObject({ decision: "deny", rule: "secret" });

@@ -8,12 +8,20 @@ const CAP_ACTION: Record<Capability, string> = {
 };
 
 /**
- * v0.4.1 escalation step: with `snapshot.escalate`, a worker row's `ask` becomes `deny` telling it to report to the
- * manager, so only the manager talks to the owner. Never applies to `main` (no `agent_id`: the manager or the owner).
- * The reason names role and capability only; it never echoes the input.
+ * Whether a worker outcome would reach the owner: every `ask`, and every `default` (Claude Code's own prompt) except
+ * `read` (in-project reads don't prompt; blocking them would cripple built-in agents) and `cap === null`.
+ * Limit: a tool the policy doesn't model (no capability) keeps the normal flow, so it can still prompt the owner.
+ */
+const reachesOwner = ({ decision, cap }: PolicyResult): boolean =>
+  decision === "ask" || (decision === "default" && cap !== null && cap !== "read");
+
+/**
+ * v0.4.1 escalation step: with `snapshot.escalate`, a worker row's outcome that would prompt the owner becomes `deny`
+ * telling it to report to the manager, so only the manager talks to the owner. Never applies to `main` (no `agent_id`:
+ * the manager or the owner) and never produces `allow`. The reason names role and capability only; it never echoes the input.
  */
 export function escalate(result: PolicyResult, snapshot: PolicySnapshot): PolicyResult {
-  if (!snapshot.escalate || result.row === MAIN_ROW || result.decision !== "ask") return result;
+  if (!snapshot.escalate || result.row === MAIN_ROW || !reachesOwner(result)) return result;
   const action = result.cap ? CAP_ACTION[result.cap] : "do this";
   return {
     ...result,
