@@ -1,10 +1,11 @@
 import type { TierWriteResult } from "../../server/tiers.types.ts";
+import { TIER_NEW_SESSIONS_NOTE } from "../../roles/model.ids.ts";
 import { appliedText, type WriteFailure } from "./agent.write.ts";
 import { ApiWriteError, sendJson } from "./api.write.ts";
 import type { Tier } from "./model.tier.ts";
 
 /** Shown under the success notice of a tier change. */
-export const TIER_LIVE_NOTE = "Applies to new Claude Code sessions; running sessions reload settings and may switch on their next request — restart them to be sure.";
+export const TIER_LIVE_NOTE = TIER_NEW_SESSIONS_NOTE;
 
 /** Saves the model behind `tier` (PUT /api/tiers/:tier) guarded by the tiers etag. */
 export const saveTier = (tier: Tier, model: string, etag: string): Promise<TierWriteResult> =>

@@ -1,10 +1,10 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { openDb } from "../src/db/db.schema.ts";
-import { DEFAULT_TIER_MODELS } from "../src/config/config.store.ts";
-import type { Config } from "../src/config/config.store.ts";
+import { configEtag } from "../src/config/config.apply.ts";
+import { configPath, DEFAULT_TIER_MODELS } from "../src/config/config.store.ts";
 import type { Pricing, Rates } from "../src/ingest/pricing.service.ts";
-import { buildTiers, TIER_DAYS } from "../src/tiers/tiers.catalog.ts";
+import { buildTiers, loadTiersConfig, TIER_DAYS, type TiersConfig } from "../src/tiers/tiers.catalog.ts";
 import { useTempHome } from "./test.home.ts";
 
 // test-only fixtures: synthetic rows, never real logs.
@@ -14,7 +14,7 @@ const rate = (input: number, output: number, extra: Partial<Rates> = {}): Rates 
   inputTokens: input, outputTokens: output, promptCacheWriteTokens: 0, promptCacheWrite1hTokens: 0, promptCacheReadTokens: 0, webSearchRequests: 0, ...extra,
 });
 const PRICING: Pricing = { version: "t", table: { "claude-opus-5-5": rate(4, 20), "claude-sonnet-5-5": rate(2, 10), "claude-old": rate(1, 5), "claude-haiku-5-5": rate(0.1, 0.5) } };
-const CONFIG = { tiers: { ...DEFAULT_TIER_MODELS }, roleModels: {}, customRoles: {}, disabledRoles: [] } as unknown as Config;
+const CONFIG: TiersConfig = { tiers: { ...DEFAULT_TIER_MODELS }, etag: "none" };
 
 let db: Database;
 let n = 0;
@@ -37,7 +37,7 @@ describe("buildTiers", () => {
     req("claude-opus-5-5-20261101[1m]");
     req("<synthetic>");
     req("claude-seen-only");
-    const cfg = { ...CONFIG, tiers: { ...CONFIG.tiers, basic: "my-pinned:model" } } as Config;
+    const cfg: TiersConfig = { ...CONFIG, tiers: { ...CONFIG.tiers, basic: "my-pinned:model" } };
     const ids = buildTiers(cfg, db, PRICING, NOW).models.map((m) => m.id);
     expect(ids).toEqual([...new Set(ids)].sort());
     expect(ids).toEqual(expect.arrayContaining(["claude-opus-5-5", "claude-old", "claude-seen-only", "my-pinned:model", "claude-sonnet-5-5"]));
@@ -81,7 +81,19 @@ describe("buildTiers", () => {
     expect(think.estimate_30d["claude-long"]).toBeCloseTo(3.1, 9);
   });
 
-  test("etag is none without a config file", () => {
+  test("etag comes from the config the tiers were read from", async () => {
     expect(buildTiers(CONFIG, db, PRICING, NOW).etag).toBe("none");
+    expect((await loadTiersConfig()).etag).toBe("none");
+    const text = JSON.stringify({ tiers: { think: "claude-opus-9" } });
+    await Bun.write(configPath(), text);
+    const read = await loadTiersConfig();
+    expect(read.etag).toBe(configEtag(text));
+    expect(read.tiers).toEqual({ ...DEFAULT_TIER_MODELS, think: "claude-opus-9" });
+    expect(buildTiers(read, db, PRICING, NOW).etag).toBe(configEtag(text));
+  });
+
+  test("a broken config.json is a server error", async () => {
+    await Bun.write(configPath(), "{nope");
+    await expect(loadTiersConfig()).rejects.toThrow("config.json is not valid JSON");
   });
 });

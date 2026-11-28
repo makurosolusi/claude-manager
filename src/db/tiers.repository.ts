@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { FROM, NORMALIZE_SQL, type Params } from "./stats.repository.ts";
+import { NORMALIZE_SQL, type Params } from "./stats.repository.ts";
 
 /** Token sums of requests that share a normalized model and the same price-relevant flags. */
 export interface TierBucket {
@@ -40,7 +40,7 @@ export function tierBuckets(db: Database, since: string, models: string[], thres
         COUNT(*) AS requests, SUM(r.input) AS input, SUM(r.cache_5m) AS cache_5m, SUM(r.cache_1h) AS cache_1h,
         SUM(r.cache_read) AS cache_read, SUM(r.output) AS output, SUM(r.web_search) AS web_search,
         COALESCE(SUM(r.cost_usd), 0) AS cost_usd, SUM(r.cost_usd IS NULL) AS unpriced
-      ${FROM} WHERE r.ts >= $since AND ${MODEL} IN (SELECT value FROM json_each($models))
+      FROM requests r WHERE r.ts >= $since AND ${MODEL} IN (SELECT value FROM json_each($models))
       GROUP BY model, fast, us, long`,
     )
     .all({ since, models: JSON.stringify(models), threshold });
@@ -50,6 +50,6 @@ export function tierBuckets(db: Database, since: string, models: string[], thres
 /** Request count per normalized model since `since` (ISO); one grouped query. */
 export function modelCounts(db: Database, since: string): ModelCount[] {
   return db
-    .query<ModelCount, Params>(`SELECT ${MODEL} AS model, COUNT(*) AS requests ${FROM} WHERE r.ts >= $since GROUP BY model`)
+    .query<ModelCount, Params>(`SELECT ${MODEL} AS model, COUNT(*) AS requests FROM requests r WHERE r.ts >= $since GROUP BY model`)
     .all({ since });
 }

@@ -2,16 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CliError } from "../cli.error.ts";
 import { appDir } from "../app.paths.ts";
+import { TIER_ALIAS_MAP } from "../roles/model.ids.ts";
 import { writeJson } from "../storage/json.file.ts";
 
 export type Tier = "think" | "work" | "basic";
 export const TIERS: Tier[] = ["think", "work", "basic"];
 
-export const TIER_ALIAS: Record<Tier, "opus" | "sonnet" | "haiku"> = {
-  think: "opus",
-  work: "sonnet",
-  basic: "haiku",
-};
+export const TIER_ALIAS: Record<Tier, "opus" | "sonnet" | "haiku"> = TIER_ALIAS_MAP;
 
 export const TIER_ENV: Record<Tier, string> = {
   think: "ANTHROPIC_DEFAULT_OPUS_MODEL",
@@ -58,7 +55,7 @@ function withDefaults(saved: Partial<Config>): Config {
 }
 
 /** Parses config.json text; a broken file is the server's own state, so it is reason "server" (HTTP 500), not "invalid" (400). */
-function parseConfig(text: string, path: string): Config {
+export function parseConfig(text: string, path: string): Config {
   try {
     return withDefaults(JSON.parse(text) as Partial<Config>);
   } catch (err) {

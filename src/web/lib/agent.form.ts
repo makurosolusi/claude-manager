@@ -1,3 +1,4 @@
+import { MODEL_ID_RE, TIER_ALIAS_MAP } from "../../roles/model.ids.ts";
 import type { Tier } from "../../config/config.store.ts";
 import type { AgentDetail, AgentInput, AgentPatch, AgentKind } from "../../server/agents.types.ts";
 import type { ChainInput } from "./agents.table.ts";
@@ -12,11 +13,9 @@ export const PROMPT_WARN_RATIO = 0.9;
 export const TOOLS_MAX = 64;
 
 const NAME_RE = /^[a-z][a-z0-9-]{0,39}$/;
-const PIN_RE = /^[\w.\-:[\]]+$/;
 /** Valid MCP tool entry: `mcp__server` or `mcp__server__tool` (tool may be `*`). */
 export const MCP_RE = /^mcp__[\w-]+(__[\w*-]+)?$/;
-// Mirrors TIER_ALIAS in config.store.ts (not importable here: that module pulls in node).
-const TIER_ALIAS: Record<Tier, string> = { think: "opus", work: "sonnet", basic: "haiku" };
+const TIER_ALIAS: Record<Tier, string> = TIER_ALIAS_MAP;
 
 export type ModelMode = "tier" | "pin" | "default";
 export type ToolsMode = "all" | "only";
@@ -58,7 +57,7 @@ const allTools = (s: FormState): string[] => [...new Set([...s.tools, ...s.mcp])
 /** Field -> message map mirroring the server rules (spec 3.1); empty when valid. Presets only check the model. */
 export function validate(s: FormState, o: { isCreate: boolean; kind: AgentKind }): FormErrors {
   const e: FormErrors = {};
-  if (s.modelMode === "pin" && !PIN_RE.test(s.modelValue)) e.model = `invalid model id "${s.modelValue}"`;
+  if (s.modelMode === "pin" && !MODEL_ID_RE.test(s.modelValue)) e.model = `invalid model id "${s.modelValue}"`;
   if (s.modelMode === "tier" && !["think", "work", "basic"].includes(s.modelValue)) e.model = `invalid tier "${s.modelValue}"`;
   if (s.modelMode === "default" && o.kind !== "preset") e.model = "only preset agents can use the default model";
   if (o.kind === "preset") return e;

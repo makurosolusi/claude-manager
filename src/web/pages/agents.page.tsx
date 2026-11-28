@@ -96,7 +96,7 @@ export function AgentsPage({ dataVersion, params, tiers, roles }: PageProps) {
         </NoticeBar>
       )}
       {data && <AgentBanner data={data} />}
-      {!creating && <AgentsHierarchy items={data?.items ?? []} tiers={tiersApi.data} write={write === true} onEdit={(tier, preselect) => setEditing({ tier, preselect })} />}
+      {!creating && <AgentsHierarchy items={data?.items ?? []} tiers={tiersApi.data} tiersError={tiersApi.error} onRetry={() => setRetry((n) => n + 1)} write={write === true} onEdit={(tier, preselect) => setEditing({ tier, preselect })} />}
       {editing && tiersApi.data && data && (
         <TierEditorHost
           tier={editing.tier} preselect={editing.preselect} data={tiersApi.data} items={data.items}

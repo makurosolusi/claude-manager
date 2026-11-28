@@ -2,18 +2,15 @@ import { CliError, type ErrorReason } from "../cli.error.ts";
 import { type Config, isTier, type Tier, TIERS } from "../config/config.store.ts";
 import type { Manifest } from "../install/install.manifest.ts";
 import type { AgentInput, AgentPatch, ModelChoice } from "../server/agents.types.ts";
+import { ALIAS_VALUES, MODEL_ID_MAX, MODEL_ID_RE } from "./model.ids.ts";
 import { PRESET_ROLES } from "./roles.presets.ts";
 import { assertRoleName, assertTools, BUILTIN_AGENTS, ownValue } from "./roles.registry.ts";
 
 /** Pure config transforms shared by the CLI and the dashboard API: each returns the next Config or throws a CliError with a reason. */
 
-const PIN = /^[\w.\-:\[\]]+$/;
 const MAX_DESCRIPTION = 1000;
 const MAX_PROMPT = 20_000;
 const MAX_TOOLS = 64;
-const MAX_MODEL_ID = 128;
-/** Claude Code aliases and sentinels: a tier must hold a full model ID, or the alias env would point at itself. */
-const MODEL_ALIASES = ["opus", "sonnet", "haiku", "fable", "best", "opusplan", "default", "inherit"];
 /** Tier stored for a custom role created with a pinned model (the pin wins at render time). */
 const PINNED_CUSTOM_TIER: Tier = "work";
 const INPUT_KEYS = ["name", "description", "model", "tools", "prompt"];
@@ -73,7 +70,7 @@ function parseChoice(choice: unknown): ModelChoice {
     return { tier: c.tier as Tier };
   }
   if ("pin" in c && typeof c.pin === "string") {
-    if (!PIN.test(c.pin)) fail(`invalid tier or model "${c.pin}"`);
+    if (!MODEL_ID_RE.test(c.pin)) fail(`invalid tier or model "${c.pin}"`);
     return { pin: c.pin };
   }
   return fail("model must be one of {tier}, {pin} or {default}");
@@ -182,8 +179,8 @@ export function disableRole(config: Config, name: string, manifest: Manifest): C
 /** Points a tier at a full model ID; rejects aliases (opus, sonnet, ...) and ids over 128 characters. */
 export function setTierModel(config: Config, tier: string, model: string): Config {
   if (!isTier(tier)) fail(`unknown tier "${tier}": use ${TIERS.join(", ")}`);
-  if (!PIN.test(model) || model.length > MAX_MODEL_ID) fail(`invalid model id "${model.slice(0, MAX_MODEL_ID)}"`);
-  if (MODEL_ALIASES.includes(model.toLowerCase())) fail(`model must be a full model ID, not the alias "${model}"`);
+  if (!MODEL_ID_RE.test(model) || model.length > MODEL_ID_MAX) fail(`invalid model id "${model.slice(0, MODEL_ID_MAX)}"`);
+  if (ALIAS_VALUES.includes(model.toLowerCase())) fail(`model must be a full model ID, not the alias "${model}"`);
   const next = structuredClone(config);
   next.tiers[tier as Tier] = model;
   return next;

@@ -1,20 +1,24 @@
-import { ArrowRight, Crown, UserRound } from "lucide-react";
+import { ArrowRight, UserRound } from "lucide-react";
 import { useId, useState } from "react";
 import type { AgentRow } from "../../server/agents.types.ts";
 import type { TiersResponse } from "../../server/tiers.types.ts";
 import { RoleBadge } from "@/components/role.badge.tsx";
 import { TierCard } from "@/components/tier.card.tsx";
 import { buildHierarchy, TIER_LIST } from "@/lib/agents.hierarchy.ts";
-import { FAMILY_CLASSES } from "@/lib/color.tokens.ts";
+import { Button } from "@/components/ui/button.tsx";
+import { FAMILY_CLASSES, TONE_CLASSES } from "@/lib/color.tokens.ts";
 import { cn } from "@/lib/cn.ts";
-import { TIER_ICON } from "@/lib/icon.map.ts";
+import { TIER_ICON, UI_ICON } from "@/lib/icon.map.ts";
 import { modelFamily, tierFamily, type Tier } from "@/lib/model.tier.ts";
-import { newerInFamily, normalizeModelId } from "@/lib/tier.models.ts";
+import { newerSuggestion, normalizeModelId } from "@/lib/tier.models.ts";
 
 interface Props {
   items: AgentRow[];
   tiers: TiersResponse | undefined;
   write: boolean;
+  /** Set when `/api/tiers` failed: shows an inline error with Retry. */
+  tiersError?: Error;
+  onRetry?: () => void;
   onEdit: (tier: Tier, preselect?: string) => void;
 }
 
@@ -25,7 +29,7 @@ function MainNode({ a, multiple }: { a: AgentRow; multiple: boolean }) {
   const family = FAMILY_CLASSES[a.model_id ? modelFamily(a.model_id) : tierFamily(a.tier ?? "other")];
   return (
     <div className={NODE} title={multiple ? "Main agent in at least one install" : undefined}>
-      <Crown aria-hidden className="size-4 shrink-0" />
+      <UI_ICON.crown aria-hidden className="size-4 shrink-0" />
       <a href={`#/agents/${encodeURIComponent(a.name)}`}><RoleBadge role={a.name} /></a>
       <Icon aria-hidden className={cn("size-4 shrink-0", family.text)} />
       <span className={cn("truncate font-mono text-xs", family.text)}>{[a.alias, a.model_id].filter((v, i, r) => v && r.indexOf(v) === i).join(" → ") || "inherit"}</span>
@@ -68,10 +72,10 @@ function Unmanaged({ agents }: { agents: AgentRow[] }) {
 }
 
 /** Owner → main agent → per-tier lanes, with pinned and unmanaged agents below. */
-export function AgentsHierarchy({ items, tiers, write, onEdit }: Props) {
+export function AgentsHierarchy({ items, tiers, write, tiersError, onRetry, onEdit }: Props) {
   const id = useId();
   const h = buildHierarchy(items);
-  const loading = !tiers && items.length === 0;
+  const loading = !tiers && !tiersError && items.length === 0;
   return (
     <section aria-labelledby={id} className="flex flex-col gap-3">
       <h2 id={id} className="text-base font-semibold">Hierarchy</h2>
@@ -87,6 +91,12 @@ export function AgentsHierarchy({ items, tiers, write, onEdit }: Props) {
           </div>
         )}
       </div>
+      {tiersError && !tiers && (
+        <p role="alert" className={cn("flex items-center gap-2 rounded-md border p-2 text-sm", TONE_CLASSES.danger.badge)}>
+          <span className="min-w-0 flex-1">{`Couldn't load tier models. ${tiersError.message}`}</span>
+          {onRetry && <Button type="button" size="sm" variant="outline" onClick={onRetry}>Retry</Button>}
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         {TIER_LIST.map((t) => {
           const summary = tiers?.tiers.find((s) => s.tier === t);
@@ -100,8 +110,9 @@ export function AgentsHierarchy({ items, tiers, write, onEdit }: Props) {
               summary={summary}
               agents={h.tiers[t]}
               price={price ? { input: price.input_usd, output: price.output_usd } : undefined}
-              newer={summary && tiers ? newerInFamily(summary.model, tiers.models) : null}
+              newer={summary && tiers ? newerSuggestion(summary.model, tiers.models) : null}
               write={write}
+              editBlocked={tiers ? undefined : tiersError ? "Tier models failed to load" : "Loading tier models…"}
               onEdit={onEdit}
             />
           );

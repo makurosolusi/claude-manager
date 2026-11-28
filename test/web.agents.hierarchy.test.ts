@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentRow } from "../src/server/agents.types.ts";
 import { BUILTIN_AGENT_INFO } from "../src/roles/roles.builtins.ts";
-import { affectedBy, buildHierarchy } from "../src/web/lib/agents.hierarchy.ts";
+import { affectedBy, buildHierarchy, pinTier } from "../src/web/lib/agents.hierarchy.ts";
 
 const row = (o: Partial<AgentRow> & { name: string }): AgentRow => ({
   kind: "preset", source: null, status: "enabled", description: null, color: null, tier: "work", pin: null, alias: "sonnet",
@@ -30,6 +30,31 @@ describe("buildHierarchy", () => {
     expect(h.tiers.work).toHaveLength(0);
     expect(h.tiers.basic.map((a) => a.name)).toEqual(["off"]);
     expect(h.unmanaged.map((a) => a.name)).toEqual(["Explore"]);
+  });
+});
+
+describe("alias pins", () => {
+  test("pinTier maps opus/sonnet/haiku to their tier; fable and full ids have none", () => {
+    expect([pinTier("opus"), pinTier("sonnet"), pinTier("haiku")]).toEqual(["think", "work", "basic"]);
+    expect(pinTier("fable")).toBeNull();
+    expect(pinTier("claude-sonnet-5-5")).toBeNull();
+    expect(pinTier(null)).toBeNull();
+  });
+  test("an alias-pinned agent sits on its alias's tier, not in Pinned", () => {
+    const h = buildHierarchy([
+      row({ name: "reviewer", tier: "think", pin: "sonnet" }),
+      row({ name: "full", pin: "claude-opus-5-5" }),
+      row({ name: "fab", pin: "fable" }),
+    ]);
+    expect(h.tiers.work.map((a) => a.name)).toEqual(["reviewer"]);
+    expect(h.tiers.think).toHaveLength(0);
+    expect(h.pinned.map((a) => a.name)).toEqual(["full", "fab"]);
+  });
+  test("affectedBy lists alias pins under their alias's tier only, enabled only", () => {
+    const items = [row({ name: "reviewer", tier: "think", pin: "sonnet" }), row({ name: "gone", pin: "sonnet", status: "disabled" }), row({ name: "fab", pin: "fable" })];
+    const names = (t: "think" | "work" | "basic") => affectedBy(t, items).filter((i) => i.kind === "agent").map((i) => i.label);
+    expect(names("work")).toEqual(["reviewer"]);
+    expect(names("think")).toEqual([]);
   });
 });
 

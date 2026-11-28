@@ -8,7 +8,8 @@ import { affectedBy } from "@/lib/agents.hierarchy.ts";
 import { TONE_CLASSES } from "@/lib/color.tokens.ts";
 import { cn } from "@/lib/cn.ts";
 import { FAMILY_LABEL, modelFamily } from "@/lib/model.tier.ts";
-import { normalizeModelId, validateModelId } from "@/lib/tier.models.ts";
+import { TIER_NEW_SESSIONS_NOTE } from "../../roles/model.ids.ts";
+import { normalizeModelId, selectionChanged, validateModelId } from "@/lib/tier.models.ts";
 
 const FOCUS = "outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring";
 
@@ -37,24 +38,24 @@ export function TierEditor({ open, tier, models, items, preselect, onSave, onClo
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
   const current = normalizeModelId(tier.model);
-  const [sel, setSel] = useState(normalizeModelId(preselect ?? tier.model));
+  const [sel, setSel] = useState((preselect ?? tier.model).trim());
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) { setSel(normalizeModelId(preselect ?? tier.model)); setBusy(false); d.showModal(); }
+    if (open && !d.open) { setSel((preselect ?? tier.model).trim()); setBusy(false); d.showModal(); }
     else if (!open && d.open) d.close();
   }, [open, preselect, tier.model]);
 
   const valid = !validateModelId(sel);
-  const changed = valid && normalizeModelId(sel) !== current;
+  const changed = selectionChanged(sel, tier.model);
   const family = modelFamily(sel);
   const priced = models.find((m) => m.id === normalizeModelId(sel));
   const noPrice = valid && (!priced || priced.input_usd == null || priced.output_usd == null);
   const save = async () => {
     setBusy(true);
-    try { await onSave(sel.trim()); } catch { /* the parent surfaces the failure via `error` */ } finally { setBusy(false); }
+    try { await onSave(sel.trim()); } finally { setBusy(false); }
   };
   const label = tier.tier;
 
@@ -89,7 +90,7 @@ export function TierEditor({ open, tier, models, items, preselect, onSave, onClo
         {noPrice && <Warn>Costs for this model will show as unpriced.</Warn>}
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        {`Written to settings.json (${tier.env}). Applies to new Claude Code sessions; running sessions reload settings and may switch on their next request — restart them to be sure.`}
+        {`Written to settings.json (${tier.env}). ${TIER_NEW_SESSIONS_NOTE}`}
       </p>
       <div className="mt-5 flex justify-end gap-2">
         <Button type="button" variant="outline" disabled={busy} onClick={onClose} className={FOCUS}>Cancel</Button>

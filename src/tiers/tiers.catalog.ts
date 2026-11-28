@@ -1,17 +1,16 @@
 import type { Database } from "bun:sqlite";
-import { existsSync, readFileSync } from "node:fs";
 import { configEtag } from "../config/config.apply.ts";
-import { configPath, TIER_ALIAS, TIER_ENV, TIERS, type Config } from "../config/config.store.ts";
+import { configPath, DEFAULT_TIER_MODELS, parseConfig, TIER_ALIAS, TIER_ENV, TIERS, type Config } from "../config/config.store.ts";
 import { modelCounts, tierBuckets, type TierBucket } from "../db/tiers.repository.ts";
 import { ratesFor, type Pricing } from "../ingest/pricing.service.ts";
 import type { TierModelOption, TierSummary, TiersResponse } from "../server/tiers.types.ts";
+import { MODEL_ID_RE } from "../roles/model.ids.ts";
+import { readText } from "../install/install.target.ts";
 import { reprice } from "./tier.estimate.ts";
 
 /** Window of usage shown and re-priced. */
 export const TIER_DAYS = 30;
 const MS_PER_DAY = 86_400_000;
-/** Same charset the role/tier model pin accepts; also drops `<synthetic>`. */
-const PIN_PATTERN = /^[\w.\-:[\]]+$/;
 /** Threshold for rates without a long-prompt tier: no request is ever "long". */
 const NEVER_LONG = Number.MAX_SAFE_INTEGER;
 
@@ -20,8 +19,22 @@ export const normalizeModelId = (id: string): string => id.trim().toLowerCase().
 
 const thresholdOf = (id: string, pricing: Pricing) => ratesFor(pricing.table, id)?.longPrompt?.abovePromptTokens ?? NEVER_LONG;
 
+/** The tier models and etag of ONE read of config.json, so the etag always describes the models shown. */
+export interface TiersConfig { tiers: Config["tiers"]; etag: string }
+
+/**
+ * Reads config.json once and derives both the tier models and the etag from that same text (a separate
+ * loadConfig + file read could straddle a write). A broken file is a server error (see parseConfig).
+ */
+export async function loadTiersConfig(): Promise<TiersConfig> {
+  const path = configPath();
+  const text = await readText(path);
+  if (text === undefined) return { tiers: { ...DEFAULT_TIER_MODELS }, etag: configEtag(undefined) };
+  return { tiers: parseConfig(text, path).tiers, etag: configEtag(text) };
+}
+
 /** Tier model editor data: per-tier 30-day usage served by the configured model, plus what the same tokens would cost on each known model. */
-export function buildTiers(config: Config, db: Database, pricing: Pricing, now: Date): TiersResponse {
+export function buildTiers(config: TiersConfig, db: Database, pricing: Pricing, now: Date): TiersResponse {
   const since = new Date(now.getTime() - TIER_DAYS * MS_PER_DAY).toISOString();
   const counts = new Map(modelCounts(db, since).map((c) => [c.model, c.requests]));
   const tierModel = Object.fromEntries(TIERS.map((t) => [t, normalizeModelId(config.tiers[t])]));
@@ -29,7 +42,7 @@ export function buildTiers(config: Config, db: Database, pricing: Pricing, now: 
   const ids = new Set<string>();
   for (const raw of [...Object.keys(pricing.table), ...counts.keys(), ...Object.values(config.tiers)]) {
     const id = normalizeModelId(raw);
-    if (PIN_PATTERN.test(id)) ids.add(id);
+    if (MODEL_ID_RE.test(id)) ids.add(id);
   }
   const models: TierModelOption[] = [...ids].sort().map((id) => {
     const rates = ratesFor(pricing.table, id);
@@ -70,7 +83,5 @@ export function buildTiers(config: Config, db: Database, pricing: Pricing, now: 
     };
   });
 
-  const file = configPath();
-  const etag = configEtag(existsSync(file) ? readFileSync(file, "utf8") : undefined);
-  return { tiers, models, etag, days: TIER_DAYS };
+  return { tiers, models, etag: config.etag, days: TIER_DAYS };
 }

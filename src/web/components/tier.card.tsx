@@ -1,4 +1,3 @@
-import { Crown } from "lucide-react";
 import { CostCell } from "@/components/cost.cell.tsx";
 import { RoleBadge } from "@/components/role.badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -24,11 +23,13 @@ interface Props {
   price?: { input: number | null; output: number | null };
   newer: string | null;
   write: boolean;
+  /** Why Edit is unavailable (tiers not loaded); the button is disabled with this tooltip. */
+  editBlocked?: string;
   onEdit: (tier: Tier, preselect?: string) => void;
 }
 
 /** One tier lane: icon, alias, configured model, price, 30-day usage, a newer-model hint and the agents routed through it. */
-export function TierCard({ tier, summary, agents, price, newer, write, onEdit }: Props) {
+export function TierCard({ tier, summary, agents, price, newer, write, editBlocked, onEdit }: Props) {
   const Icon = TIER_ICON[tier];
   const alias = TIER_ALIAS[tier];
   const model = summary?.model ?? agents.find((a) => a.model_id)?.model_id ?? null;
@@ -42,7 +43,7 @@ export function TierCard({ tier, summary, agents, price, newer, write, onEdit }:
         <h3 className="text-sm font-semibold capitalize">{tier}</h3>
         <span className="rounded-sm border border-border px-1.5 font-mono text-xs text-muted-foreground">{alias}</span>
         {write && (
-          <Button type="button" size="sm" variant="outline" className={cn("ml-auto min-h-9", FOCUS)} onClick={() => onEdit(tier)}>
+          <Button type="button" size="sm" variant="outline" className={cn("ml-auto min-h-9", FOCUS)} disabled={!!editBlocked} title={editBlocked} onClick={() => onEdit(tier)}>
             <UI_ICON.edit aria-hidden />Edit
           </Button>
         )}
@@ -67,8 +68,9 @@ export function TierCard({ tier, summary, agents, price, newer, write, onEdit }:
       <ul className="flex flex-wrap gap-1.5">
         {agents.slice(0, MAX_CHIPS).map((a, i) => (
           <li key={a.name} className={cn("flex items-center gap-1", a.status === "disabled" && "opacity-60", i >= MAX_CHIPS_NARROW && "max-sm:hidden")}>
-            {a.main_agent && <Crown aria-label="Main agent" className="size-3.5 shrink-0" />}
+            {a.main_agent && <UI_ICON.crown aria-label="Main agent" className="size-3.5 shrink-0" />}
             <a href={`#/agents/${encodeURIComponent(a.name)}`} className={cn("rounded-sm", FOCUS)}><RoleBadge role={a.name} /></a>
+            {a.pin && <span title={`Pinned to the ${a.pin} alias: still follows this tier's model`} className="rounded-sm border border-border px-1 text-xs text-muted-foreground">Pin</span>}
           </li>
         ))}
         {extra(MAX_CHIPS_NARROW) > 0 && <li className="text-xs text-muted-foreground sm:hidden">+{extra(MAX_CHIPS_NARROW)}</li>}

@@ -1,10 +1,10 @@
 import type { Database } from "bun:sqlite";
 import { CliError, type ErrorReason } from "../cli.error.ts";
 import { applyConfig, StaleConfigError } from "../config/config.apply.ts";
-import { isTier, loadConfig, TIERS, type Tier } from "../config/config.store.ts";
+import { isTier, TIERS, type Tier } from "../config/config.store.ts";
 import { loadPricing } from "../ingest/pricing.service.ts";
 import { setTierModel } from "../roles/roles.service.ts";
-import { buildTiers } from "../tiers/tiers.catalog.ts";
+import { buildTiers, loadTiersConfig } from "../tiers/tiers.catalog.ts";
 import type { TierWriteResult } from "./tiers.types.ts";
 import { checkWrite, type WriteSession } from "./write.guard.ts";
 
@@ -28,7 +28,7 @@ export const isTiersWriteRoute = (method: string, pathname: string) => method ==
 export async function routeTiersRead(db: Database, pathname: string, now = new Date()): Promise<Response> {
   if (!COLLECTION_PATH.test(trim(pathname))) return fail(STATUS.notFound, `unknown endpoint ${trim(pathname)}`);
   try {
-    const [config, pricing] = await Promise.all([loadConfig(), loadPricing()]);
+    const [config, pricing] = await Promise.all([loadTiersConfig(), loadPricing()]);
     return Response.json(buildTiers(config, db, pricing, now));
   } catch (err) {
     return fail(STATUS.internal, `load tiers: ${reason(err)}`);

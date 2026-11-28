@@ -1,11 +1,9 @@
 import { CliError } from "../cli.error.ts";
 import { applyConfig } from "../config/config.apply.ts";
 import { loadConfig, TIER_ALIAS, TIER_ENV, TIERS, type Tier } from "../config/config.store.ts";
+import { TIER_NEW_SESSIONS_NOTE } from "../roles/model.ids.ts";
 import { setTierModel } from "../roles/roles.service.ts";
 import type { Command } from "./command.types.ts";
-
-const APPLY_NOTE =
-  "Applies to new Claude Code sessions; running sessions reload settings and may switch on their next request — restart them to be sure.";
 
 export const tierCommand: Command = {
   name: "tier",
@@ -29,9 +27,9 @@ Examples:
       return 0;
     }
     if (sub !== "set" || !tier || !model) throw new CliError(`usage: claude-manager tier set <think|work|basic> <model-id>`);
-    const { applied } = await applyConfig((c) => setTierModel(c, tier, model));
+    const { applied } = await applyConfig((c) => setTierModel(c, tier, model), { skipUnchanged: true });
     console.log(`${tier} (${TIER_ALIAS[tier as Tier]}) -> ${model}; re-applied ${applied} install(s)`);
-    console.log(APPLY_NOTE);
+    console.log(TIER_NEW_SESSIONS_NOTE);
     return 0;
   },
 };

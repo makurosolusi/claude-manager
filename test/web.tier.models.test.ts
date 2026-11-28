@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { normalizeModelId as serverNormalize } from "../src/tiers/tiers.catalog.ts";
-import { fmtPrice, normalizeModelId, groupByFamily, isAliasValue, modelVersion, newerInFamily, validateModelId } from "../src/web/lib/tier.models.ts";
+import { fmtPrice, newerSuggestion, selectionChanged, normalizeModelId, groupByFamily, isAliasValue, modelVersion, newerInFamily, validateModelId } from "../src/web/lib/tier.models.ts";
 
 const ids = (...a: string[]) => a.map((id) => ({ id }));
 
@@ -42,5 +42,23 @@ describe("tier.models", () => {
       expect(normalizeModelId(id)).toBe(serverNormalize(id));
     }
     expect(normalizeModelId("Claude-Haiku-4-5-20251001[1m]")).toBe("claude-haiku-4-5");
+  });
+});
+
+describe("[1m] and date suffixes", () => {
+  test("selectionChanged compares the raw trimmed ids", () => {
+    expect(selectionChanged("claude-opus-4-6", "claude-opus-4-6[1m]")).toBe(true);
+    expect(selectionChanged("claude-opus-4-6[1m]", "claude-opus-4-6")).toBe(true);
+    expect(selectionChanged("claude-opus-4-6-20260101", "claude-opus-4-6")).toBe(true);
+    expect(selectionChanged(" claude-opus-4-6 ", "claude-opus-4-6")).toBe(false);
+    expect(selectionChanged("opus", "claude-opus-4-6")).toBe(false);
+    expect(selectionChanged("", "claude-opus-4-6")).toBe(false);
+  });
+  test("newerSuggestion carries [1m] over", () => {
+    const m = ids("claude-opus-4-6", "claude-opus-4-7");
+    expect(newerSuggestion("claude-opus-4-6[1m]", m)).toBe("claude-opus-4-7[1m]");
+    expect(newerSuggestion("claude-opus-4-6", m)).toBe("claude-opus-4-7");
+    expect(newerSuggestion("claude-opus-4-7[1m]", m)).toBeNull();
+    expect(newerSuggestion("claude-opus-4-7", ids("claude-opus-4-8[1m]"))).toBe("claude-opus-4-8[1m]");
   });
 });

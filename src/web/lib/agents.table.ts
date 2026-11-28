@@ -1,6 +1,6 @@
 import { BUILTIN_AGENT_INFO } from "../../roles/roles.builtins.ts";
 import type { AgentRow } from "../../server/agents.types.ts";
-import { TIER_ALIAS } from "@/lib/agents.hierarchy.ts";
+import { pinTier, TIER_ALIAS } from "@/lib/agents.hierarchy.ts";
 import type { ClientTableOptions } from "@/lib/table.client.ts";
 import { NO_GROUP, type TableSpec } from "@/lib/table.query.ts";
 
@@ -28,8 +28,8 @@ export const AGENTS_SPEC: TableSpec = {
 /** Default group of the Agents table. */
 export const AGENTS_DEFAULT_GROUP = "tier";
 
-/** Tier facet value: "pinned" wins over the tier, externals fall to "none". */
-export const tierKey = (r: Pick<AgentRow, "tier" | "pin">): string => (r.pin ? TIER_PINNED : r.tier ?? TIER_NONE);
+/** Tier facet value: an alias pin keeps its tier (same rule as the hierarchy panel); `fable` and full-id pins are "pinned"; externals fall to "none". */
+export const tierKey = (r: Pick<AgentRow, "tier" | "pin">): string => (r.pin ? pinTier(r.pin) ?? TIER_PINNED : r.tier ?? TIER_NONE);
 
 /** Scope facet value: which scopes the agent is installed in ("both" for user + project, "none" when not installed). */
 export function scopeKey(r: Pick<AgentRow, "scopes">): string {

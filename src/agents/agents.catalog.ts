@@ -2,7 +2,8 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { claudeDir } from "../app.paths.ts";
 import { CliError } from "../cli.error.ts";
-import { configPath, type Config, type Tier, TIER_ALIAS } from "../config/config.store.ts";
+import { configEtag } from "../config/config.apply.ts";
+import { configPath, parseConfig, type Config, type Tier, TIER_ALIAS } from "../config/config.store.ts";
 import { loadManifest, type InstallRecord } from "../install/install.manifest.ts";
 import { readText } from "../install/install.target.ts";
 import { allRoles, BUILTIN_AGENTS, ownValue } from "../roles/roles.registry.ts";
@@ -52,6 +53,7 @@ interface Catalog {
   extras: Map<string, Extra>;
   warnings: string[];
   etag: string;
+  config: Config;
   installed: boolean;
 }
 
@@ -124,11 +126,13 @@ const empty = (): Omit<AgentRow, "name" | "kind" | "source" | "status" | "usage"
   tools: null, disallowed_tools: null, scopes: [],
 });
 
-async function build(config: Config, usage: UsageRow[], opts: CatalogOptions): Promise<Catalog> {
+async function build(fallback: Config, usage: UsageRow[], opts: CatalogOptions): Promise<Catalog> {
   const cwd = opts.cwd ?? process.cwd();
   const manifest = await loadManifest();
   const installs = Object.values(manifest.installs);
+  // One read: the config used and the etag both come from this text, so a concurrent write cannot split them.
   const configText = await readText(configPath());
+  const config = configText === undefined ? fallback : parseConfig(configText, configPath());
   const warnings: string[] = [];
   const usageBy = new Map(usage.map((u) => [u.role, u]));
   const mains = new Set(installs.map((i) => i.mainAgent).filter(Boolean));
@@ -204,13 +208,13 @@ async function build(config: Config, usage: UsageRow[], opts: CatalogOptions): P
     if (u.role !== "main" && u.role !== "subagent") addNamed(u.role, u.role.includes(":") ? "plugin" : "unknown");
   }
 
-  return { rows, extras, warnings, etag: configText === undefined ? "none" : sha256(configText), installed: installs.length > 0 };
+  return { config, rows, extras, warnings, etag: configEtag(configText), installed: installs.length > 0 };
 }
 
 /** Builds the Agents list from config, manifest, agent dirs and 30-day usage rows (merged by name, capped at MAX_AGENTS). */
 export async function buildAgents(config: Config, usage: UsageRow[], opts: CatalogOptions = {}): Promise<AgentsResponse> {
   const c = await build(config, usage, opts);
-  const tiers: Record<Tier, string> = config.tiers;
+  const tiers: Record<Tier, string> = c.config.tiers;
   return {
     items: c.rows.slice(0, MAX_AGENTS), truncated: c.rows.length > MAX_AGENTS, etag: c.etag,
     tiers, known_tools: KNOWN_TOOLS, warnings: c.warnings, installed: c.installed,

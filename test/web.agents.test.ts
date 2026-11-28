@@ -123,3 +123,15 @@ test("agentRerouteNote spells out the share and the usual causes", () => {
   expect(n.startsWith("≈24 of 200 requests were answered by a different model than requested. Cost uses the model that answered.")).toBe(true);
   expect(n).toContain("a gateway or proxy (ANTHROPIC_BASE_URL) remapping models, or Claude Code's automatic fallback. Run `claude-manager doctor`.");
 });
+
+test("alias pin groups under its tier like the hierarchy panel; full-id pins stay pinned", () => {
+  const alias = mk({ name: "reviewer", tier: "work", pin: "sonnet" });
+  const full = mk({ name: "full", tier: null, pin: "claude-fable-5-2" });
+  expect(tierKey(alias)).toBe("work");
+  expect(levelKey(alias)).toBe("work");
+  expect(agentGroupKey("tier", alias)).toBe("work");
+  expect(tierKey(full)).toBe("pinned");
+  expect(agentGroupKey("tier", full)).toBe("pinned");
+  const { counts } = runClientTable([alias, full], base, agentTableOptions);
+  expect(Object.fromEntries(counts.tier!)).toEqual({ work: 1, pinned: 1 });
+});
