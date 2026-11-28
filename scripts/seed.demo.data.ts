@@ -66,3 +66,24 @@ export const TOOLS: { name: string; input: Record<string, unknown> }[] = [
   { name: "TodoWrite", input: { todos: [] } },
   { name: "mcp__docs__search", input: { query: "rate limiting" } },
 ];
+
+/** `claude-manager` CLI steps the demo runs against the temp config (real code path: config.json, then install writes files + manifest). */
+export const MANAGER_STEPS: string[][] = [
+  ["roles", "add", "ui-ux", "--tier", "work", "--tools", "Read,Grep,Glob,Edit,Write", "--description", "Designs UI layouts, accessibility and visual polish"],
+  ["roles", "rm", "writer"], // disables a preset
+  ["install", "--scope", "user"],
+];
+
+/** Hand-written agent files (external: not managed by claude-manager), written to `<config>/agents/<name>.md`. */
+export const EXTERNAL_AGENTS: Record<string, string> = {
+  "code-simplifier": `---
+name: code-simplifier
+description: Simplifies recently changed code without altering behaviour. Use after a feature lands.
+tools: Read, Edit, Grep, Glob
+model: sonnet
+color: cyan
+---
+You simplify recently modified code: remove dead branches, flatten nesting, keep behaviour identical.
+Never touch tests unless they fail to compile.
+`,
+};
