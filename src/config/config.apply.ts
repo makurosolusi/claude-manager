@@ -1,10 +1,12 @@
 import { readdir, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { appDir } from "../app.paths.ts";
 import { CliError } from "../cli.error.ts";
 import { install, reapplyAll, refreshPolicySnapshot } from "../install/install.service.ts";
 import { backupPath, loadManifest, type Manifest } from "../install/install.manifest.ts";
 import { readText } from "../install/install.target.ts";
 import { policySnapshotPath } from "../policy/policy.paths.ts";
+import { withFileLock } from "../storage/file.lock.ts";
 import { sha256, writeJson } from "../storage/json.file.ts";
 import { type Config, configPath, loadConfig } from "./config.store.ts";
 
@@ -39,11 +41,17 @@ export interface ApplyOptions {
 
 export interface ApplyResult { applied: number; config: Config; etag: string }
 
-// ponytail: in-process lock; cross-process races are caught by the etag
+/** Cross-process lock file guarding config.json, manifest.json and the policy snapshot. The PreToolUse hook never takes it. */
+export const configLockPath = () => join(appDir(), "config.lock");
+
 let tail: Promise<unknown> = Promise.resolve();
-/** Serialises every config.json writer in this process (config apply and policy apply share it). */
+/**
+ * Serialises every config writer (config apply and policy apply share it): first the in-process chain, so this process
+ * never contends with itself, then the `config.lock` file, so a CLI write and a dashboard write can't interleave.
+ */
 export function withConfigLock<T>(fn: () => Promise<T>): Promise<T> {
-  const run = tail.then(fn, fn);
+  const locked = () => withFileLock(configLockPath(), fn);
+  const run = tail.then(locked, locked);
   tail = run.catch(() => undefined);
   return run;
 }
