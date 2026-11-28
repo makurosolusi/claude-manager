@@ -1,8 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { existsSync, renameSync, statSync } from "node:fs";
-import { join } from "node:path";
-import { appDir } from "../app.paths.ts";
+import { policyAuditFilePath } from "../policy/policy.paths.ts";
 import { readLines } from "./ingest.scanner.ts";
 
 /** Rows older than this many days are dropped (decision 4 of the v0.4.0 spec). */
@@ -33,8 +32,8 @@ export interface PolicyAuditResult {
   rotated: boolean;
 }
 
-/** Live audit file the hook appends to. */
-export const policyAuditPath = () => join(appDir(), "policy-audit.jsonl");
+/** Live audit file the hook appends to; kept as an alias of the hook-side path so existing callers don't break. */
+export const policyAuditPath = policyAuditFilePath;
 
 const SQL = {
   file: "SELECT size, mtime_ms, ino, offset FROM files WHERE path = ?",
