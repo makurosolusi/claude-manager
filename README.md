@@ -22,6 +22,7 @@ Without a split, every task in a Claude Code session runs on the same expensive 
 - **Tiered role swarm.** Each role has a tier: think (opus), work (sonnet) or basic (haiku).
 - **One-command model changes.** `tier set` changes the model ID behind a tier and re-applies every install.
 - **Safe install and uninstall.** `install --dry-run` previews changes. Files that claude-manager did not create are not overwritten without `--force`, and forced overwrites are backed up. `uninstall` reverts exactly what `install` wrote.
+- **Permission policy.** Presets (Strict, Balanced, Autonomous) decide per role what workers may do without asking. Push, publish, deploy and recursive delete ask you, and secrets are always denied. Those owner checks read the command text, so unusual shell forms may slip past; Balanced (recommended) keeps shell on ask, Autonomous does not. It works through a hook in the same binary, and `uninstall` restores `settings.json` byte for byte.
 - **Local analytics.** `sync` imports Claude Code transcripts into a local SQLite database. `stats` prints tokens and estimated cost by model, role, project or day.
 - **Local dashboard.** A web UI over the same data, with an Agents page to manage roles and tier models. `--read-only` disables writes.
 - **No network calls for analytics.** `sync`, `stats` and the dashboard do not contact the internet. The dashboard listens on 127.0.0.1 only.
@@ -117,6 +118,20 @@ claude-manager uninstall                      # revert what install wrote (user 
 
 `install` and `uninstall` accept `--dry-run` to show changes without writing. `uninstall --scope project` reverts the project install. Files you edited after installing are kept and reported.
 
+### Permission policy
+
+```bash
+claude-manager policy show                        # status, hook state and the per-role matrix
+claude-manager policy apply balanced --dry-run    # preview the diff; drop --dry-run to apply
+claude-manager policy apply balanced --scope project  # write .claude/settings.local.json instead
+claude-manager policy apply balanced --dev-hook    # development only: allow a hook that runs from a source checkout
+claude-manager policy set coder shell allow       # override one cell (allow, ask, deny or default)
+claude-manager policy audit --since 7d            # recent hook decisions
+claude-manager policy disable                     # revert the settings; `enable` turns it back on
+```
+
+Presets are `strict`, `balanced` (recommended) and `autonomous`. Each decides, per role, what workers may do without asking across nine capabilities: read, edit, test, shell, web, agents, git, push and mcp. Owner floors apply in every preset: push, publish, deploy and recursive delete ask you (detected from the command text, a heuristic, so unusual forms may not be caught), `push` can never be set to `allow`, and `.env*`, keys and credentials are always denied. `apply` accepts `--yes` to skip the confirmation and `--accept-edits` to also start sessions in Accept edits mode; without that flag `defaultMode` is left alone. The hook (`claude-manager hook pre-tool-use`) fails open: if it fails, Claude Code's normal prompts apply. Your own existing rules are kept. `policy audit` also takes `--role`, `--decision` and `--limit`.
+
 ### Analytics
 
 ```bash
@@ -154,6 +169,8 @@ Start it with `claude-manager dashboard`. It serves a single page app with these
 - **Projects** (`#/projects`): usage per project, with the full working directory (`~`-relative) under each name and a copy button. Rows group by folder by default and carry a Kind (Project, Worktree, Temp dir, Home or Other). A row opens Sessions filtered to that project.
 - **Roles** (`#/roles`): usage per role and model in one table. A switch picks By role, By model or By tier, and each role links to the Agents page.
 - **Agents** (`#/agents`): every agent (preset, custom and external), grouped by level, with its prompt, tools, install files and state, 30-day usage and warnings. A hierarchy panel shows You, the main agent and the Think, Work and Basic tier cards with model, price per MTok and 30-day cost. From here you can create, edit, delete, disable and enable managed agents, and change the model behind a tier. The tier picker shows prices and a 30-day cost estimate, and warns about the affected agents and cross-family changes. Writes need a per-process token and a same-origin request. Every save backs up `config.json` and rolls back if applying fails. Changes apply to new Claude Code sessions. Running sessions reload settings and may switch on their next request, so restart them to be sure.
+- **Permission policy** (`#/policy`, linked from Agents): pick a preset and scope, review the diff, then confirm. A per-role matrix editor changes single cells (edited cells are marked), and the owner floors are shown read-only. A "Set up policy" banner on Overview, Agents and agent detail stays until a policy is enforced. Agents also gets an "Effective permission" column on wide screens, and agent detail has a Permissions panel.
+- **Policy audit** (`#/policy/audit`): every allow, ask and deny the hook decided, with filters.
 - **Live** (`#/live`): sessions active in the last 15 minutes, with a context bar and estimated context left (OK, warning or critical). It refreshes when new data is synced.
 - **Session detail** (`#/sessions/<id>`): one session with cost, requests, tokens and context. A summary row lists the models, tools used and cost by role. Tabs hold the Requests table (agent, model, tools, stop reason, context, tokens, cost, with Agent, Model, Stop and Tool filters), a searchable, paginated Agents table, and the Prompts timeline. With `storePromptText` set to `false`, no prompt text is stored.
 
@@ -194,6 +211,7 @@ The screenshots use generated demo data.
 - `sync`, `stats` and `dashboard` make no network requests. Only `install.sh`, `update` and `update --check` contact GitHub.
 - Prompt text is stored locally by default. Set `storePromptText` to `false` to keep metadata only.
 - The dashboard listens on 127.0.0.1 only. Its `/api` routes reject any request whose Host header is not `127.0.0.1:<port>` or `localhost:<port>`. Its only writes are agent and tier changes from the Agents page (`--read-only` turns them off). They need a per-process token, and they go to `config.json` and your Claude Code agent files and `settings.json`.
+- The permission policy audit (`~/.claude-manager/policy-audit.jsonl`, then `data.db`) stores the time, session and agent ids, role, tool name, capability, decision and rule. It does not store tool inputs, paths or commands. Rows are kept 30 days or up to 200,000 rows, and the file rotates at 5 MiB.
 - Costs are estimates at public API list prices, priced by the model that served each request. They are not your bill, and subscription plans are not billed this way.
 - Prices come from built-in defaults, then Claude Code's local price cache, then `~/.claude-manager/pricing.json`. The last source wins for each model ID. Costs are recomputed when prices change.
 - Background calls that Claude Code does not write to transcripts (for example, title generation) are not counted.
@@ -241,6 +259,8 @@ Environment variables:
 | `doctor` exits 1 | A check printed `FAIL`. `claude CLI not found in PATH` means Claude Code is missing or not on `PATH`. `cannot parse <path> (Claude Code requires strict JSON)` means `settings.json` is invalid. | Install Claude Code or fix `PATH`, or fix the JSON in the named file. `warn` lines do not change the exit code. |
 | The dashboard says `config.json` is invalid (API error 500) | `~/.claude-manager/config.json` is not valid JSON. | Fix the JSON, or restore a copy from `~/.claude-manager/backups/` (the last 20 are kept). |
 | Saving in the dashboard fails with 409 (agent file edited by hand) | An installed agent file was changed after claude-manager wrote it. The dashboard will not overwrite it. | Run `claude-manager install --force`. It overwrites the file and keeps a backup. |
+| Workers still ask for every tool | No policy is applied, the hook was removed or edited, or the policy snapshot is stale. | Run `claude-manager doctor` and check whether the policy is enforced and whether the hook was edited. Then run `claude-manager policy apply balanced`. |
+| `doctor` says the policy hook points at a moved binary | The hook in `settings.json` still holds the old binary path. | Re-run `claude-manager policy apply <preset>` to rewrite it. |
 | `Permission denied` when running a manually downloaded binary | The file is not executable. The shell prints this message, not claude-manager. | Run `chmod +x` on the binary, for example `chmod +x ~/.local/bin/claude-manager`. |
 
 ## Development

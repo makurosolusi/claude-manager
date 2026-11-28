@@ -4,6 +4,57 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-28
+
+### Added
+
+- Permission policy, so workers stop asking for every tool while you stay in control:
+  - Three presets, Strict, Balanced (recommended) and Autonomous, decide per role what workers may do
+    without asking. The capabilities are read, edit, test, shell, web, agents, git, push and mcp. Balanced is
+    recommended because shell still asks there; Autonomous lets workers run any shell command without asking.
+  - Owner floors are written to your settings and cannot be switched off from the UI. Push, publish, deploy
+    and recursive delete ask you, and push can never be set to allow. These checks read the command text, so
+    unusual forms may not be caught. Secrets (`.env*`, keys,
+    credentials) are always denied.
+  - The policy runs as a PreToolUse hook, `claude-manager hook pre-tool-use`, in the same binary. The hook
+    fails open: if it fails, Claude Code's normal prompts apply.
+  - Applying is atomic and shows a preview diff before anything is written. Your own existing rules are never
+    removed. A repo that ships its own agent file with the same name as a managed role does not inherit that
+    role's rights.
+  - Scope is user (`~/.claude/settings.json`) by default. `--scope project` writes
+    `.claude/settings.local.json`, never the committed file. `defaultMode` is only changed if you opt in with
+    `--accept-edits`.
+- `claude-manager policy show | apply <preset> | set <row> <capability> <allow|ask|deny|default> | enable |
+  disable | audit`. `apply` takes `--scope user|project`, `--accept-edits`, `--dry-run` and `--yes`.
+- Dashboard:
+  - A Permission policy page (`#/policy`, reached from Agents) with preset setup, a diff preview, a confirm
+    step, a per-role matrix editor (edited cells are marked) and the owner floors.
+  - A "Set up policy" banner on Overview, Agents and agent detail until a policy is enforced.
+  - An "Effective permission" column on Agents (wide screens) and a Permissions panel on agent detail.
+  - A policy audit table (`#/policy/audit`) with filters.
+- Policy audit: each allow, ask and deny the hook decides is logged locally, without tool inputs, paths or
+  commands. Rows are kept 30 days or up to 200,000 rows, the log file rotates at 5 MiB, and `sync` ingests it.
+- `doctor` checks whether the policy is enforced, and whether the hook is missing, edited or points at a moved
+  binary. It also checks for a stale snapshot, session modes, deny rules that conflict with the policy, and
+  managed settings (including `managed-settings.d`).
+
+### Changed
+
+- The role names `main` and `unknown` are reserved.
+- Sync warnings are shown in the CLI and in the dashboard header.
+- The dashboard header is more compact on narrow desktop widths.
+- `install` and `uninstall` refresh the policy snapshot, so reinstalling into a project keeps the policy working.
+- Database migration v4 adds the `policy_decisions` table.
+- Rollback: a binary older than 0.4.0 cannot open a v4 `data.db`. To downgrade, delete
+  `~/.claude-manager/data.db` (or `$CLAUDE_MANAGER_HOME/data.db`). `sync` rebuilds it from your transcripts;
+  only the policy audit rows are lost. To remove the policy, run `claude-manager policy disable` or
+  `claude-manager uninstall`.
+
+### Fixed
+
+- `uninstall` now restores `settings.json` byte for byte even when it had no `env` section. This bug existed
+  before 0.4.0.
+
 ## [0.3.0] - 2026-11-28
 
 ### Added
