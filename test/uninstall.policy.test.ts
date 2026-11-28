@@ -7,6 +7,8 @@ import { install } from "../src/install/install.service.ts";
 import { resolveTarget, type Target } from "../src/install/install.target.ts";
 import { applyPolicySettings, type PolicyDesired, policySettingsPath } from "../src/install/settings.lists.ts";
 import { uninstall } from "../src/install/uninstall.service.ts";
+import { applyPolicy } from "../src/policy/policy.apply.ts";
+import { applyPreset } from "../src/policy/policy.service.ts";
 import { useTempHome } from "./test.home.ts";
 
 const ctx = useTempHome();
@@ -86,5 +88,31 @@ describe("uninstall reverts the policy first", () => {
     await uninstall(resolveTarget("project", project));
     expect((await loadManifest()).policy).toBeDefined();
     expect(JSON.parse(readFileSync(settingsFile(), "utf8")).permissions.ask).toEqual(["Bash(git push *)"]);
+  });
+});
+
+describe("uninstall restores a settings.json that had no env section", () => {
+  // test-only: odd indentation, inline objects, no `env`, other keys; install adds `env`, uninstall must empty and drop it.
+  const ORIGINAL = '{\n     "theme":"dark",\n  "permissions": {"allow": ["Bash(ls)"]},   "model": "opus"\n}';
+
+  test("without a policy: byte-identical after install + uninstall", async () => {
+    mkdirSync(ctx.claude, { recursive: true });
+    writeFileSync(settingsFile(), ORIGINAL);
+    const target = resolveTarget("user");
+    await install(target, await loadConfig());
+    expect(JSON.parse(readFileSync(settingsFile(), "utf8")).env).toBeDefined();
+    const ops = await uninstall(target);
+    expect(ops.find((o) => o.path === settingsFile())?.op).toBe("restore");
+    expect(readFileSync(settingsFile(), "utf8")).toBe(ORIGINAL);
+  });
+
+  test("with a policy applied: byte-identical after install + policy + uninstall", async () => {
+    mkdirSync(ctx.claude, { recursive: true });
+    writeFileSync(settingsFile(), ORIGINAL);
+    const target = resolveTarget("user");
+    await install(target, await loadConfig());
+    await applyPolicy((c) => applyPreset(c, "balanced", "user"));
+    await uninstall(target);
+    expect(readFileSync(settingsFile(), "utf8")).toBe(ORIGINAL);
   });
 });
