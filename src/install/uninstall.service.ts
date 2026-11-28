@@ -1,17 +1,37 @@
+import { dirname } from "node:path";
 import { rm } from "node:fs/promises";
 import { CliError } from "../cli.error.ts";
 import { sha256 } from "../storage/json.file.ts";
 import { loadManifest, saveManifest } from "./install.manifest.ts";
 import { pruneEmptySections, revertKey } from "./settings.merge.ts";
+import { revertPolicySettings } from "./settings.lists.ts";
 import { type FileOp, parseSettings, readText, type Target } from "./install.target.ts";
 
-/** Reverts exactly what install wrote; files/keys the user changed since are left alone. */
+/**
+ * Reverts exactly what install wrote; files/keys the user changed since are left alone.
+ * A policy in this scope's .claude dir is reverted first, so the install's compare-with-backup sees the original file.
+ */
 export async function uninstall(target: Target, opts: { dryRun?: boolean } = {}): Promise<FileOp[]> {
   const manifest = await loadManifest();
   const record = manifest.installs[target.settingsPath];
   if (!record) throw new CliError(`claude-manager is not installed in ${target.scope} scope (${target.settingsPath})`);
   const ops: FileOp[] = [];
   const writes: Array<() => Promise<unknown>> = [];
+  let raw = await readText(target.settingsPath);
+
+  const policy = manifest.policy;
+  if (policy && dirname(policy.settingsPath) === dirname(target.settingsPath)) {
+    const reverted = await revertPolicySettings(policy, opts);
+    ops.push(...reverted.ops);
+    if (opts.dryRun) {
+      if (policy.settingsPath === target.settingsPath) raw = reverted.text;
+    } else {
+      await rm(policy.compiledPath, { force: true });
+      delete manifest.policy;
+      await saveManifest(manifest);
+      raw = await readText(target.settingsPath);
+    }
+  }
 
   for (const [path, rec] of Object.entries(record.files)) {
     const onDisk = await readText(path);
@@ -27,7 +47,6 @@ export async function uninstall(target: Target, opts: { dryRun?: boolean } = {})
     });
   }
 
-  const raw = await readText(target.settingsPath);
   if (raw !== undefined) {
     const settings = parseSettings(raw, target.settingsPath);
     const keys = Object.keys(record.settings.keys);
