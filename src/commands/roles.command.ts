@@ -8,6 +8,7 @@ import { roleModel } from "../roles/roles.render.ts";
 import { addRole, disableRole, enableRole, setRoleModel } from "../roles/roles.service.ts";
 import type { ModelChoice } from "../server/agents.types.ts";
 import type { Command } from "./command.types.ts";
+import { editRole } from "./roles.edit.ts";
 
 function list(config: Config): void {
   const roles = resolveRoles(config);
@@ -42,6 +43,9 @@ export const rolesCommand: Command = {
   roles set <role> default                Remove the override
   roles add <name> --tier <t> --description <text> [--tools A,B] [--prompt <text>]
                                           Create a custom role (no --tools = all except Agent)
+  roles edit <name> [--description <t>] [--tier <t>|--pin <m>|--default] [--tools A,B|all]
+                                          [--prompt-file <path>] [--enable|--disable]
+                                          Edit a role (presets: model and enabled only)
   roles rm <name>                         Delete a custom role, or disable a preset
   roles enable <name>                     Re-enable a disabled preset
 
@@ -80,6 +84,8 @@ Example:
         const input = { name, description: values.description, model: { tier: values.tier }, tools: tools ?? null, prompt: values.prompt };
         return save(addRole(config, input), `added ${name}`);
       }
+      case "edit":
+        return editRole(name, rest);
       case "rm":
         return save(disableRole(config, name, await loadManifest()), `removed ${name}`);
       case "enable":
