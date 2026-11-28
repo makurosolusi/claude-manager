@@ -14,7 +14,7 @@ import {
 import { sha256, writeJson } from "../storage/json.file.ts";
 import { effectivePolicy } from "./policy.effective.ts";
 import { policySnapshotPath } from "./policy.paths.ts";
-import { assertPolicy, compileSnapshot, desiredSettings } from "./policy.service.ts";
+import { assertPolicy, compileSnapshot, desiredSettings, HOOK_ARGS } from "./policy.service.ts";
 import type { PolicyRow, PolicySnapshot } from "./policy.types.ts";
 
 /** One planned settings change in one file (§5 `SettingsChange`). */
@@ -78,18 +78,23 @@ function targetPath(next: Config, manifest: Manifest): string {
   return policySettingsPath(scope, projectDir);
 }
 
+/** A `claude-manager … hook pre-tool-use` handler, whatever binary or bun flags it was applied with. */
+const isPolicyHandler = (h: { args?: unknown } | undefined) =>
+  Array.isArray(h?.args) && Bun.deepEquals(h.args.slice(-HOOK_ARGS.length), [...HOOK_ARGS]);
+
 /**
  * Our hook group as the file holds it: when the recorded group is gone but one with the same command + args is there
- * (hand-edited), that one is treated as ours, so the re-apply replaces it instead of appending a duplicate.
+ * (hand-edited), or else any group with a policy handler (an older matcher, a source-run or moved binary), that one
+ * is treated as ours, so the re-apply replaces it instead of appending a duplicate.
  */
 function adoptEditedHook(settings: Settings, prior: PolicySettingsRecord | undefined): PolicySettingsRecord | undefined {
   const group = prior?.hook?.group as HookGroup | undefined;
   const groups = getKey(settings, "hooks.PreToolUse");
   if (!prior || !group || !Array.isArray(groups) || groups.some((g) => Bun.deepEquals(g, group))) return prior;
   const ours = group.hooks?.[0];
-  const edited = groups.find((g) =>
-    (g as HookGroup)?.hooks?.some?.((h) => h?.command === ours?.command && Bun.deepEquals(h?.args, ours?.args)),
-  );
+  const hooksOf = (g: unknown) => (Array.isArray((g as HookGroup)?.hooks) ? (g as HookGroup).hooks : []);
+  const edited = groups.find((g) => hooksOf(g).some((h) => h?.command === ours?.command && Bun.deepEquals(h?.args, ours?.args)))
+    ?? groups.find((g) => hooksOf(g).some(isPolicyHandler));
   return edited ? { ...prior, hook: { group: edited } } : prior;
 }
 
@@ -108,7 +113,10 @@ interface Planned {
   revert?: PolicyRecord;
 }
 
-async function planChange(next: Config, manifest: Manifest, configText: string | undefined): Promise<Planned> {
+/** `devHook`: the `--dev-hook` opt-in for a source-run hook (policy.service.ts `hookCommand`). */
+export interface PolicyWriteOpts { devHook?: boolean }
+
+async function planChange(next: Config, manifest: Manifest, configText: string | undefined, opts: PolicyWriteOpts): Promise<Planned> {
   if (next.policy !== undefined) assertPolicy(next.policy);
   const prior = manifest.policy;
   const base = { compiledPath: policySnapshotPath(), rows: effectivePolicy(next), hook: null, snapshot: null };
@@ -122,7 +130,7 @@ async function planChange(next: Config, manifest: Manifest, configText: string |
   const moved = prior && prior.settingsPath !== path ? prior : undefined;
   const changes = moved ? revertChanges(moved, (await readSettings(moved.settingsPath)).settings) : [];
   const { raw, settings } = await readSettings(path);
-  const write = { path, desired: desiredSettings(next.policy), prior: moved ? undefined : adoptEditedHook(settings, prior) };
+  const write = { path, desired: desiredSettings(next.policy, undefined, opts.devHook), prior: moved ? undefined : adoptEditedHook(settings, prior) };
   const dry = await applyPolicySettings(path, write.desired, write.prior, { dryRun: true });
   changes.push(...dry.changes.map((c) => ({ path, ...c })));
   const plan = {
@@ -132,8 +140,8 @@ async function planChange(next: Config, manifest: Manifest, configText: string |
 }
 
 /** What `applyPolicy` would write for `next`; writes nothing. */
-export async function previewPolicy(next: Config): Promise<PolicyPlan> {
-  return (await planChange(next, await loadManifest(), await readText(configPath()))).plan;
+export async function previewPolicy(next: Config, opts: PolicyWriteOpts = {}): Promise<PolicyPlan> {
+  return (await planChange(next, await loadManifest(), await readText(configPath()), opts)).plan;
 }
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -165,7 +173,7 @@ async function rollback(err: unknown, before: Map<string, string | undefined>): 
  * (it covers the target settings file, so it needs the plan), then write snapshot → settings → config → manifest.
  * Any failure restores the snapshot, settings and config bytes; the manifest is written last, atomically.
  */
-export function applyPolicy(build: ConfigBuild, opts: { expectedEtag?: string } = {}): Promise<PolicyApplyResult> {
+export function applyPolicy(build: ConfigBuild, opts: PolicyWriteOpts & { expectedEtag?: string } = {}): Promise<PolicyApplyResult> {
   return withConfigLock(async () => {
     const cfgPath = configPath();
     const configText = await readText(cfgPath);
@@ -173,7 +181,7 @@ export function applyPolicy(build: ConfigBuild, opts: { expectedEtag?: string } 
     const manifest = await loadManifest();
     const stateEtag = await currentEtag(config, manifest, configText);
     const next = await build(config, structuredClone(manifest));
-    const { plan, write, revert } = await planChange(next, manifest, configText);
+    const { plan, write, revert } = await planChange(next, manifest, configText, opts);
     // The state etag (GET, or a previous write) or this plan's etag (a preview of this exact change, which also covers a new target file).
     const expected = opts.expectedEtag;
     if (expected !== undefined && expected !== stateEtag && expected !== plan.etag) throw new StaleConfigError();

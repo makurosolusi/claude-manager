@@ -1,10 +1,8 @@
 import { lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { parseAgentFile } from "../agents/agent.frontmatter.ts";
-import { sha256 } from "../storage/json.file.ts";
-import {
-  isCellAllowed, isDecision, MAIN_ROW, OWNER_ONLY_TOKENS, RESERVED_ROWS, SHELL_META_RE, TEST_COMMAND_MAX_CHARS, UNKNOWN_ROW,
-} from "./policy.presets.ts";
+import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
+import { bashCap, isOwnerOnly, isUncertain, SECRET_CMD_RE, unquote } from "./policy.bash.ts";
+import { absDir, isShadowed } from "./policy.shadow.ts";
+import { isCellAllowed, isDecision, MAIN_ROW, OWNER_ONLY_TOKENS, RESERVED_ROWS, UNKNOWN_ROW } from "./policy.presets.ts";
 import type { Capability, Decision, HookInput, PolicyEnv, PolicyFs, PolicyResult, PolicySnapshot } from "./policy.types.ts";
 
 // Hook fast path (§3): imports stay minimal (no roles registry, config store or role prompts).
@@ -27,56 +25,45 @@ export function parseSnapshot(text: string): PolicySnapshot {
 
 /** §3 row selection: agent_type regex. */
 const AGENT_NAME_RE = /^[A-Za-z0-9_.:-]{1,64}$/;
-/** More files than this in one agents dir → treat every role as shadowed rather than read them all. */
-const SHADOW_SCAN_MAX = 200;
 const TOOL_CAP: Record<string, Capability> = {
   Read: "read", Grep: "read", Glob: "read", LSP: "read", Edit: "edit", Write: "edit", NotebookEdit: "edit",
   WebFetch: "web", WebSearch: "web", Agent: "agents", SendMessage: "agents", TaskStop: "agents",
 };
 const MCP_PREFIX = "mcp__";
-const GIT_LOCAL = ["add", "commit", "switch", "checkout", "restore", "stash", "branch"];
-const PROTECTED_DIRS = [".git", ".claude"];
+/** Never "project" for edit: git internals, Claude Code config, and direnv's `.envrc` (it runs on cd). */
+const PROTECTED_NAMES = [".git", ".claude", ".envrc"];
 const PATH_FIELDS = ["file_path", "notebook_path", "path"];
-// ponytail: text heuristics (§10), not a sandbox; `.env` also hits `process.env` (false deny, never a false allow).
-const SECRET_CMD_RE = /\.env\b|id_(?:rsa|dsa|ecdsa|ed25519)|\.(?:pem|key|p12|pfx)\b|\.ssh\b|\.aws\b|credentials\.json|service-account\.json/;
-const SECRET_BASE_RE = /^\.env(?:\..*)?$|\.(?:pem|key|p12|pfx)$|^id_(?:rsa|dsa|ecdsa|ed25519)|^credentials\.json$|^service-account\.json$/;
-const WORD_SPLIT_RE = /[\s;&|()<>$`{}=,:/]+/;
-const RECURSIVE_FLAG_RE = /^-[a-z]*r/;
-
-/** Quotes and backslashes removed, so `.e""nv`, `.\env` and `"git" push` read as the shell would. */
-const unquote = (cmd: string) => cmd.replace(/[\\'"]/g, "");
+const SECRET_BASE_RE = /^\.env(?:\..*)?$|^\.envrc$|\.(?:pem|key|p12|pfx)$|^id_(?:rsa|dsa|ecdsa|ed25519)|^credentials\.json$|^service-account\.json$/;
+/** A `..` path segment: the kernel resolves a symlink before it, `path.resolve` collapses it first (§3 step 3). */
+const DOTDOT_RE = /(?:^|[\\/])\.\.(?:[\\/]|$)/;
 
 function isSecretPath(p: string): boolean {
   const parts = p.toLowerCase().split(/[\\/]+/);
   return parts.some((s) => s === ".ssh" || s === ".aws") || SECRET_BASE_RE.test(parts.at(-1) ?? "");
 }
 
-/** §3 step 2: an owner-only word anywhere (stricter than "after git/npm/…"), or `rm` with a recursive flag. */
-function isOwnerOnly(cmd: string, tokens: Set<string>): boolean {
-  const words = unquote(cmd).toLowerCase().split(WORD_SPLIT_RE).filter(Boolean);
-  if (words.some((w) => tokens.has(w))) return true;
-  return words.includes("rm") && words.some((w) => w === "--recursive" || RECURSIVE_FLAG_RE.test(w));
-}
-
-/** §3 step 4: simple = no metacharacter (or stray quote) left after dropping single-quoted spans. */
-const isSimple = (cmd: string) => {
-  const rest = cmd.replace(/'[^']*'/g, "");
-  return !SHELL_META_RE.test(rest) && !rest.includes("'");
-};
-const squash = (s: string) => s.trim().split(/\s+/).join(" ");
-
-function bashCap(cmd: string, testCommands: string[]): { cap: Capability; compound: boolean } {
-  if (!isSimple(cmd)) return { cap: "shell", compound: true };
-  const words = squash(cmd).split(" ");
-  const line = words.join(" ");
-  const tests = testCommands.filter((t) => t.trim() && t.length <= TEST_COMMAND_MAX_CHARS && isSimple(t) && !t.includes("'")).map(squash);
-  if (tests.some((t) => line === t || line.startsWith(`${t} `))) return { cap: "test", compound: false };
-  if (words[0] === "git" && GIT_LOCAL.includes(words[1] ?? "")) return { cap: "git", compound: false };
-  return { cap: "shell", compound: false };
+/**
+ * Applies each `..` to the realpath of the prefix before it, as the kernel does (`lnk/..` = parent of lnk's target).
+ * Needed because `path.resolve` and Bun's realpathSync both collapse `..` lexically first. Null when a prefix is missing.
+ */
+function kernelDotDot(abs: string, fs: PolicyFs): string | null {
+  let acc: string = sep;
+  for (const seg of abs.split(/[\\/]+/)) {
+    if (!seg || seg === ".") continue;
+    if (seg !== "..") acc = join(acc, seg);
+    else {
+      const real = fs.realpath(acc);
+      if (real === null) return null;
+      acc = dirname(real);
+    }
+  }
+  return acc;
 }
 
 /** Symlink-free absolute path, walking up to the nearest existing ancestor; null for a dangling link or no existing ancestor. */
-function canonical(abs: string, fs: PolicyFs): string | null {
+function canonical(path: string, fs: PolicyFs): string | null {
+  const abs = DOTDOT_RE.test(path) ? kernelDotDot(path, fs) : path;
+  if (abs === null) return null;
   const tail: string[] = [];
   for (let p = abs; ; p = dirname(p)) {
     const real = fs.realpath(p);
@@ -84,33 +71,6 @@ function canonical(abs: string, fs: PolicyFs): string | null {
     if (fs.lexists(p) || dirname(p) === p) return null; // a dangling link's target can't be checked
     tail.unshift(basename(p));
   }
-}
-
-const absDir = (v: unknown): string | undefined => (typeof v === "string" && isAbsolute(v) ? v : undefined);
-
-/** Project roots for the shadow check and edit scope: snapshot projectDir, CLAUDE_PROJECT_DIR, cwd (§3). */
-const roots = (snap: PolicySnapshot, env: PolicyEnv, cwd: string | undefined) =>
-  [...new Set([absDir(snap.projectDir), absDir(env.CLAUDE_PROJECT_DIR), cwd].filter((d): d is string => !!d))];
-
-/** §3 row step 3: an unowned project agent file whose stem or frontmatter `name` is this role. */
-function isShadowed(name: string, snap: PolicySnapshot, fs: PolicyFs, env: PolicyEnv, cwd: string | undefined): boolean {
-  for (const root of roots(snap, env, cwd)) {
-    const dir = join(root, ".claude", "agents");
-    const files = (fs.listDir(dir) ?? []).filter((f) => f.toLowerCase().endsWith(".md"));
-    if (files.length > SHADOW_SCAN_MAX) return true;
-    for (const f of files) {
-      const file = join(dir, f);
-      const stem = f.slice(0, -".md".length) === name;
-      const text = fs.readText(file);
-      if (text === null) {
-        if (stem && fs.lexists(file)) return true;
-        continue;
-      }
-      if (!stem && parseAgentFile(text).meta.name !== name) continue;
-      if (ownValue(snap.owned, file) !== sha256(text)) return true;
-    }
-  }
-  return false;
 }
 
 function selectRow(input: HookInput, snap: PolicySnapshot, fs: PolicyFs, env: PolicyEnv, cwd: string | undefined) {
@@ -130,11 +90,13 @@ function scopeRoot(snap: PolicySnapshot, env: PolicyEnv, cwd: string | undefined
   return root === home ? null : root;
 }
 
-function insideProject(target: string | null, root: string | null): boolean {
+/** Inside the scope root; for `edit` also not under a protected name. The root itself counts for `read` (Grep in cwd). */
+function insideProject(target: string | null, root: string | null, cap: Capability): boolean {
   if (!target || !root) return false;
   const rel = relative(root, target);
-  if (!rel || rel.startsWith("..") || isAbsolute(rel)) return false;
-  return !rel.toLowerCase().split(sep).some((s) => PROTECTED_DIRS.includes(s));
+  if (rel.startsWith("..") || isAbsolute(rel)) return false;
+  if (cap === "read") return true;
+  return !!rel && !rel.toLowerCase().split(sep).some((s) => PROTECTED_NAMES.includes(s));
 }
 
 const cellOf = (snap: PolicySnapshot, row: string, cap: Capability): Decision => {
@@ -161,14 +123,16 @@ export function decide(input: HookInput, snapshot: PolicySnapshot, fs: PolicyFs,
   const cmd = tool === "Bash" && typeof ti.command === "string" ? ti.command : null;
   const base = cwd ?? scopeRoot(snapshot, env, cwd, fs) ?? undefined;
   const paths = PATH_FIELDS.map((k) => ti[k]).filter((p): p is string => typeof p === "string" && p.length > 0 && !p.includes("\0"));
-  const resolved = paths.map((p) => (base || isAbsolute(p) ? canonical(resolve(base ?? "/", p), fs) : null));
+  // Joined, not `resolve`d: `canonical` applies `..` after symlinks, as the kernel does.
+  const resolved = paths.map((p) => (isAbsolute(p) ? canonical(p, fs) : base ? canonical(`${base}${sep}${p}`, fs) : null));
 
   // 1. Secret floor. Main is covered by the settings deny rules, so the hook stays out of its way.
   const secret = cmd !== null ? SECRET_CMD_RE.test(unquote(cmd).toLowerCase()) : [...paths, ...resolved].some((p) => p && isSecretPath(p));
   if (secret) return row === MAIN_ROW ? out("default", null, "secret") : out("deny", null, "secret", SECRET_REASON);
 
   // 2. Owner-only floor: ask, or deny when the row's push cell says deny. Never allow.
-  if (cmd !== null && isOwnerOnly(cmd, new Set([...OWNER_ONLY_TOKENS, ...snapshot.ownerOnly.map((t) => t.toLowerCase())]))) {
+  const tokens = new Set([...OWNER_ONLY_TOKENS, ...snapshot.ownerOnly.map((t) => t.toLowerCase())]);
+  if (cmd !== null && isOwnerOnly(cmd, tokens)) {
     return out(cellOf(snapshot, row, "push") === "deny" ? "deny" : "ask", "push", "owner-only:push", OWNER_REASON);
   }
 
@@ -181,12 +145,21 @@ export function decide(input: HookInput, snapshot: PolicySnapshot, fs: PolicyFs,
   // 5. Cell value.
   let decision = cellOf(snapshot, row, cap);
   let rule = shadowed ? "shadowed" : compound ? "compound-shell" : `role:${row}.${cap}`;
-  const target = resolved[0] ?? null;
+  // Grep/Glob without a path search cwd.
+  const target = resolved[0] ?? (cap === "read" && !paths.length && cwd ? canonical(cwd, fs) : null);
   // §3 step 3 says "treat the cell as default" outside the project. Safer reading: drop only `allow`, keep ask/deny,
   // so a reviewer's `edit: deny` still denies outside the project instead of loosening to the normal flow.
-  if (cap === "edit" && decision === "allow" && !insideProject(target, scopeRoot(snapshot, env, cwd, fs))) {
+  // `read` is scoped too (§2.4: it only matters inside), else read allow would auto-approve ~/.npmrc or ~/.netrc.
+  // Any `..` segment drops allow: lexical and kernel resolution disagree after a symlink (`lnk/../.zshrc`).
+  const scoped = cap === "edit" || cap === "read";
+  if (scoped && decision === "allow" && (paths.some((p) => DOTDOT_RE.test(p)) || !insideProject(target, scopeRoot(snapshot, env, cwd, fs), cap))) {
     decision = "default";
     rule = "outside-project";
+  }
+  // Text the owner-only and secret floors can't read literally (`git pu$(true)sh`, `cat .en?`) never reaches allow.
+  if (cmd !== null && decision === "allow" && isUncertain(cmd, tokens)) {
+    decision = "ask";
+    rule = "owner-check-uncertain";
   }
   return out(decision, cap, rule, `claude-manager policy: ${row} ${VERB[decision]} ${cap} (${rule}). Change it: claude-manager policy set ${row} ${cap} <allow|ask|deny|default>`);
 }

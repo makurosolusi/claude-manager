@@ -28,12 +28,18 @@ function printPlan(plan: PolicyPlan): void {
   if (plan.snapshot) console.log(`\n${matrixTable(plan.rows)}`);
 }
 
-/** Preview, optionally confirm, then write through the shared `applyPolicy` path (same as the dashboard API). */
+/** CLI option for a source-run hook (development only); parse it with `DEV_HOOK_OPTION` and pass it as `devHook`. */
+export const DEV_HOOK_OPTION = { "dev-hook": { type: "boolean", default: false } } as const;
+
+/**
+ * Preview, optionally confirm, then write through the shared `applyPolicy` path (same as the dashboard API).
+ * `devHook` = `--dev-hook`: allow a source-run hook (see policy.service.ts `hookCommand`).
+ */
 export async function runPolicyChange(
   build: ConfigBuild,
-  opts: { dryRun: boolean; confirm: boolean; yes: boolean; done: string },
+  opts: { dryRun: boolean; confirm: boolean; yes: boolean; done: string; devHook?: boolean },
 ): Promise<number> {
-  const plan = await previewPolicy(await build(await loadConfig(), await loadManifest()));
+  const plan = await previewPolicy(await build(await loadConfig(), await loadManifest()), { devHook: opts.devHook });
   printPlan(plan);
   if (opts.dryRun) {
     console.log("\nDry run, nothing written.");
@@ -43,7 +49,7 @@ export async function runPolicyChange(
     if (!process.stdin.isTTY) throw new CliError("not a terminal: pass --yes to apply without the prompt");
     if (!/^y(es)?$/i.test((prompt("\nApply? [y/N]") ?? "").trim())) return console.log("Cancelled, nothing written."), 1;
   }
-  await applyPolicy(build, { expectedEtag: plan.etag });
+  await applyPolicy(build, { expectedEtag: plan.etag, devHook: opts.devHook });
   console.log(`\n${opts.done}`);
   return 0;
 }

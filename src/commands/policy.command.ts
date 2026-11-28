@@ -4,15 +4,16 @@ import { isPresetName, PRESET_NAMES } from "../policy/policy.presets.ts";
 import { applyPreset, disablePolicy, enablePolicy, setCell } from "../policy/policy.service.ts";
 import type { Command } from "./command.types.ts";
 import { auditPolicy } from "./policy.command.audit.ts";
-import { gitRoot, runPolicyChange } from "./policy.command.apply.ts";
+import { DEV_HOOK_OPTION, gitRoot, runPolicyChange } from "./policy.command.apply.ts";
 import { showPolicy } from "./policy.command.show.ts";
 
 const USAGE = `Usage: claude-manager policy <subcommand>
 
   policy show [--json]                 Status, target settings file, hook state and the matrix
-  policy apply <${PRESET_NAMES.join("|")}> [--scope user|project] [--accept-edits] [--dry-run] [--yes]
+  policy apply <${PRESET_NAMES.join("|")}> [--scope user|project] [--accept-edits] [--dry-run] [--yes] [--dev-hook]
                                        Write the preset (resets overrides). Prompts on a terminal;
-                                       without a terminal --yes is required
+                                       without a terminal --yes is required.
+                                       --dev-hook: development only, allow a hook that runs from a source checkout
   policy set <row> <capability> <allow|ask|deny|default>
                                        Override one matrix cell (push can never be allow)
   policy enable | disable [--dry-run]  Turn the stored policy on or off (disable reverts settings)
@@ -36,14 +37,14 @@ export const policyCommand: Command = {
         return showPolicy(opts(rest, { json: { type: "boolean", default: false } }, false).values.json as boolean);
       case "apply": {
         const { values: v, positionals: [preset, extra] } = opts(rest, {
-          ...flags, scope: { type: "string", default: "user" }, "accept-edits": { type: "boolean", default: false },
+          ...flags, scope: { type: "string", default: "user" }, "accept-edits": { type: "boolean", default: false }, ...DEV_HOOK_OPTION,
         });
         if (!isPresetName(preset) || extra) throw new CliError(`usage: claude-manager policy apply <${PRESET_NAMES.join("|")}> [options]`);
         if (v.scope !== "user" && v.scope !== "project") throw new CliError(`invalid --scope "${v.scope}": use user or project`);
         const projectDir = v.scope === "project" ? gitRoot() : undefined;
         const defaultMode = v["accept-edits"] ? ("acceptEdits" as const) : undefined;
         return runPolicyChange((c) => applyPreset(c, preset, v.scope as "user" | "project", { projectDir, defaultMode }), {
-          dryRun: v["dry-run"] as boolean, yes: v.yes as boolean, confirm: true, done: `Applied ${preset} policy (${v.scope} scope).`,
+          dryRun: v["dry-run"] as boolean, yes: v.yes as boolean, confirm: true, devHook: v["dev-hook"] as boolean, done: `Applied ${preset} policy (${v.scope} scope).`,
         });
       }
       case "set": {

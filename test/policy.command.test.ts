@@ -124,4 +124,13 @@ describe("policy command", () => {
   test("audit with no decisions prints an empty message", async () => {
     expect((await run("audit")).out).toContain("no policy decisions since");
   });
+
+  test("apply from a source run needs --dev-hook or the env opt-in", async () => {
+    delete process.env.CLAUDE_MANAGER_DEV_POLICY; // useTempHome restores it after the test
+    await installUser();
+    expect(await fail("apply", "balanced", "--yes")).toContain("must run from the installed binary");
+    expect(read(settings())).not.toContain("pre-tool-use");
+    expect((await run("apply", "balanced", "--yes", "--dev-hook")).code).toBe(0);
+    expect(read(settings())).toContain("pre-tool-use");
+  });
 });

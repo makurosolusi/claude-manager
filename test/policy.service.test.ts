@@ -4,14 +4,15 @@ import { join } from "node:path";
 import { CliError } from "../src/cli.error.ts";
 import { StaleConfigError } from "../src/config/config.apply.ts";
 import { type Config, configPath, loadConfig } from "../src/config/config.store.ts";
-import { loadManifest } from "../src/install/install.manifest.ts";
+import { loadManifest, saveManifest } from "../src/install/install.manifest.ts";
 import { install } from "../src/install/install.service.ts";
 import { resolveTarget } from "../src/install/install.target.ts";
 import { uninstall } from "../src/install/uninstall.service.ts";
 import { applyPolicy, previewPolicy } from "../src/policy/policy.apply.ts";
 import { OWNER_ASK_RULES, PUSH_ALLOW_ERROR, SECRET_DENY_RULES } from "../src/policy/policy.presets.ts";
 import {
-  applyPreset, disablePolicy, enablePolicy, HOOK_MATCHER, hookCommand, setCell, setOverrides, setTestCommands,
+  applyPreset, DEV_POLICY_ENV, disablePolicy, enablePolicy, HOOK_MATCHER, hookCommand, setCell, setOverrides, setTestCommands,
+  SOURCE_HOOK_ERROR,
 } from "../src/policy/policy.service.ts";
 import { policySnapshotPath as compiledPolicyPath } from "../src/policy/policy.paths.ts";
 import { sha256 } from "../src/storage/json.file.ts";
@@ -65,11 +66,23 @@ describe("pure transforms", () => {
     expect(enablePolicy(disablePolicy(reset)).policy).toEqual(reset.policy);
   });
 
-  test("hook command: compiled binary vs running from source", () => {
+  test("hook command: compiled binary vs running from source (refused without the dev opt-in, hardened with it)", async () => {
     expect(hookCommand("/opt/bin/claude-manager")).toEqual({ command: "/opt/bin/claude-manager", args: ["hook", "pre-tool-use"] });
-    const dev = hookCommand("/usr/local/bin/bun");
-    expect(dev.command).toBe("/usr/local/bin/bun");
-    expect(dev.args).toEqual([join(import.meta.dir, "..", "src", "cli.ts"), "hook", "pre-tool-use"]);
+    const saved = { node: process.env.NODE_ENV, dev: process.env[DEV_POLICY_ENV] };
+    delete process.env.NODE_ENV;
+    delete process.env[DEV_POLICY_ENV];
+    try {
+      expect(await reasonOf(() => hookCommand("/usr/local/bin/bun"))).toEqual({ reason: "conflict", message: SOURCE_HOOK_ERROR });
+      const dev = hookCommand("/usr/local/bin/bun", true);
+      expect(dev.command).toBe("/usr/local/bin/bun");
+      expect(dev.args).toEqual(["--config=/dev/null", "--no-env-file", join(import.meta.dir, "..", "src", "cli.ts"), "hook", "pre-tool-use"]);
+      process.env[DEV_POLICY_ENV] = "1";
+      expect(hookCommand("/usr/local/bin/bun").args).toEqual(dev.args);
+    } finally {
+      process.env.NODE_ENV = saved.node;
+      if (saved.dev === undefined) delete process.env[DEV_POLICY_ENV];
+      else process.env[DEV_POLICY_ENV] = saved.dev;
+    }
   });
 });
 
@@ -100,6 +113,20 @@ describe("applyPolicy", () => {
     expect(manifest.policy!.hook).toEqual({ group: preview.hook });
     expect(Date.parse(manifest.policy!.appliedAt)).toBeGreaterThan(0);
     expect(result.etag).not.toBe(preview.etag);
+  });
+
+  test("re-apply replaces a hook group with an older matcher or older args instead of adding a second one", async () => {
+    await installUser();
+    await applyPolicy(balanced);
+    const settings = json(userSettings());
+    const old = { ...settings.hooks.PreToolUse[0], matcher: "Edit|Write|Bash|mcp__.*" };
+    writeFileSync(userSettings(), JSON.stringify({ ...settings, hooks: { PreToolUse: [old] } }));
+    const manifest = await loadManifest();
+    // as recorded by an older version, from a source run: different matcher and args
+    manifest.policy!.hook = { group: { ...old, hooks: [{ ...old.hooks[0], args: ["/old/src/cli.ts", "hook", "pre-tool-use"] }] } };
+    await saveManifest(manifest);
+    await applyPolicy(balanced);
+    expect(json(userSettings()).hooks.PreToolUse).toEqual([{ ...old, matcher: HOOK_MATCHER }]);
   });
 
   test("accept-edits opt-in writes permissions.defaultMode only when asked", async () => {

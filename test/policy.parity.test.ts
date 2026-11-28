@@ -15,7 +15,7 @@ const PORT = 5757;
 const BASE = `http://127.0.0.1:${PORT}`;
 const TOKEN = "t".repeat(64); // test-only token
 const RW: WriteSession = { readOnly: false, token: TOKEN };
-const ENV_KEYS = ["HOME", "CLAUDE_CONFIG_DIR", "CLAUDE_MANAGER_HOME"] as const;
+const ENV_KEYS = ["HOME", "CLAUDE_CONFIG_DIR", "CLAUDE_MANAGER_HOME", "CLAUDE_MANAGER_DEV_POLICY"] as const;
 const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
 let homes: string[] = [];
 let db: Database;
@@ -24,6 +24,7 @@ function useHome(home: string) {
   process.env.HOME = home;
   process.env.CLAUDE_CONFIG_DIR = join(home, ".claude");
   process.env.CLAUDE_MANAGER_HOME = join(home, ".claude-manager");
+  process.env.CLAUDE_MANAGER_DEV_POLICY = "1"; // source-run hook opt-in
 }
 async function cli(home: string, argv: string[]) {
   useHome(home);

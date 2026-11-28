@@ -1,5 +1,5 @@
 import { existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { claudeDir } from "../app.paths.ts";
 import type { Config } from "../config/config.store.ts";
 import type { PolicyRecord } from "../install/install.manifest.ts";
@@ -8,6 +8,7 @@ import { getKey } from "../install/settings.merge.ts";
 import { effectivePolicy, matrixOf } from "../policy/policy.effective.ts";
 import { parseSnapshot } from "../policy/policy.eval.ts";
 import { blockingKeys, managedSettingsPaths } from "../policy/policy.managed.ts";
+import { DEV_POLICY_ENV, devHookAllowed, HOOK_MATCHER } from "../policy/policy.service.ts";
 import type { Capability, PolicyConfig, PolicyMatrix } from "../policy/policy.types.ts";
 import type { RoutingCheck } from "./doctor.routing.ts";
 
@@ -20,6 +21,8 @@ const TOOL_CAPS: Record<string, Capability[]> = {
   Bash: ["test", "shell", "git"], WebFetch: ["web"], WebSearch: ["web"], Agent: ["agents"],
 };
 const APPLY_FIX = 'Run "claude-manager policy apply balanced"';
+const GIT_CHECK_TIMEOUT_MS = 2000;
+const LOCAL_SETTINGS = "settings.local.json";
 
 type Loaded = { path: string; settings?: Settings; error?: string };
 
@@ -43,10 +46,19 @@ function checkHook(rec: PolicyRecord, settings: Settings, execPath: string): Rou
   if (rec.hook && !exact) return { ok: false, label: `policy hook in ${rec.settingsPath} was edited (command, args or matcher changed). ${fix}` };
   const hook = hooksOf(found).find(isOurHook)!;
   const bin = hook.command ?? "";
-  const src = hook.args?.[0];
-  const missing = [bin, ...(src && src !== "hook" ? [src] : [])].find((p) => !existsSync(p));
+  const src = hook.args?.find((a) => /\.[cm]?[jt]s$/.test(a));
+  const missing = [bin, ...(src ? [src] : [])].find((p) => !existsSync(p));
   if (missing) return { ok: false, label: `policy hook points at ${missing}, which no longer exists (binary moved?). ${fix}` };
   if (!(statSync(bin).mode & 0o111)) return { ok: false, label: `policy hook binary ${bin} is not executable. ${fix}` };
+  if (src || /^bun(?:\.exe)?$/i.test(basename(bin))) {
+    const label = "policy hook runs from a source checkout; workers can change its decisions. Re-apply from the installed binary";
+    // FAIL unless this process has the dev opt-in (the developer chose it; the dashboard would otherwise always show drift).
+    return devHookAllowed() ? { ok: "warn", label: `${label} (dev opt-in ${DEV_POLICY_ENV} is set)` } : { ok: false, label };
+  }
+  const matcher = (found as { matcher?: unknown }).matcher;
+  if (matcher !== HOOK_MATCHER) {
+    return { ok: false, label: `policy hook matcher in ${rec.settingsPath} is out of date (some tools, e.g. Read, skip the policy). ${fix}` };
+  }
   if (bin !== execPath) {
     return { ok: "warn", label: `policy hook runs ${bin}, not this binary (${execPath}). Fine if intended, otherwise ${APPLY_FIX.toLowerCase()}` };
   }
@@ -117,6 +129,26 @@ async function checkManaged(paths: string[]): Promise<RoutingCheck[]> {
   return out;
 }
 
+/**
+ * Project scope writes absolute paths to `<repo>/.claude/settings.local.json`; it must stay out of git.
+ * `git check-ignore -q`: 0 = ignored, 1 = not ignored, other = can't tell (not a repo, git broken).
+ */
+async function checkLocalIgnored(settingsPath: string): Promise<RoutingCheck[]> {
+  if (basename(settingsPath) !== LOCAL_SETTINGS) return [];
+  const repo = dirname(dirname(settingsPath));
+  let code: number;
+  try {
+    const proc = Bun.spawn(["git", "-C", repo, "check-ignore", "-q", settingsPath], { env: process.env, stdout: "ignore", stderr: "ignore", timeout: GIT_CHECK_TIMEOUT_MS });
+    code = await proc.exited;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw new Error(`doctor: git check-ignore ${settingsPath}: ${(err as Error).message}`, { cause: err });
+    return [{ ok: true, label: `git not found: skipped the gitignore check for ${settingsPath}` }];
+  }
+  if (code === 0) return [{ ok: true, label: `${settingsPath} is gitignored` }];
+  if (code === 1) return [{ ok: "warn", label: `${settingsPath} is not gitignored: it holds this machine's hook path. Add .claude/${LOCAL_SETTINGS} to ${join(repo, ".gitignore")}` }];
+  return [{ ok: true, label: `git check-ignore could not decide (exit ${code}): skipped the gitignore check for ${settingsPath}` }];
+}
+
 /** Doctor section for the permission policy; without an applied policy it is exactly one line. */
 export async function checkPolicy(
   config: Config,
@@ -133,6 +165,7 @@ export async function checkPolicy(
     : [{ ok: false, label: `${own.error}. Fix the file, then ${APPLY_FIX.toLowerCase()}` }];
   const snap = await checkSnapshot(rec, config);
   out.push(snap.check, ...checkModes(files), ...(snap.matrix ? checkConflicts(files, snap.matrix) : []));
+  out.push(...(await checkLocalIgnored(rec.settingsPath)));
   out.push(...(await checkManaged(opts.managed ?? managedSettingsPaths())));
   return out;
 }

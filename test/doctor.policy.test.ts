@@ -5,6 +5,7 @@ import { checkPolicy } from "../src/commands/doctor.policy.ts";
 import { loadConfig } from "../src/config/config.store.ts";
 import type { PolicyRecord } from "../src/install/install.manifest.ts";
 import { effectivePolicy, matrixOf } from "../src/policy/policy.effective.ts";
+import { DEV_POLICY_ENV, HOOK_MATCHER } from "../src/policy/policy.service.ts";
 import { useTempHome } from "./test.home.ts";
 
 const ctx = useTempHome();
@@ -15,7 +16,7 @@ const write = (path: string, data: unknown) => {
 };
 
 function hookGroup(command: string) {
-  return { matcher: "Edit|Write", hooks: [{ type: "command", command, args: ["hook", "pre-tool-use"], timeout: 5 }] };
+  return { matcher: HOOK_MATCHER, hooks: [{ type: "command", command, args: ["hook", "pre-tool-use"], timeout: 5 }] };
 }
 
 /** A healthy applied policy: runnable binary, matching hook, current snapshot. */
@@ -152,4 +153,51 @@ test("managed settings: absent is silent, present warns softly, blocking hooks f
   const hard = (await checkPolicy(s.config, s.rec, { cwd: ctx.home, managed: [managed], execPath: s.bin })).at(-1)!;
   expect(hard.ok).toBe(false);
   expect(hard.label).toContain("allowManagedHooksOnly");
+});
+
+/** Runs `fn` with no dev opt-in (bun test sets NODE_ENV=test, which counts as one). */
+async function withoutDevOptIn<T>(fn: () => Promise<T>): Promise<T> {
+  const saved = { node: process.env.NODE_ENV, dev: process.env[DEV_POLICY_ENV] };
+  delete process.env.NODE_ENV;
+  delete process.env[DEV_POLICY_ENV];
+  try {
+    return await fn();
+  } finally {
+    process.env.NODE_ENV = saved.node;
+    if (saved.dev !== undefined) process.env[DEV_POLICY_ENV] = saved.dev;
+  }
+}
+
+test("a source-run hook fails (workers can edit the checkout); with the dev opt-in it only warns", async () => {
+  const s = await setup();
+  const script = join(ctx.home, "src", "cli.ts");
+  write(script, "");
+  const group = { ...hookGroup(s.bin), hooks: [{ type: "command", command: s.bin, args: ["--config=/dev/null", "--no-env-file", script, "hook", "pre-tool-use"], timeout: 5 }] };
+  s.rec.hook = { group };
+  write(settingsOf(), { permissions: { ask: ["Bash(git push *)"] }, hooks: { PreToolUse: [group] } });
+  const strict = (await withoutDevOptIn(() => run(s))).find((x) => x.label.includes("source checkout"));
+  expect(strict).toEqual({ ok: false, label: expect.stringContaining("Re-apply from the installed binary") });
+  expect((await run(s)).find((x) => x.label.includes("source checkout"))?.ok).toBe("warn");
+});
+
+test("an applied hook with an older matcher (no Read) fails as out of date", async () => {
+  const s = await setup();
+  const old = { ...hookGroup(s.bin), matcher: "Edit|Write|NotebookEdit|Bash|WebFetch|WebSearch|Agent|SendMessage|TaskStop|mcp__.*" };
+  s.rec.hook = { group: old };
+  write(settingsOf(), { permissions: { ask: ["Bash(git push *)"] }, hooks: { PreToolUse: [old] } });
+  expect((await run(s)).find((x) => x.label.includes("matcher"))).toEqual({ ok: false, label: expect.stringContaining("out of date") });
+});
+
+test("project scope: settings.local.json not gitignored warns, ignored is ok, outside a repo is skipped", async () => {
+  const s = await setup();
+  const repo = join(ctx.home, "repo");
+  const local = join(repo, ".claude", "settings.local.json");
+  write(local, { permissions: { ask: ["Bash(git push *)"] }, hooks: { PreToolUse: [s.rec.hook!.group] } });
+  s.rec.settingsPath = local;
+  const gitCheck = async () => (await run(s)).find((x) => x.label.includes("gitignore"));
+  expect(await gitCheck()).toEqual({ ok: true, label: expect.stringContaining("skipped the gitignore check") });
+  await Bun.$`git init -q ${repo}`.quiet();
+  expect(await gitCheck()).toEqual({ ok: "warn", label: expect.stringContaining("is not gitignored") });
+  writeFileSync(join(repo, ".gitignore"), ".claude/settings.local.json\n");
+  expect(await gitCheck()).toEqual({ ok: true, label: `${local} is gitignored` });
 });

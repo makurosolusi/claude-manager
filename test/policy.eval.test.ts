@@ -171,7 +171,8 @@ describe("shadow check (§3 row 3)", () => {
     const input = { agent_id: "a", agent_type: "coder", tool_name: "Bash", tool_input: { command: "ls" }, cwd: sub };
     expect(decide(input, snapshotFor("autonomous"), nodeFs(), env).row).toBe("unknown");
     expect(decide(input, snapshotFor("autonomous", {}, { projectDir: ctx.project }), nodeFs(), { HOME: ctx.home }).row).toBe("unknown");
-    expect(decide(input, snapshotFor("autonomous"), nodeFs(), { HOME: ctx.home }).row).toBe("coder");
+    // cwd alone also finds it: Claude Code walks up from cwd to the repo root for project agents (sub-agents docs).
+    expect(decide(input, snapshotFor("autonomous"), nodeFs(), { HOME: ctx.home }).row).toBe("unknown");
   });
 });
 
@@ -199,8 +200,10 @@ describe("secret floor (§3 step 1, §4.4)", () => {
     const main = decide({ tool_name: "Bash", tool_input: { command: "cat .env" }, cwd: ctx.project }, snap, nodeFs(), {});
     expect(main).toMatchObject({ row: "main", decision: "default", rule: "secret" });
   });
-  test(".envrc and env.ts are not secrets", () => {
-    expect(call(snap, "coder", "Edit", { file_path: ".envrc" }).decision).toBe("allow");
+  test(".envrc is a secret (direnv runs it on cd); env.ts is not", () => {
+    expect(call(snap, "coder", "Edit", { file_path: ".envrc" })).toMatchObject({ decision: "deny", rule: "secret" });
+    expect(call(snap, "coder", "Read", { file_path: "sub/.envrc" })).toMatchObject({ decision: "deny", rule: "secret" });
+    expect(bash(snap, "coder", "cat .envrc")).toMatchObject({ decision: "deny", rule: "secret" });
     expect(call(snap, "coder", "Edit", { file_path: "src/env.ts" }).decision).toBe("allow");
   });
 });

@@ -10,8 +10,12 @@ import {
 } from "./policy.presets.ts";
 import type { Capability, Decision, PolicyConfig, PolicySnapshot, PresetName } from "./policy.types.ts";
 
-/** Tools the hook sees (§2.4); read-only tools are left out to save a process spawn per Read/Grep/Glob. */
-export const HOOK_MATCHER = "Edit|Write|NotebookEdit|Bash|WebFetch|WebSearch|Agent|SendMessage|TaskStop|mcp__.*";
+/**
+ * Tools the hook sees (§2.4). Read tools are included so read cells (and the secret floor on Read) are enforced.
+ * `mcp__.*` puts the matcher on Claude Code's regex path, which is unanchored (`RegExp.test`), so it is wrapped in
+ * `^(…)$`: unanchored, `Write` would also spawn the hook for `TodoWrite` (code.claude.com/docs/en/hooks, Matcher patterns).
+ */
+export const HOOK_MATCHER = "^(Read|Grep|Glob|LSP|Edit|Write|NotebookEdit|Bash|WebFetch|WebSearch|Agent|SendMessage|TaskStop|mcp__.*)$";
 export const HOOK_ARGS: readonly string[] = ["hook", "pre-tool-use"];
 export const HOOK_TIMEOUT_SECONDS = 5;
 const DEFAULT_MODE_KEY = "permissions.defaultMode";
@@ -117,29 +121,45 @@ export const enablePolicy = (config: Config): Config => withPolicy(config, { ...
 /** Turns the policy off; the matrix stays in config.json so enable restores it (§5 DELETE). */
 export const disablePolicy = (config: Config): Config => withPolicy(config, { ...requirePolicy(config), enabled: false });
 
+/** Env opt-in for a source-run hook (same as `--dev-hook`). */
+export const DEV_POLICY_ENV = "CLAUDE_MANAGER_DEV_POLICY";
+export const SOURCE_HOOK_ERROR =
+  "the permission policy hook must run from the installed binary; install claude-manager or pass --dev-hook for development";
+/**
+ * Bun flags for a dev hook: Claude Code runs hooks in the project dir, and bun would load that dir's `bunfig.toml`
+ * (`preload` runs code) and `.env`, which workers can edit. The compiled binary disables both at build time.
+ */
+const DEV_BUN_FLAGS = ["--config=/dev/null", "--no-env-file"];
+
+const isBun = (execPath: string) => /^bun(?:\.exe)?$/i.test(basename(execPath));
+/** Dev opt-in: the `--dev-hook` flag or the env var; tests set the env var in `useTempHome`. */
+export const devHookAllowed = (flag = false) => flag || process.env[DEV_POLICY_ENV] === "1";
+
 /**
  * Hook command for the running process (§2.4), always absolute and exec form (no shell, no PATH lookup).
- * Compiled binary: `<binary> hook pre-tool-use`. From source (`bun src/cli.ts`): `<bun> <abs src/cli.ts> hook pre-tool-use`;
- * a dev hook stops working when the checkout moves, which doctor reports.
+ * Compiled binary: `<binary> hook pre-tool-use`. From source: 409 unless the dev opt-in (`devHook` = `--dev-hook`), then
+ * `<bun> --config=/dev/null --no-env-file <abs src/cli.ts> hook pre-tool-use`. Doctor reports a source hook as FAIL:
+ * whoever can edit the checkout can change its decisions.
  */
-export function hookCommand(execPath = process.execPath): { command: string; args: string[] } {
-  const fromSource = /^bun(?:\.exe)?$/i.test(basename(execPath));
-  return { command: execPath, args: fromSource ? [resolve(import.meta.dir, "..", "cli.ts"), ...HOOK_ARGS] : [...HOOK_ARGS] };
+export function hookCommand(execPath = process.execPath, devHook = false): { command: string; args: string[] } {
+  if (!isBun(execPath)) return { command: execPath, args: [...HOOK_ARGS] };
+  if (!devHookAllowed(devHook)) conflict(SOURCE_HOOK_ERROR);
+  return { command: execPath, args: [...DEV_BUN_FLAGS, resolve(import.meta.dir, "..", "cli.ts"), ...HOOK_ARGS] };
 }
 
-export function hookGroup(execPath?: string): HookGroup {
-  const { command, args } = hookCommand(execPath);
+export function hookGroup(execPath?: string, devHook?: boolean): HookGroup {
+  const { command, args } = hookCommand(execPath, devHook);
   return { matcher: HOOK_MATCHER, hooks: [{ type: "command", command, args, timeout: HOOK_TIMEOUT_SECONDS }] };
 }
 
 /** What an enabled policy wants in its settings file: the owner mandate (§2.4), the hook, and opt-in defaultMode (§2.5). */
-export function desiredSettings(policy: PolicyConfig, execPath?: string): PolicyDesired {
+export function desiredSettings(policy: PolicyConfig, execPath?: string, devHook?: boolean): PolicyDesired {
   const entries = [
     ...OWNER_ASK_RULES.map((value) => ({ list: "permissions.ask" as const, value })),
     ...SECRET_DENY_RULES.map((value) => ({ list: "permissions.deny" as const, value })),
   ];
   const keys = policy.defaultMode === "acceptEdits" ? { [DEFAULT_MODE_KEY]: "acceptEdits" } : {};
-  return { entries, hook: hookGroup(execPath), keys };
+  return { entries, hook: hookGroup(execPath, devHook), keys };
 }
 
 /** The compiled snapshot (§2.6). `owned` = every managed agent file → the sha256 the installer recorded for it. */

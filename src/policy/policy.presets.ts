@@ -18,11 +18,16 @@ export const RESERVED_ROWS: readonly string[] = [MAIN_ROW, UNKNOWN_ROW];
 export const OWNER_ONLY_CAPS: readonly Capability[] = ["push"];
 export const PUSH_ALLOW_ERROR = "push is owner-only; use ask or deny";
 
-/** Bash words that make a command owner-only (§3 step 2). `vercel` deploys with no subcommand. */
-export const OWNER_ONLY_TOKENS: readonly string[] = ["push", "publish", "deploy", "release", "vercel"];
+/**
+ * Bash words that make a command owner-only (§3 step 2). `vercel` deploys with no subcommand; `send-pack` and `dcommit`
+ * (git-svn) push without the word. `http-push` is caught as a `-push` suffix, `gh pr merge` / `gh repo sync` and npm
+ * abbreviations (`npm pub`) in policy.bash.ts.
+ */
+export const OWNER_ONLY_TOKENS: readonly string[] = ["push", "publish", "deploy", "release", "vercel", "send-pack", "dcommit"];
 
+/** `bunx --no-install`: plain `bunx tsc` without typescript installed downloads and runs the unrelated npm package `tsc`. */
 export const DEFAULT_TEST_COMMANDS: readonly string[] = [
-  "bun test", "bun run test", "bun run build", "bunx tsc", "npm test", "npm run test", "npm run build",
+  "bun test", "bun run test", "bun run build", "bunx --no-install tsc", "npm test", "npm run test", "npm run build",
   "pnpm test", "yarn test", "cargo test", "go test", "pytest",
 ];
 export const TEST_COMMANDS_MAX = 32;
@@ -37,7 +42,8 @@ export const OWNER_ASK_RULES: readonly string[] = [
 ];
 export const SECRET_DENY_RULES: readonly string[] = [
   "Read(**/.env)", "Read(**/.env.*)", "Edit(**/.env)", "Edit(**/.env.*)", "Read(**/*.pem)", "Read(**/*.key)",
-  "Read(**/*.p12)", "Read(~/.ssh/**)", "Read(~/.aws/**)", "Read(**/credentials.json)", "Read(**/service-account.json)",
+  "Read(**/*.p12)", "Read(**/*.pfx)", "Read(**/.envrc)", "Read(~/.ssh/**)", "Read(~/.aws/**)", "Read(**/credentials.json)",
+  "Read(**/service-account.json)",
 ];
 
 type Cells = Partial<Record<Capability, Decision>>;

@@ -56,13 +56,13 @@ describe("capability mapping for Bash (§2.1, §3 step 4)", () => {
   const snap = snapshotFor("balanced");
 
   test("simple test commands → test (allow in Balanced coder)", () => {
-    for (const c of ["bun test", "bun test --watch", "bun  test  src", "bunx tsc --noEmit", "npm run build", "pytest -k 'a or b'",
+    for (const c of ["bun test", "bun test --watch", "bun  test  src", "bunx --no-install tsc --noEmit", "npm run build", "pytest -k 'a or b'",
       "go test ./...", "cargo test", "bun test -t 'a;b|c'"]) {
       expect([c, bash(snap, "coder", c).cap, bash(snap, "coder", c).decision]).toEqual([c, "test", "allow"]);
     }
   });
   test("prefix look-alikes and prefixed forms are shell, not test", () => {
-    for (const c of ["bun testx", "FOO=1 bun test", "npm --prefix /x test", "bun run testing", "env bun test", "bun"]) {
+    for (const c of ["bun testx", "FOO=1 bun test", "npm --prefix /x test", "bun run testing", "env bun test", "bun", "bunx tsc"]) {
       expect([c, bash(snap, "coder", c).cap]).toEqual([c, "shell"]);
     }
   });
