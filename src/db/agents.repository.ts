@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { KEY, REROUTED_COUNT, type Params } from "./stats.repository.ts";
+import { FROM, KEY, REROUTED_COUNT, type Params } from "./stats.repository.ts";
 
 /** Usage of one named role (agent) over a window. */
 export interface AgentUsageRow {
@@ -14,9 +14,6 @@ export interface AgentUsageRow {
 
 // Role keys that are not a named agent: plain main session and subagent without a type. Dropped in SQL so callers never see them.
 const UNNAMED_ROLES = "('main', 'subagent')";
-
-// ponytail: FROM mirrors the private one in stats.repository.ts; export it there if a third copy appears.
-const FROM = "FROM requests r LEFT JOIN agents a ON a.id = r.agent_id LEFT JOIN sessions s ON s.id = r.session_id";
 
 /** Per-role request count, cost, last use and rerouted count since `since` (ISO), one grouped query; `main`/`subagent` are excluded. */
 export function agentUsage(db: Database, since: string): AgentUsageRow[] {

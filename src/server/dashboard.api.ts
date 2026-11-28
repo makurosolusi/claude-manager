@@ -7,6 +7,7 @@ import { contextWindow } from "./context.window.ts";
 import { filter, HTTP, HttpError, pageQuery, sessionFilter, sessionGroupBy, sessionQuery, wantsFacets } from "./dashboard.params.ts";
 import type { ApiError, DashboardMeta, LiveSession, Overview, SessionGroups, SessionsResponse } from "./dashboard.types.ts";
 import { FAVICON_PATHS, faviconResponse } from "./favicon.ts";
+import { isAgentsPath, routeAgents } from "./agents.api.ts";
 import { routeSessionDetail } from "./session.detail.api.ts";
 import { PRESET_ROLES } from "../roles/roles.presets.ts";
 
@@ -94,16 +95,23 @@ function route(db: Database, url: URL, meta: MetaProvider): unknown {
   throw new HttpError(HTTP.notFound, `unknown endpoint ${path}`);
 }
 
-/** Serves the read-only dashboard JSON API; undefined for non-/api paths. */
-export function handleApi(req: Request, db: Database, port = DEFAULT_DASHBOARD_PORT, meta: MetaProvider = NO_META): Response | undefined {
-  const url = new URL(req.url);
-  if (FAVICON_PATHS.includes(url.pathname)) return faviconResponse();
-  if (url.pathname !== "/api" && !url.pathname.startsWith("/api/")) return undefined;
+/** Host allowlist first, then GET-only; undefined when the request may proceed. */
+function guard(req: Request, url: URL, port: number): Response | undefined {
   // DNS rebinding guard: a foreign page resolving its own name to 127.0.0.1 still sends its own Host.
   // Bun.serve builds req.url from Host, so url.host is the fallback when the header is absent.
   const host = req.headers.get("host") ?? url.host;
   if (!ALLOWED_HOSTS.some((h) => host === `${h}:${port}`)) return fail(HTTP.forbidden, "forbidden host");
   if (req.method !== "GET") return fail(HTTP.notAllowed, "method not allowed");
+  return undefined;
+}
+
+/** Serves the read-only dashboard JSON API; undefined for non-/api paths. */
+export function handleApi(req: Request, db: Database, port = DEFAULT_DASHBOARD_PORT, meta: MetaProvider = NO_META): Response | undefined {
+  const url = new URL(req.url);
+  if (FAVICON_PATHS.includes(url.pathname)) return faviconResponse();
+  if (url.pathname !== "/api" && !url.pathname.startsWith("/api/")) return undefined;
+  const denied = guard(req, url, port);
+  if (denied) return denied;
   try {
     const body = route(db, url, meta);
     return body instanceof Response ? body : json(body);
@@ -111,4 +119,11 @@ export function handleApi(req: Request, db: Database, port = DEFAULT_DASHBOARD_P
     if (err instanceof HttpError) return fail(err.status, err.message);
     throw err;
   }
+}
+
+/** handleApi plus the async /api/agents routes (same Host and method guard); undefined for non-/api paths. */
+export function handleRequest(req: Request, db: Database, port = DEFAULT_DASHBOARD_PORT, meta: MetaProvider = NO_META): Response | Promise<Response> | undefined {
+  const url = new URL(req.url);
+  if (!isAgentsPath(url.pathname)) return handleApi(req, db, port, meta);
+  return guard(req, url, port) ?? routeAgents(db, url.pathname);
 }
