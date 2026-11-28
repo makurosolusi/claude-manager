@@ -15,7 +15,7 @@ interface Props {
   /** Read-only mode renders a badge instead of a select. */
   editable: boolean;
   onChange: (d: Decision) => void;
-  /** Worker row while escalation is on: an Ask cell is shown as "Ask → manager". */
+  /** Worker row while escalation is on: Ask and Default (except Read) cells carry the manager marker. */
   escalated?: boolean;
   /** What the preset gives this cell, for the "changed from preset" hint. */
   preset?: { label: string; decision: Decision };
@@ -26,7 +26,7 @@ export function PolicyCell({ row, cap, staged, editable, onChange, preset, escal
   const c = row.cells[cap];
   const edited = c.source === "override";
   const dot = <span aria-hidden className={cn("size-2 shrink-0 rounded-full", TONE_CLASSES[DECISION_TONE[c.decision]].dot)} />;
-  const viaManager = !!escalated && c.decision === "ask";
+  const viaManager = !!escalated && (c.decision === "ask" || (c.decision === "default" && cap !== "read"));
   const title = viaManager ? ESCALATED_TITLE : staged ? "Unsaved edit" : edited && preset ? `Changed from preset (${preset.label}: ${DECISION_LABEL[preset.decision]})` : edited ? "Changed from preset" : undefined;
   return (
     <span title={title} className={cn("inline-flex items-center gap-1 rounded-md", staged && "bg-tone-info-bg px-1 py-0.5 ring-2 ring-tone-info-border")}>

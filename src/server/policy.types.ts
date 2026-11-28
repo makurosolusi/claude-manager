@@ -8,12 +8,15 @@ export type { AuditFacets, AuditSummaryRow, Capability, Decision, PolicyConfig, 
 /** not_set_up: no `policy` in config.json · disabled: stored but off · drift: on but not enforced · blocked: managed settings win. */
 export type PolicyStatus = "not_set_up" | "enforced" | "disabled" | "drift" | "blocked";
 
+/** Stored policy as the API reports it: `escalate: null` = not set (a v0.4.0 policy), which an apply upgrades to on. */
+export type PolicyConfigView = Omit<PolicyConfig, "escalate"> & { escalate: boolean | null };
+
 /** GET /api/policy. `etag` is the If-Match for PATCH/DELETE; PUT takes the etag from its preview. */
 export interface PolicyResponse {
   status: PolicyStatus;
   /** Why status is drift or blocked (first one is the banner text); empty otherwise. */
   reasons: string[];
-  config: PolicyConfig | null;
+  config: PolicyConfigView | null;
   /** Effective matrix; the Balanced preview when not set up. */
   rows: PolicyRow[];
   /** Settings file holding the applied policy; null when nothing is applied. */

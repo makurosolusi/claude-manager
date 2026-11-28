@@ -3,7 +3,7 @@ import type { SetupForm } from "@/components/policy.setup.tsx";
 import { ApiWriteError } from "@/lib/api.write.ts";
 import type { Notice } from "@/lib/agent.write.ts";
 import { disablePolicy, enablePolicy, previewPolicy, setEscalate } from "@/lib/policy.write.ts";
-import type { PolicyConfig, PolicyInput, PolicyPreview, PolicyResponse } from "../../server/policy.types.ts";
+import type { PolicyConfigView, PolicyInput, PolicyPreview, PolicyResponse } from "../../server/policy.types.ts";
 
 export interface Failure { text: string; reload: boolean }
 export interface Pending { input: PolicyInput; data: PolicyPreview; label: string }
@@ -16,9 +16,9 @@ export function toFailure(err: unknown): Failure {
   return { text: err.serverMessage, reload: false };
 }
 
-/** PolicyInput that re-applies the stored config (Turn on, Repair). */
-export const inputFromConfig = (c: PolicyConfig): PolicyInput =>
-  ({ preset: c.preset, scope: c.scope, overrides: c.overrides, defaultMode: c.defaultMode ?? null, testCommands: c.testCommands, escalate: !!c.escalate });
+/** PolicyInput that re-applies the stored config (Turn on, Repair); an unset `escalate` is left out so the server default (on) applies. */
+export const inputFromConfig = (c: PolicyConfigView): PolicyInput =>
+  ({ preset: c.preset, scope: c.scope, overrides: c.overrides, defaultMode: c.defaultMode ?? null, testCommands: c.testCommands, escalate: c.escalate ?? undefined });
 
 /** Preview → confirm → apply and confirm → disable, with busy, notice and failure state for the Policy page. */
 export function usePolicyFlow(policy: PolicyResponse | undefined, refetch: () => void) {

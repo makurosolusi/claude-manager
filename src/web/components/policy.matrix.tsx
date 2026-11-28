@@ -7,7 +7,7 @@ import { RoleBadge } from "@/components/role.badge.tsx";
 import type { RoleMeta } from "@/lib/color.tokens.ts";
 import { cn } from "@/lib/cn.ts";
 import { useFrozenEtag } from "@/lib/agent.write.ts";
-import { isEscalated } from "@/lib/policy.status.ts";
+import { ESCALATE_LEGEND, isEscalated } from "@/lib/policy.status.ts";
 import { applyPatches } from "@/lib/policy.write.ts";
 import {
   countLine, diffToPatches, discardStaging, isDirty, newStaging, rowsForDisplay, stageCell, stagedRows, summarizeRow, type Staging,
@@ -51,7 +51,7 @@ export function PolicyMatrix({ policy, editable, roles, onSaved, onFailure }: Pr
   return (
     <Panel title="What each agent may do">
       <p className="text-xs text-muted-foreground">Default means Claude Code's own mode and rules decide. Push can be Ask or Deny, never Allow.</p>
-      {policy.config?.escalate && <p className="flex items-center gap-1 text-xs text-muted-foreground"><ArrowUpRight aria-hidden className="size-3" />Ask is sent to the manager; only the manager prompts you.</p>}
+      {!!policy.config?.escalate && <p className="flex items-center gap-1 text-xs text-muted-foreground"><ArrowUpRight aria-hidden className="size-3" />{ESCALATE_LEGEND}</p>}
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[56rem] border-separate border-spacing-0 text-sm">
           <thead><tr><th className={TH}>Agent</th>{CAPABILITIES.map((c) => <th key={c} className={cn(TH, c === "mcp" ? "uppercase" : "capitalize")}>{c}</th>)}</tr></thead>

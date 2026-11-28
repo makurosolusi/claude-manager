@@ -46,7 +46,7 @@ export async function showPolicy(json: boolean): Promise<number> {
     if (policy.projectDir) console.log(`project: ${policy.projectDir}`);
     const escalate = policy.escalate === true;
     console.log(`escalate: ${escalate ? "on" : "off"}`);
-    if (escalate) console.log("  worker asks are sent back to the manager; only the manager prompts you");
+    if (escalate) console.log("  worker asks and defaults (except read) go to the manager; only the manager prompts you");
     if (policy.defaultMode) console.log(`defaultMode: ${policy.defaultMode}`);
   }
   console.log(`settings: ${hook.path ?? "-"}  hook: ${hook.status}`);

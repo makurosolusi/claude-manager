@@ -16,7 +16,7 @@ import { toolIcon } from "@/lib/icon.map.ts";
 import type { Tiers } from "@/lib/model.tier.ts";
 import { CAPABILITIES } from "../../policy/policy.presets.ts";
 import { usePolicy, rowForAgent } from "@/lib/policy.use.ts";
-import { isEscalated } from "@/lib/policy.status.ts";
+import { goesToManager, isEscalated } from "@/lib/policy.status.ts";
 import { CAP_NOUN, DECISION_LABEL } from "@/lib/policy.matrix.ts";
 import type { Decision } from "../../server/policy.types.ts";
 
@@ -135,7 +135,7 @@ export function PermissionsPanel({ agent, tick }: { agent: Pick<AgentDetail, "na
       <ul className="flex flex-wrap gap-1.5">
         {CAPABILITIES.map((c) => {
           const cell = row.cells[c], v = DECISION_VIEW[cell.decision];
-          return <li key={c}><ToneBadge tone={v.tone} icon={v.icon} className={cn(off && "opacity-60")}>{`${CAP_NOUN[c]}: ${viaManager && cell.decision === "ask" ? "Ask → manager" : DECISION_LABEL[cell.decision]}${cell.source === "override" ? " · edited" : ""}`}</ToneBadge></li>;
+          return <li key={c}><ToneBadge tone={v.tone} icon={v.icon} className={cn(off && "opacity-60")}>{`${CAP_NOUN[c]}: ${viaManager && goesToManager(row, c, cell.decision, true) ? `${DECISION_LABEL[cell.decision]} → manager` : DECISION_LABEL[cell.decision]}${cell.source === "override" ? " · edited" : ""}`}</ToneBadge></li>;
         })}
       </ul>
     </Panel>
