@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { symlinkSync } from "node:fs";
 import { join } from "node:path";
-import { decide, effectivePolicy, matrixOf, nodePolicyFs, parseSnapshot } from "../src/policy/policy.eval.ts";
+import { decide, nodePolicyFs, parseSnapshot } from "../src/policy/policy.eval.ts";
+import { effectivePolicy, matrixOf } from "../src/policy/policy.effective.ts";
 import {
   assertCells, assertOverrides, assertTestCommands, CAPABILITIES, PRESET_NAMES, PUSH_ALLOW_ERROR,
 } from "../src/policy/policy.presets.ts";

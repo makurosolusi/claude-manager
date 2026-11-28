@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DEFAULT_TIER_MODELS, type Config } from "../src/config/config.store.ts";
-import { decide, effectivePolicy, matrixOf, nodePolicyFs } from "../src/policy/policy.eval.ts";
+import { decide, nodePolicyFs } from "../src/policy/policy.eval.ts";
+import { effectivePolicy, matrixOf } from "../src/policy/policy.effective.ts";
 import { DEFAULT_TEST_COMMANDS, OWNER_ONLY_TOKENS } from "../src/policy/policy.presets.ts";
 import type { HookInput, PolicyConfig, PolicySnapshot, PresetName } from "../src/policy/policy.types.ts";
 

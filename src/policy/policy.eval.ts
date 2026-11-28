@@ -1,40 +1,15 @@
 import { lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseAgentFile } from "../agents/agent.frontmatter.ts";
-import type { Config } from "../config/config.store.ts";
-import { ownValue, resolveRoles } from "../roles/roles.registry.ts";
 import { sha256 } from "../storage/json.file.ts";
 import {
-  CAPABILITIES, isCellAllowed, isDecision, isPresetName, MAIN_ROW, OWNER_ONLY_TOKENS, presetRow, RECOMMENDED_PRESET,
-  RESERVED_ROWS, SHELL_META_RE, TEST_COMMAND_MAX_CHARS, UNKNOWN_ROW,
+  isCellAllowed, isDecision, MAIN_ROW, OWNER_ONLY_TOKENS, RESERVED_ROWS, SHELL_META_RE, TEST_COMMAND_MAX_CHARS, UNKNOWN_ROW,
 } from "./policy.presets.ts";
-import type {
-  Capability, Decision, HookInput, PolicyConfig, PolicyEnv, PolicyFs, PolicyMatrix, PolicyResult, PolicyRow, PolicySnapshot,
-} from "./policy.types.ts";
+import type { Capability, Decision, HookInput, PolicyEnv, PolicyFs, PolicyResult, PolicySnapshot } from "./policy.types.ts";
 
-/** Effective matrix rows: main, every enabled role, unknown (§2.2). `push` is never `allow`, whatever config.json says. */
-export function effectivePolicy(config: Config & { policy?: PolicyConfig }): PolicyRow[] {
-  const policy = config.policy;
-  // Absent policy previews the recommended preset; a present but invalid preset name falls back to the strictest.
-  const preset = policy ? (isPresetName(policy.preset) ? policy.preset : "strict") : RECOMMENDED_PRESET;
-  const overrides = policy?.overrides && typeof policy.overrides === "object" ? policy.overrides : {};
-  const row = (name: string, kind: PolicyRow["kind"], tier?: Parameters<typeof presetRow>[3]): PolicyRow => {
-    const base = presetRow(preset, name, kind, tier);
-    const patch = ownValue(overrides, name);
-    const cells = Object.fromEntries(CAPABILITIES.map((cap) => {
-      const o = patch && typeof patch === "object" && Object.hasOwn(patch, cap) ? patch[cap] : undefined;
-      return [cap, isDecision(o) && isCellAllowed(cap, o) ? { decision: o, source: "override" } : { decision: base[cap], source: "preset" }];
-    })) as PolicyRow["cells"];
-    return { row: name, kind, cells };
-  };
-  // A role named "main"/"unknown" would collide with a reserved row, so it gets no row and runs as `unknown`.
-  const roles = resolveRoles(config).filter((r) => !RESERVED_ROWS.includes(r.name));
-  return [row(MAIN_ROW, "main"), ...roles.map((r) => row(r.name, r.source, r.tier)), row(UNKNOWN_ROW, "unknown")];
-}
-
-/** Snapshot `matrix` from effective rows. */
-export const matrixOf = (rows: PolicyRow[]): PolicyMatrix =>
-  Object.fromEntries(rows.map((r) => [r.row, Object.fromEntries(CAPABILITIES.map((c) => [c, r.cells[c].decision]))])) as PolicyMatrix;
+// Hook fast path (§3): imports stay minimal (no roles registry, config store or role prompts).
+/** `map[key]` only for an own property, so "__proto__"/"constructor" never resolve to Object.prototype. */
+const ownValue = <T>(map: Record<string, T>, key: string): T | undefined => (Object.hasOwn(map, key) ? map[key] : undefined);
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const isStrings = (v: unknown): v is string[] => Array.isArray(v) && v.every((s) => typeof s === "string");

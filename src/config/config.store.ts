@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CliError } from "../cli.error.ts";
 import { appDir } from "../app.paths.ts";
+import type { PolicyConfig } from "../policy/policy.types.ts";
 import { TIER_ALIAS_MAP } from "../roles/model.ids.ts";
 import { writeJson } from "../storage/json.file.ts";
 
@@ -39,6 +40,8 @@ export interface Config {
   storePromptText: boolean;
   /** Port for `claude-manager dashboard` (overridden by --port). */
   dashboardPort?: number;
+  /** Permission policy (PLAN/08 §2.2); absent = never set up. Validated by policy.service on write. */
+  policy?: PolicyConfig;
 }
 
 export const configPath = () => join(appDir(), "config.json");
@@ -51,6 +54,7 @@ function withDefaults(saved: Partial<Config>): Config {
     disabledRoles: saved.disabledRoles ?? [],
     storePromptText: saved.storePromptText ?? true,
     dashboardPort: saved.dashboardPort,
+    ...(saved.policy ? { policy: saved.policy } : {}),
   };
 }
 
