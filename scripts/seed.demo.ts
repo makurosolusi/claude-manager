@@ -5,8 +5,9 @@
 //   HOME=$T CLAUDE_CONFIG_DIR=$T/.claude CLAUDE_MANAGER_HOME=$T/.cm bun src/cli.ts dashboard
 // Shape follows src/ingest/ingest.parser.ts and the fixtures in test/dashboard.test.ts.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { EXTERNAL_AGENTS, HEAVY_ROLES, MANAGER_STEPS, LONG_TITLE, MODEL, type ModelKey, PROJECTS, PROMPTS, ROLE_MODELS, TITLES, TOOLS } from "./seed.demo.data.ts";
+import { EXTERNAL_AGENTS, HEAVY_ROLES, MANAGER_STEPS, LONG_TITLE, MODEL, type ModelKey, PROJECTS as PROJECT_TEMPLATES, PROMPTS, ROLE_MODELS, TITLES, TOOLS } from "./seed.demo.data.ts";
 
 const SEED = 0x5eed;
 const DAYS = 30;
@@ -26,6 +27,9 @@ if (!root) {
   process.exit(1);
 }
 const projectsDir = join(root, "projects");
+// Same HOME the run command pins (parent of the config dir), so `~` paths read as home-relative in the dashboard.
+const home = dirname(resolve(root));
+const PROJECTS = PROJECT_TEMPLATES.map((p) => ({ ...p, cwd: p.cwd.replace(/^~/, home).replace(/^\$TMP/, tmpdir()) }));
 rmSync(projectsDir, { recursive: true, force: true }); // rerun = same output, no stale files
 
 // mulberry32: tiny seeded PRNG so every run produces the same data shape.
