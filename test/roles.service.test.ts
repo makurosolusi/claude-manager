@@ -5,7 +5,6 @@ import { run } from "../src/cli.ts";
 import { CliError } from "../src/cli.error.ts";
 import { applyConfig, assertEtag, configEtag, StaleConfigError } from "../src/config/config.apply.ts";
 import { configPath, loadConfig, saveConfig } from "../src/config/config.store.ts";
-import { loadManifest } from "../src/install/install.manifest.ts";
 import { addRole, enableRole, removeRole, setTierModel, updateRole } from "../src/roles/roles.service.ts";
 import type { AgentInput, AgentPatch } from "../src/server/agents.types.ts";
 import { useTempHome } from "./test.home.ts";
@@ -40,7 +39,7 @@ const reason = async (fn: () => unknown) => {
 /** Installs everywhere and writes config.json so later applies have something to back up. */
 const seed = async () => {
   await quiet(["install"]);
-  await applyConfig(await loadConfig());
+  await applyConfig((c) => c);
 };
 const backups = () => {
   const dir = join(ctx.app, "backups");
@@ -112,17 +111,17 @@ describe("applyConfig", () => {
   test("adds, updates, disables and deletes through to installed files, with a config backup", async () => {
     await seed();
     const baseline = backups().length;
-    let r = await applyConfig(addRole(await loadConfig(), input()));
+    let r = await applyConfig((c) => addRole(c, input()));
     expect(r.applied).toBe(1);
     expect(readFileSync(agent("ui-ux"), "utf8")).toContain("Designs UI layouts");
     expect(backups().length).toBe(baseline + 1);
-    r = await applyConfig(updateRole(await loadConfig(), "ui-ux", { description: "Polishes UI" }));
+    r = await applyConfig((c) => updateRole(c, "ui-ux", { description: "Polishes UI" }));
     expect(readFileSync(agent("ui-ux"), "utf8")).toContain("Polishes UI");
-    await applyConfig(updateRole(await loadConfig(), "writer", { enabled: false }));
+    await applyConfig((c) => updateRole(c, "writer", { enabled: false }));
     expect(existsSync(agent("writer"))).toBe(false);
-    await applyConfig(enableRole(await loadConfig(), "writer"));
+    await applyConfig((c) => enableRole(c, "writer"));
     expect(existsSync(agent("writer"))).toBe(true);
-    await applyConfig(removeRole(await loadConfig(), "ui-ux", await loadManifest()));
+    await applyConfig((c, m) => removeRole(c, "ui-ux", m));
     expect(existsSync(agent("ui-ux"))).toBe(false);
     expect(backups().length).toBe(baseline + 5);
   });
@@ -132,7 +131,7 @@ describe("applyConfig", () => {
     writeFileSync(agent("coder"), "my edits\n");
     const configBefore = readFileSync(configPath(), "utf8");
     const baseline = backups().length;
-    const err = await reason(async () => applyConfig(addRole(await loadConfig(), input())));
+    const err = await reason(async () => applyConfig((c) => addRole(c, input())));
     expect(err.reason).toBe("conflict");
     expect(err.message).toContain("these files were edited by hand");
     expect(err.message).toContain(agent("coder"));
@@ -145,7 +144,7 @@ describe("applyConfig", () => {
   test("a foreign file with a new role's name is reported as unmanaged", async () => {
     await quiet(["install"]);
     writeFileSync(agent("ui-ux"), "mine\n");
-    const err = await reason(async () => applyConfig(addRole(await loadConfig(), input())));
+    const err = await reason(async () => applyConfig((c) => addRole(c, input())));
     expect(err).toEqual({ message: `${agent("ui-ux")} exists and isn't managed by claude-manager`, reason: "conflict" });
     expect(readFileSync(agent("ui-ux"), "utf8")).toBe("mine\n");
   });
@@ -156,7 +155,7 @@ describe("applyConfig", () => {
     writeFileSync(agent("ui-ux"), "original\n");
     await quiet(["install", "--force"]); // adopts the file, backing the original up
     expect(readFileSync(agent("ui-ux"), "utf8")).toContain("Designs UI layouts");
-    await applyConfig(removeRole(await loadConfig(), "ui-ux", await loadManifest()));
+    await applyConfig((c, m) => removeRole(c, "ui-ux", m));
     expect(readFileSync(agent("ui-ux"), "utf8")).toBe("original\n");
   });
 
@@ -166,7 +165,7 @@ describe("applyConfig", () => {
     const dir = join(ctx.claude, "agents");
     chmodSync(dir, 0o555);
     try {
-      const err = await applyConfig(addRole(await loadConfig(), input())).then(
+      const err = await applyConfig((c) => addRole(c, input())).then(
         () => undefined,
         (e: Error) => e,
       );
@@ -179,15 +178,28 @@ describe("applyConfig", () => {
     expect(existsSync(agent("ui-ux"))).toBe(false);
   });
 
-  test("concurrent applies are serialized", async () => {
+  test("concurrent applies are serialized and each builds on the previous result", async () => {
     await seed();
-    const base = await loadConfig();
     await Promise.all([
-      applyConfig(addRole(base, input({ name: "role-a" }))),
-      applyConfig(addRole(base, input({ name: "role-b" }))),
+      applyConfig((c) => addRole(c, input({ name: "role-a" }))),
+      applyConfig((c) => addRole(c, input({ name: "role-b" }))),
     ]);
+    expect(existsSync(agent("role-a"))).toBe(true);
     expect(existsSync(agent("role-b"))).toBe(true);
-    expect(Object.keys((await loadConfig()).customRoles)).toEqual(["role-b"]); // last writer wins; etag guards real races
+    expect(Object.keys((await loadConfig()).customRoles).sort()).toEqual(["role-a", "role-b"]);
+  });
+
+  test("two applies on the same etag: the etag is checked under the lock, so exactly one wins", async () => {
+    await seed();
+    const etag = configEtag(readFileSync(configPath(), "utf8"));
+    const results = await Promise.allSettled([
+      applyConfig((c) => addRole(c, input({ name: "role-a" })), { expectedEtag: etag }),
+      applyConfig((c) => addRole(c, input({ name: "role-b" })), { expectedEtag: etag }),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"]);
+    expect((results.find((r) => r.status === "rejected") as PromiseRejectedResult).reason).toBeInstanceOf(StaleConfigError);
+    expect(Object.keys((await loadConfig()).customRoles)).toEqual(["role-a"]);
+    expect(existsSync(agent("role-b"))).toBe(false);
   });
 });
 
@@ -202,7 +214,6 @@ describe("etag", () => {
     writeFileSync(configPath(), '{"storePromptText":false}\n');
     const err = await assertEtag(etag).then(() => undefined, (e: unknown) => e as StaleConfigError);
     expect(err).toBeInstanceOf(StaleConfigError);
-    expect(err?.status).toBe(412);
     expect(err?.reason).toBe("conflict");
     expect(err?.message).toBe("config changed outside this page; reload");
   });

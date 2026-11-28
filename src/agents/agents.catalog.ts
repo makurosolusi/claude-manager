@@ -5,7 +5,7 @@ import { CliError } from "../cli.error.ts";
 import { configPath, type Config, type Tier, TIER_ALIAS } from "../config/config.store.ts";
 import { loadManifest, type InstallRecord } from "../install/install.manifest.ts";
 import { readText } from "../install/install.target.ts";
-import { allRoles, BUILTIN_AGENTS } from "../roles/roles.registry.ts";
+import { allRoles, BUILTIN_AGENTS, ownValue } from "../roles/roles.registry.ts";
 import { KNOWN_TOOLS } from "../roles/roles.presets.ts";
 import { sha256 } from "../storage/json.file.ts";
 import type {
@@ -18,14 +18,14 @@ export const MAX_AGENTS = 500;
 const MAX_FILE_BYTES = 256 * 1024;
 const PIN_ALIASES: string[] = Object.values(TIER_ALIAS);
 
-/** One row of `agentUsage(db, since)` (src/db/agents.repository.ts); `rerouted` is null when the column does not exist. */
+/** One row of `agentUsage(db, since)` (src/db/agents.repository.ts). */
 export interface UsageRow {
   role: string;
   requests: number;
   cost_usd: number;
   unpriced: number;
   last_ts: string | null;
-  rerouted: number | null;
+  rerouted: number;
 }
 
 export interface CatalogOptions {
@@ -54,7 +54,7 @@ const NO_USAGE: AgentUsage = { requests: 0, cost_usd: 0, unpriced: 0, last_ts: n
 
 function toUsage(u: UsageRow | undefined): AgentUsage {
   if (!u) return { ...NO_USAGE };
-  const pct = u.rerouted === null ? null : u.requests > 0 ? (u.rerouted / u.requests) * 100 : 0;
+  const pct = u.requests > 0 ? (u.rerouted / u.requests) * 100 : 0;
   return { requests: u.requests, cost_usd: u.cost_usd, unpriced: u.unpriced, last_ts: u.last_ts, rerouted_pct: pct };
 }
 
@@ -70,7 +70,7 @@ async function listMd(dir: string): Promise<string[]> {
 
 interface AgentDir { dir: string; project: boolean }
 
-/** Reads `*.md` files (non-recursive, up to 256 KiB) from the agent dirs, skipping files the manifest owns. */
+/** Reads `*.md` files (non-recursive, up to 256 KiB) from the agent dirs, skipping files the manifest owns; an unreadable entry (directory, broken symlink) is skipped with a warning. */
 async function scanExternals(dirs: AgentDir[], owned: Set<string>, warnings: string[]): Promise<ExternalFile[]> {
   const out: ExternalFile[] = [];
   const seen = new Set<string>();
@@ -81,14 +81,14 @@ async function scanExternals(dirs: AgentDir[], owned: Set<string>, warnings: str
       const path = join(dir, file);
       if (owned.has(path)) continue;
       const handle = Bun.file(path);
-      if (handle.size > MAX_FILE_BYTES) {
-        warnings.push(`${path} skipped: larger than ${MAX_FILE_BYTES / 1024} KiB`);
-        continue;
-      }
       try {
+        if (handle.size > MAX_FILE_BYTES) {
+          warnings.push(`${path} skipped: larger than ${MAX_FILE_BYTES / 1024} KiB`);
+          continue;
+        }
         out.push({ path, name: file.slice(0, -3), project, text: await handle.text() });
       } catch (err) {
-        throw new CliError(`cannot read agent file ${path}: ${(err as Error).message}`);
+        warnings.push(`${path} skipped: cannot read it (${(err as Error).message})`);
       }
     }
   }
@@ -161,7 +161,7 @@ async function build(config: Config, usage: UsageRow[], opts: CatalogOptions): P
       model_id: tierRouted ? config.tiers[role.tier] : pin && !PIN_ALIASES.includes(pin) ? pin : null,
       tools: role.tools ?? null, disallowed_tools: role.disallowedTools ?? null, scopes,
     }));
-    const fromConfig = role.source === "custom" && Boolean(config.customRoles[role.name]?.prompt);
+    const fromConfig = role.source === "custom" && Boolean(ownValue(config.customRoles, role.name)?.prompt);
     const w: string[] = [];
     for (const s of scopes) {
       if (s.state === "edited") w.push(`${s.path} was edited by hand; the next install or role change will report a conflict`);

@@ -4,11 +4,17 @@ import { KNOWN_TOOLS, PRESET_ROLES, type Role } from "./roles.presets.ts";
 
 const ROLE_NAME = /^[a-z][a-z0-9-]{0,39}$/;
 
-export function assertRoleName(name: string): void {
+/** Throws a 400 CliError unless `name` is a string role name; names on Object.prototype ("constructor") are reserved. */
+export function assertRoleName(name: unknown): asserts name is string {
+  if (typeof name !== "string") throw new CliError("name is required");
   if (!ROLE_NAME.test(name)) {
     throw new CliError(`invalid role name "${name}": use lowercase letters, digits and dashes`);
   }
+  if (Object.hasOwn(Object.prototype, name)) throw new CliError(`invalid role name "${name}": reserved`);
 }
+
+/** `map[key]` only when `key` is an own property, so "__proto__"/"constructor" never resolve to Object.prototype. */
+export const ownValue = <T>(map: Record<string, T>, key: string): T | undefined => (Object.hasOwn(map, key) ? map[key] : undefined);
 
 export function assertTools(tools: string[]): void {
   for (const tool of tools) {
@@ -36,7 +42,7 @@ export function allRoles(config: Config): RoleEntry[] {
     source: "custom",
   }));
   return [...PRESET_ROLES, ...custom].map((role) => {
-    const override = config.roleModels[role.name];
+    const override = ownValue(config.roleModels, role.name);
     const disabled = config.disabledRoles.includes(role.name);
     if (!override) return { ...role, disabled };
     return isTier(override) ? { ...role, tier: override, disabled } : { ...role, model: override, disabled };

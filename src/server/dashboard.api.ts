@@ -9,7 +9,7 @@ import type { ApiError, DashboardMeta, LiveSession, Overview, SessionGroups, Ses
 import { FAVICON_PATHS, faviconResponse } from "./favicon.ts";
 import { isAgentsPath, routeAgents } from "./agents.api.ts";
 import { isAgentsWriteRoute, routeAgentsWrite } from "./agents.write.api.ts";
-import type { WriteSession } from "./write.guard.ts";
+import { LOCAL_HOSTS, type WriteSession } from "./write.guard.ts";
 import { routeSessionDetail } from "./session.detail.api.ts";
 import { PRESET_ROLES } from "../roles/roles.presets.ts";
 import { withProjectPaths } from "./project.env.ts";
@@ -25,7 +25,6 @@ export const LIVE_WINDOW_MIN = 15;
 const DAY_LIMIT = 90;
 const BREAKDOWN_LIMIT = 50;
 const MINUTE_MS = 60_000;
-const ALLOWED_HOSTS = ["127.0.0.1", "localhost"];
 
 /** Supplies /api/meta; without one the endpoint reports "never synced" and the default tier models. */
 export type MetaProvider = () => DashboardMeta;
@@ -102,7 +101,7 @@ function guard(req: Request, url: URL, port: number): Response | undefined {
   // DNS rebinding guard: a foreign page resolving its own name to 127.0.0.1 still sends its own Host.
   // Bun.serve builds req.url from Host, so url.host is the fallback when the header is absent.
   const host = req.headers.get("host") ?? url.host;
-  if (!ALLOWED_HOSTS.some((h) => host === `${h}:${port}`)) return fail(HTTP.forbidden, "forbidden host");
+  if (!LOCAL_HOSTS.some((h) => host === `${h}:${port}`)) return fail(HTTP.forbidden, "forbidden host");
   if (req.method !== "GET" && !isAgentsWriteRoute(req.method, url.pathname)) return fail(HTTP.notAllowed, "method not allowed");
   return undefined;
 }

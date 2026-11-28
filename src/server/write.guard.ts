@@ -7,7 +7,8 @@ const FETCH_SITE_HEADER = "sec-fetch-site";
 const SAME_ORIGIN = "same-origin";
 const JSON_TYPE = "application/json";
 const TOKEN_BYTES = 32;
-const LOCAL_HOSTS = ["127.0.0.1", "localhost"];
+/** Loopback host names the dashboard answers to (Host allowlist) and accepts as write Origin. */
+export const LOCAL_HOSTS = ["127.0.0.1", "localhost"];
 const WRITE_METHODS = ["POST", "PATCH", "DELETE"];
 const BODY_METHODS = ["POST", "PATCH"];
 const STATUS = { badRequest: 400, forbidden: 403, notAllowed: 405, tooLarge: 413, unsupported: 415 } as const;

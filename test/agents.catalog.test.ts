@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildAgentDetail, buildAgents, MAX_AGENTS, type UsageRow } from "../src/agents/agents.catalog.ts";
 import { loadConfig, saveConfig } from "../src/config/config.store.ts";
@@ -10,7 +10,7 @@ import { useTempHome } from "./test.home.ts";
 
 const ctx = useTempHome();
 const cwd = () => join(ctx.home, "proj");
-const usage = (role: string, requests: number, rerouted: number | null): UsageRow =>
+const usage = (role: string, requests: number, rerouted: number): UsageRow =>
   ({ role, requests, cost_usd: 1.5, unpriced: 0, last_ts: "2026-11-28T00:00:00Z", rerouted });
 const write = (dir: string, file: string, text: string) => {
   mkdirSync(dir, { recursive: true });
@@ -55,10 +55,10 @@ describe("agents catalog kinds", () => {
     expect(get("manager").usage.rerouted_pct).toBe(0);
   });
 
-  test("etag is none without config.json; rerouted_pct null when column missing", async () => {
-    const { res, get } = await byName([usage("coder", 3, null)]);
+  test("etag is none without config.json; rerouted_pct is 0 with no rerouted requests", async () => {
+    const { res, get } = await byName([usage("coder", 3, 0)]);
     expect(res.etag).toBe("none");
-    expect(get("coder").usage.rerouted_pct).toBeNull();
+    expect(get("coder").usage.rerouted_pct).toBe(0);
     expect(res.truncated).toBe(false);
     expect(res.items.length).toBeLessThanOrEqual(MAX_AGENTS);
   });
@@ -85,6 +85,20 @@ describe("external files", () => {
     expect(res.warnings.join("\n")).toContain("big.md");
     const d = (await buildAgentDetail(await loadConfig(), "broken", [], { cwd: cwd() }))!;
     expect(d.warnings[0]).toContain("not closed");
+  });
+
+  test("a directory named x.md and a broken symlink are skipped with a warning, not a 500", async () => {
+    const dir = join(ctx.claude, "agents");
+    mkdirSync(join(dir, "folder.md"), { recursive: true });
+    symlinkSync(join(dir, "gone-target.md"), join(dir, "dangling.md"));
+    write(dir, "fine.md", "---\nname: fine\n---\nok\n");
+    const { res, get } = await byName();
+    expect(get("fine")).toBeDefined();
+    expect(get("folder")).toBeUndefined();
+    expect(get("dangling")).toBeUndefined();
+    const warnings = res.warnings.join("\n");
+    expect(warnings).toContain(join(dir, "folder.md"));
+    expect(warnings).toContain(join(dir, "dangling.md"));
   });
 
   test("unknown name has no detail", async () => {

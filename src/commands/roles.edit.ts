@@ -1,8 +1,7 @@
 import { parseArgs } from "node:util";
 import { CliError } from "../cli.error.ts";
 import { applyConfig } from "../config/config.apply.ts";
-import { loadConfig, type Tier } from "../config/config.store.ts";
-import { loadManifest } from "../install/install.manifest.ts";
+import type { Tier } from "../config/config.store.ts";
 import { updateRole } from "../roles/roles.service.ts";
 import type { AgentPatch } from "../server/agents.types.ts";
 
@@ -52,9 +51,7 @@ async function buildPatch(rest: string[]): Promise<AgentPatch> {
 export async function editRole(name: string, rest: string[]): Promise<number> {
   const patch = await buildPatch(rest);
   if (Object.keys(patch).length === 0) throw new CliError(EDIT_USAGE);
-  const config = await loadConfig();
-  const next = updateRole(config, name, patch, await loadManifest());
-  const applied = JSON.stringify(next) === JSON.stringify(config) ? 0 : (await applyConfig(next)).applied;
+  const { applied } = await applyConfig((c, m) => updateRole(c, name, patch, m), { skipUnchanged: true });
   console.log(`updated ${name}; re-applied ${applied} install(s)`);
   return 0;
 }

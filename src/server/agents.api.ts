@@ -10,6 +10,8 @@ import { HTTP } from "./filter.params.ts";
 /** Usage window of the Agents page, in days. */
 export const AGENT_USAGE_DAYS = 30;
 const DAY_MS = 86_400_000;
+/** ISO start of the Agents usage window ending at `now`; shared by the read and write routes. */
+export const agentUsageSince = (now = Date.now()) => new Date(now - AGENT_USAGE_DAYS * DAY_MS).toISOString();
 const AGENT_PATH = /^\/api\/agents(?:\/([^/]+))?$/;
 
 const fail = (status: number, error: string) => Response.json({ error }, { status });
@@ -23,7 +25,7 @@ async function routingWarnings(config: ReturnType<typeof loadConfigSync>): Promi
 
 async function respond(db: Database, name: string | undefined, now: number): Promise<Response> {
   const config = loadConfigSync(); // fresh per request, like liveMeta, so CLI changes show after a reload
-  const usage = agentUsage(db, new Date(now - AGENT_USAGE_DAYS * DAY_MS).toISOString());
+  const usage = agentUsage(db, agentUsageSince(now));
   const opts = { cwd: process.cwd() };
   const bad = await routingWarnings(config);
   if (name === undefined) {

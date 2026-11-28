@@ -26,8 +26,7 @@ Examples:
       return 0;
     }
     if (sub !== "set" || !tier || !model) throw new CliError(`usage: claude-manager tier set <think|work|basic> <model-id>`);
-    const next = setTierModel(config, tier, model);
-    const { applied } = await applyConfig(next);
+    const { applied } = await applyConfig((c) => setTierModel(c, tier, model));
     console.log(`${tier} (${TIER_ALIAS[tier as Tier]}) -> ${model}; re-applied ${applied} install(s)`);
     return 0;
   },

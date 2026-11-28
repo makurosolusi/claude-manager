@@ -3,7 +3,7 @@ import { type Config, isTier, type Tier, TIERS } from "../config/config.store.ts
 import type { Manifest } from "../install/install.manifest.ts";
 import type { AgentInput, AgentPatch, ModelChoice } from "../server/agents.types.ts";
 import { PRESET_ROLES } from "./roles.presets.ts";
-import { assertRoleName, assertTools, BUILTIN_AGENTS } from "./roles.registry.ts";
+import { assertRoleName, assertTools, BUILTIN_AGENTS, ownValue } from "./roles.registry.ts";
 
 /** Pure config transforms shared by the CLI and the dashboard API: each returns the next Config or throws a CliError with a reason. */
 
@@ -21,6 +21,7 @@ const fail = (message: string, reason: ErrorReason = "invalid"): never => {
 };
 
 const isPreset = (name: string) => PRESET_ROLES.some((r) => r.name === name);
+const isCustom = (config: Config, name: string) => Object.hasOwn(config.customRoles, name);
 
 function assertKnownKeys(body: object, allowed: string[]): void {
   for (const key of Object.keys(body)) if (!allowed.includes(key)) fail(`unknown field "${key}"`);
@@ -36,6 +37,7 @@ function assertNotMain(manifest: Manifest, name: string): void {
 }
 
 function parseDescription(value: unknown): string {
+  if (value !== undefined && value !== null && typeof value !== "string") fail("description must be a string");
   const text = typeof value === "string" ? value.trim() : "";
   if (!text) fail("description is required (Claude uses it to pick the agent)");
   if (text.length > MAX_DESCRIPTION) fail(`description is too long (max ${MAX_DESCRIPTION} characters)`);
@@ -75,14 +77,14 @@ function parseChoice(choice: unknown): ModelChoice {
 }
 
 function assertRoleExists(config: Config, name: string): void {
-  if (!isPreset(name) && !config.customRoles[name]) fail(`role "${name}" not found. Run "claude-manager roles".`, "not_found");
+  if (!isPreset(name) && !isCustom(config, name)) fail(`role "${name}" not found. Run "claude-manager roles".`, "not_found");
 }
 
 /** Creates a custom role; conflicts with presets, customs and Claude Code built-ins. */
 export function addRole(config: Config, input: AgentInput): Config {
   assertKnownKeys(input, INPUT_KEYS);
   assertRoleName(input.name);
-  if (isPreset(input.name) || config.customRoles[input.name]) fail(`role "${input.name}" already exists`, "conflict");
+  if (isPreset(input.name) || isCustom(config, input.name)) fail(`role "${input.name}" already exists`, "conflict");
   if (BUILTIN_AGENTS.some((b) => b.toLowerCase() === input.name.toLowerCase())) {
     fail(`"${input.name}" is a Claude Code built-in agent name`, "conflict");
   }
@@ -139,14 +141,14 @@ export function updateRole(config: Config, name: string, patch: AgentPatch, mani
   }
   if (patch.model !== undefined) {
     const choice = parseChoice(patch.model);
-    const custom = next.customRoles[name];
+    const custom = ownValue(next.customRoles, name);
     if (custom && "default" in choice) fail("default model is only for preset agents");
     if (custom && "tier" in choice) {
       custom.tier = choice.tier;
       delete next.roleModels[name]; // a stale pin would shadow the new tier
     } else next = setRoleModel(next, name, choice);
   }
-  const custom = next.customRoles[name];
+  const custom = ownValue(next.customRoles, name);
   if (custom) {
     if ("description" in patch) custom.description = parseDescription(patch.description);
     if ("tools" in patch) custom.tools = parseTools(patch.tools);
@@ -169,7 +171,7 @@ export function removeRole(config: Config, name: string, manifest: Manifest): Co
 /** CLI `roles rm`: deletes a custom role, or disables a preset. */
 export function disableRole(config: Config, name: string, manifest: Manifest): Config {
   assertNotMain(manifest, name);
-  if (config.customRoles[name]) return removeRole(config, name, manifest);
+  if (isCustom(config, name)) return removeRole(config, name, manifest);
   if (isPreset(name) && !config.disabledRoles.includes(name)) return disablePreset(config, name, manifest);
   return fail(`role "${name}" not found`, "not_found");
 }

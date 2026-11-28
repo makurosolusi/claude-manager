@@ -1,19 +1,17 @@
 import type { Database } from "bun:sqlite";
-import { buildAgentDetail } from "../agents/agents.catalog.ts";
+import { buildAgentDetail, type UsageRow } from "../agents/agents.catalog.ts";
 import { CliError, type ErrorReason } from "../cli.error.ts";
-import { applyConfig, assertEtag, configEtag, StaleConfigError } from "../config/config.apply.ts";
-import { type Config, configPath, loadConfig } from "../config/config.store.ts";
+import { applyConfig, type ConfigBuild, StaleConfigError } from "../config/config.apply.ts";
+import type { Config } from "../config/config.store.ts";
 import { agentUsage } from "../db/agents.repository.ts";
-import { loadManifest, type Manifest } from "../install/install.manifest.ts";
-import { readText } from "../install/install.target.ts";
+import { assertRoleName } from "../roles/roles.registry.ts";
 import { addRole, removeRole, updateRole } from "../roles/roles.service.ts";
-import { AGENT_USAGE_DAYS } from "./agents.api.ts";
+import { agentUsageSince } from "./agents.api.ts";
 import type { AgentInput, AgentPatch, AgentWriteResult } from "./agents.types.ts";
 import { checkWrite, type WriteSession } from "./write.guard.ts";
 
 const STATUS = { ok: 200, created: 201, badRequest: 400, notFound: 404, conflict: 409, stale: 412, noEtag: 428, internal: 500 } as const;
 const REASON_STATUS: Record<ErrorReason, number> = { invalid: STATUS.badRequest, not_found: STATUS.notFound, conflict: STATUS.conflict };
-const DAY_MS = 86_400_000;
 const PATH = /^\/api\/agents(?:\/([^/]+))?$/;
 
 const fail = (status: number, error: string) => Response.json({ error }, { status });
@@ -31,44 +29,29 @@ function errorResponse(err: unknown, what: string): Response {
   return fail(STATUS.internal, `${what}: ${err instanceof Error ? err.message : String(err)}`);
 }
 
-/** The Agent detail as the page will see it after the write. */
-async function detailOf(db: Database, config: Config, name: string) {
-  const usage = agentUsage(db, new Date(Date.now() - AGENT_USAGE_DAYS * DAY_MS).toISOString());
-  const detail = await buildAgentDetail(config, name, usage, { cwd: process.cwd() });
-  if (!detail) throw new Error(`agent "${name}" missing after write`);
-  return detail;
+const catalogOpts = () => ({ cwd: process.cwd() });
+
+/**
+ * Path name check for PATCH/DELETE: an agent the catalog shows as external (file, built-in, plugin or usage-only) is 409;
+ * any other name must be a valid role name (400) before the service looks it up.
+ */
+async function assertManagedName(config: Config, name: string, usage: UsageRow[]): Promise<void> {
+  const found = await buildAgentDetail(config, name, usage, catalogOpts());
+  if (found?.kind === "external") {
+    throw new CliError(`"${name}" is not managed by claude-manager; edit ${found.file_path ?? name} directly`, 1, "conflict");
+  }
+  assertRoleName(name);
 }
 
-/** Writes only when the config changed; a no-op patch must not touch disk or make a backup. */
-async function commit(config: Config, next: Config): Promise<number> {
-  if (JSON.stringify(next) === JSON.stringify(config)) return 0;
-  return (await applyConfig(next)).applied;
-}
-
-type Plan = (config: Config, manifest: Manifest) => Promise<Response>;
-
-async function plan(db: Database, req: Request, body: unknown, name: string | undefined): Promise<Plan> {
-  const isObject = typeof body === "object" && body !== null && !Array.isArray(body);
+function buildFor(method: string, body: unknown, name: string | undefined, usage: UsageRow[]): ConfigBuild {
   return async (config, manifest) => {
-    if (req.method === "POST") {
-      if (!isObject) return fail(STATUS.badRequest, "body must be a JSON object");
-      const input = body as AgentInput;
-      const applied = await commit(config, addRole(config, input));
-      const agent = await detailOf(db, await loadConfig(), input.name);
-      return Response.json({ agent, applied, etag: agent.etag } satisfies AgentWriteResult, { status: STATUS.created });
-    }
-    if (req.method === "PATCH") {
-      if (!isObject) return fail(STATUS.badRequest, "body must be a JSON object");
-      const applied = await commit(config, updateRole(config, name!, body as AgentPatch, manifest));
-      const agent = await detailOf(db, await loadConfig(), name!);
-      return Response.json({ agent, applied, etag: agent.etag } satisfies AgentWriteResult);
-    }
-    const applied = await commit(config, removeRole(config, name!, manifest));
-    return Response.json({ removed: name, applied, etag: configEtag(await readText(configPath())) });
+    if (method === "POST") return addRole(config, body as AgentInput);
+    await assertManagedName(config, name!, usage);
+    return method === "PATCH" ? updateRole(config, name!, body as AgentPatch, manifest) : removeRole(config, name!, manifest);
   };
 }
 
-/** Handles POST/PATCH/DELETE on /api/agents (Host check already done): guard, If-Match, load fresh, apply. */
+/** Handles POST/PATCH/DELETE on /api/agents (Host check already done): guard, then If-Match + transform + write under the config lock. */
 export async function routeAgentsWrite(req: Request, db: Database, pathname: string, session: WriteSession, port: number): Promise<Response> {
   const checked = await checkWrite(req, { ...session, port, isWriteRoute: true });
   if (!checked.ok) return checked.res;
@@ -81,16 +64,19 @@ export async function routeAgentsWrite(req: Request, db: Database, pathname: str
   } catch {
     return fail(STATUS.badRequest, "invalid agent name encoding");
   }
+  const body = checked.body;
+  const isObject = typeof body === "object" && body !== null && !Array.isArray(body);
+  if (req.method !== "DELETE" && !isObject) return fail(STATUS.badRequest, "body must be a JSON object");
   try {
-    await assertEtag(ifMatch);
-    const [config, manifest] = [await loadConfig(), await loadManifest()];
-    if (name !== undefined) {
-      const found = await buildAgentDetail(config, name, [], { cwd: process.cwd() });
-      if (found?.kind === "external") {
-        return fail(STATUS.conflict, `"${name}" is not managed by claude-manager; edit ${found.file_path ?? name} directly`);
-      }
-    }
-    return await (await plan(db, req, checked.body, name))(config, manifest);
+    const usage = agentUsage(db, agentUsageSince());
+    const build = buildFor(req.method, body, name, usage);
+    const { applied, config, etag } = await applyConfig(build, { expectedEtag: ifMatch, skipUnchanged: true });
+    if (req.method === "DELETE") return Response.json({ removed: name, applied, etag });
+    const agentName = name ?? (body as AgentInput).name;
+    const detail = await buildAgentDetail(config, agentName, usage, catalogOpts());
+    if (!detail) throw new Error(`agent "${agentName}" missing after write`);
+    const result: AgentWriteResult = { agent: { ...detail, etag }, applied, etag };
+    return Response.json(result, { status: req.method === "POST" ? STATUS.created : STATUS.ok });
   } catch (err) {
     return errorResponse(err, `${req.method} agent${name ? ` "${name}"` : ""}`);
   }
