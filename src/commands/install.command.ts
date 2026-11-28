@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { withConfigLock } from "../config/config.apply.ts";
 import { loadConfig } from "../config/config.store.ts";
 import { install, refreshPolicySnapshot } from "../install/install.service.ts";
 import { formatOps, resolveTarget } from "../install/install.target.ts";
@@ -30,14 +31,15 @@ Options:
       },
     });
     const target = resolveTarget(values.scope!);
-    const config = await loadConfig();
-    const ops = await install(target, config, {
-      mainAgent: values["main-agent"],
-      force: values.force,
-      dryRun: values["dry-run"],
-    });
-    // New agent files must enter the snapshot's `owned` map, or every role reads as shadowed and falls back to `unknown`.
-    if (!values["dry-run"]) await refreshPolicySnapshot(config);
+    // One lock for the whole write phase (install.service never takes it, so nothing re-enters): a dashboard write can't interleave.
+    const write = async () => {
+      const config = await loadConfig();
+      const ops = await install(target, config, { mainAgent: values["main-agent"], force: values.force, dryRun: values["dry-run"] });
+      // New agent files must enter the snapshot's `owned` map, or every role reads as shadowed and falls back to `unknown`.
+      if (!values["dry-run"]) await refreshPolicySnapshot(config);
+      return ops;
+    };
+    const ops = values["dry-run"] ? await write() : await withConfigLock(write);
     console.log(values["dry-run"] ? "Dry run, nothing written:" : `Installed (${target.scope} scope):`);
     console.log(formatOps(ops));
     if (!values["dry-run"] && !values["main-agent"]) console.log("\nStart a swarm session with: claude --agent manager");

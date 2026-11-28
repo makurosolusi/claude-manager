@@ -2,6 +2,7 @@ import { rm } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import { appDir } from "../app.paths.ts";
 import { CliError } from "../cli.error.ts";
+import { withConfigLock } from "../config/config.apply.ts";
 import { loadConfig } from "../config/config.store.ts";
 import { refreshPolicySnapshot } from "../install/install.service.ts";
 import { loadManifest } from "../install/install.manifest.ts";
@@ -32,9 +33,14 @@ Options:
       },
     });
     const target = resolveTarget(values.scope!);
-    const ops = await uninstall(target, { dryRun: values["dry-run"] });
-    // A policy in another scope survives this uninstall; drop this scope's agent files from its snapshot.
-    if (!values["dry-run"]) await refreshPolicySnapshot(await loadConfig());
+    // One lock for the whole write phase (uninstall.service never takes it, so nothing re-enters).
+    const write = async () => {
+      const done = await uninstall(target, { dryRun: values["dry-run"] });
+      // A policy in another scope survives this uninstall; drop this scope's agent files from its snapshot.
+      if (!values["dry-run"]) await refreshPolicySnapshot(await loadConfig());
+      return done;
+    };
+    const ops = values["dry-run"] ? await write() : await withConfigLock(write);
     console.log(values["dry-run"] ? "Dry run, nothing written:" : `Uninstalled (${target.scope} scope):`);
     console.log(formatOps(ops));
     if (values["purge-data"] && !values["dry-run"]) {
