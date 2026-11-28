@@ -7,25 +7,18 @@ import { parseSettings, readText } from "../install/install.target.ts";
 import { getKey } from "../install/settings.merge.ts";
 import { effectivePolicy, matrixOf } from "../policy/policy.effective.ts";
 import { parseSnapshot } from "../policy/policy.eval.ts";
+import { blockingKeys, managedSettingsPaths } from "../policy/policy.managed.ts";
 import type { Capability, PolicyConfig, PolicyMatrix } from "../policy/policy.types.ts";
 import type { RoutingCheck } from "./doctor.routing.ts";
 
 type Settings = Record<string, unknown>;
 type Hook = { command?: string; args?: string[] };
 
-/** Managed settings locations per spec §1.3; unverified, so a hit is only ever a soft warning unless it blocks hooks/rules. */
-export const MANAGED_PATHS = [
-  "/Library/Application Support/ClaudeCode/managed-settings.json",
-  "/etc/claude-code/managed-settings.json",
-  "C:\\Program Files\\ClaudeCode\\managed-settings.json",
-];
-
 /** Bare or full-wildcard deny on these tools blocks the capabilities (§7; `Tool(path)` rules are ignored). */
 const TOOL_CAPS: Record<string, Capability[]> = {
   Read: ["read"], Grep: ["read"], Glob: ["read"], Edit: ["edit"], Write: ["edit"], NotebookEdit: ["edit"],
   Bash: ["test", "shell", "git"], WebFetch: ["web"], WebSearch: ["web"], Agent: ["agents"],
 };
-const MANAGED_BLOCKERS = ["allowManagedHooksOnly", "allowManagedPermissionRulesOnly", "disableAllHooks"];
 const APPLY_FIX = 'Run "claude-manager policy apply balanced"';
 
 type Loaded = { path: string; settings?: Settings; error?: string };
@@ -116,7 +109,7 @@ async function checkManaged(paths: string[]): Promise<RoutingCheck[]> {
   for (const path of paths) {
     if (!existsSync(path)) continue;
     const { settings, error } = await load(path);
-    const blocks = settings ? MANAGED_BLOCKERS.filter((k) => settings[k] === true) : [];
+    const blocks = settings ? blockingKeys(settings) : [];
     out.push(blocks.length
       ? { ok: false, label: `managed settings ${path} set ${blocks.join(", ")}: the policy hook or rules may be overridden. Ask your admin to allow user hooks` }
       : { ok: "warn", label: `managed settings ${path} exist${error ? ` (unreadable: ${error})` : ""} and may override the policy; check with your admin` });
@@ -140,6 +133,6 @@ export async function checkPolicy(
     : [{ ok: false, label: `${own.error}. Fix the file, then ${APPLY_FIX.toLowerCase()}` }];
   const snap = await checkSnapshot(rec, config);
   out.push(snap.check, ...checkModes(files), ...(snap.matrix ? checkConflicts(files, snap.matrix) : []));
-  out.push(...(await checkManaged(opts.managed ?? MANAGED_PATHS)));
+  out.push(...(await checkManaged(opts.managed ?? managedSettingsPaths())));
   return out;
 }

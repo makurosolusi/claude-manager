@@ -1,17 +1,17 @@
 import type { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { CliError, type ErrorReason } from "../cli.error.ts";
-import { MANAGED_PATHS, checkPolicy } from "../commands/doctor.policy.ts";
+import { checkPolicy } from "../commands/doctor.policy.ts";
 import { parseSince } from "../commands/stats.command.ts";
 import { StaleConfigError } from "../config/config.apply.ts";
-import { type Config, configPath, loadConfig } from "../config/config.store.ts";
+import { type Config, loadConfig } from "../config/config.store.ts";
 import { auditPage, auditSummary } from "../db/policy.repository.ts";
 import { ingestPolicyAudit, POLICY_AUDIT_DAYS } from "../ingest/policy.audit.ingest.ts";
 import { loadManifest, type Manifest } from "../install/install.manifest.ts";
 import { parseSettings, readText } from "../install/install.target.ts";
-import { policySettingsPath } from "../install/settings.lists.ts";
-import { policyEtag } from "../policy/policy.apply.ts";
+import { currentEtag } from "../policy/policy.apply.ts";
 import { effectivePolicy } from "../policy/policy.effective.ts";
+import { blockingKeys, managedSettingsPaths } from "../policy/policy.managed.ts";
 import type { HookGroup } from "../install/settings.lists.ts";
 import { MAX_QUERY_CHARS } from "./dashboard.params.ts";
 import { bad, HttpError, listParam } from "./filter.params.ts";
@@ -22,8 +22,6 @@ const REASON_STATUS: Record<ErrorReason, number> = { invalid: STATUS.badRequest,
 const POLICY_PATH = /^\/api\/policy(?:\/.*)?$/;
 const AUDIT_DEFAULT_SIZE = 50;
 const AUDIT_MAX_SIZE = 100;
-/** Managed-settings keys that switch user hooks or rules off (§4.1 item 6). */
-const MANAGED_BLOCKERS = ["allowManagedHooksOnly", "allowManagedPermissionRulesOnly", "disableAllHooks"];
 
 export const fail = (status: number, error: string) => Response.json({ error }, { status });
 export const trim = (pathname: string) => pathname.replace(/\/+$/, "");
@@ -41,21 +39,14 @@ export function errorResponse(err: unknown, what: string): Response {
 }
 
 /** Managed settings files that block hooks or rules, as reasons; an unreadable managed file is not a block. */
-export async function managedBlocks(paths = MANAGED_PATHS): Promise<string[]> {
+export async function managedBlocks(paths = managedSettingsPaths()): Promise<string[]> {
   const out: string[] = [];
   for (const path of paths.filter((p) => existsSync(p))) {
     const settings = parseSettings(await readText(path), path);
-    const keys = MANAGED_BLOCKERS.filter((k) => settings[k] === true);
+    const keys = blockingKeys(settings);
     if (keys.length) out.push(`Blocked by your organization's managed settings (${path} sets ${keys.join(", ")})`);
   }
   return out;
-}
-
-/** Same settings file `planChange` hashes for the next write of this config, so this etag matches its If-Match check. */
-export async function currentEtag(config: Config, manifest: Manifest): Promise<string> {
-  const p = config.policy;
-  const path = p?.enabled ? policySettingsPath(p.scope, p.projectDir) : manifest.policy?.settingsPath;
-  return policyEtag(await readText(configPath()), path ? await readText(path) : undefined);
 }
 
 async function status(config: Config, manifest: Manifest): Promise<{ status: PolicyStatus; reasons: string[]; warnings: string[] }> {

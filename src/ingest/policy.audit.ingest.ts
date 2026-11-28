@@ -110,11 +110,21 @@ async function ingestFile(db: Database, path: string, cutoff: string): Promise<F
   }
 }
 
+// Sync and the on-demand API/CLI reads share one sqlite connection; each file ingest holds BEGIN across an await,
+// so two overlapping calls would nest transactions. Calls run one after another instead.
+let queue: Promise<unknown> = Promise.resolve();
+
 /**
  * Entry point for sync: ingests policy-audit.jsonl.1 then policy-audit.jsonl incrementally and idempotently,
  * rotates the live file once fully read, then applies retention. Never throws on malformed lines.
  */
-export async function ingestPolicyAudit(db: Database, opts: PolicyAuditOptions = {}): Promise<PolicyAuditResult> {
+export function ingestPolicyAudit(db: Database, opts: PolicyAuditOptions = {}): Promise<PolicyAuditResult> {
+  const run = queue.then(() => ingestNow(db, opts));
+  queue = run.catch(() => undefined); // the caller gets the error from `run`; the queue only orders calls
+  return run;
+}
+
+async function ingestNow(db: Database, opts: PolicyAuditOptions): Promise<PolicyAuditResult> {
   const now = opts.now ?? Date.now();
   const cutoff = new Date(now - (opts.days ?? POLICY_AUDIT_DAYS) * DAY_MS).toISOString();
   const live = policyAuditPath();

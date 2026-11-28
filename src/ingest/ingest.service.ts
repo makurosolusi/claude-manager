@@ -6,6 +6,7 @@ import { loadConfig } from "../config/config.store.ts";
 import { readJson } from "../storage/json.file.ts";
 import { isCandidate, parseEntry, type ParseContext, type RequestRow } from "./ingest.parser.ts";
 import { listLogFiles, readLines, type LogFile } from "./ingest.scanner.ts";
+import { ingestPolicyAudit, type PolicyAuditResult } from "./policy.audit.ingest.ts";
 import { loadPricing, ratesFor, requestCost, type Pricing } from "./pricing.service.ts";
 
 export interface SyncResult {
@@ -16,6 +17,10 @@ export interface SyncResult {
   recomputed: number;
   /** Models seen without known rates (their cost is NULL). */
   unpriced: string[];
+  /** Policy audit ingest outcome (spec §2.7); null when it failed, with the cause in `warnings`. */
+  policyAudit: PolicyAuditResult | null;
+  /** Non-fatal problems to show the user, e.g. an audit file that could not be ingested. */
+  warnings: string[];
   ms: number;
 }
 
@@ -174,7 +179,19 @@ function recompute(db: Database, pricing: Pricing): number {
 
 const countRequests = (db: Database) => db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM requests").get()!.n;
 
-/** Incrementally ingests every Claude Code transcript into the analytics DB. */
+/** Audit ingest for sync: a failure there becomes a warning, so it never fails transcript sync. */
+async function syncPolicyAudit(db: Database, warnings: string[]): Promise<PolicyAuditResult | null> {
+  try {
+    const r = await ingestPolicyAudit(db);
+    if (r.badLines) warnings.push(`${r.badLines} unparseable policy audit lines skipped`);
+    return r;
+  } catch (err) {
+    warnings.push(`policy audit not ingested: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+/** Incrementally ingests every Claude Code transcript, then the policy audit, into the analytics DB. */
 export async function sync(db: Database): Promise<SyncResult> {
   const t0 = performance.now();
   const [pricing, config] = await Promise.all([loadPricing(), loadConfig()]);
@@ -193,5 +210,8 @@ export async function sync(db: Database): Promise<SyncResult> {
     .query<{ model: string }, []>("SELECT DISTINCT model FROM requests WHERE cost_usd IS NULL ORDER BY model")
     .all()
     .map((r) => r.model);
-  return { files: files.length, changed, newRequests: countRequests(db) - before, badLines, recomputed, unpriced, ms: Math.round(performance.now() - t0) };
+  const newRequests = countRequests(db) - before;
+  const warnings: string[] = [];
+  const policyAudit = await syncPolicyAudit(db, warnings);
+  return { files: files.length, changed, newRequests, badLines, recomputed, unpriced, policyAudit, warnings, ms: Math.round(performance.now() - t0) };
 }

@@ -81,10 +81,8 @@ export async function routePolicyWrite(req: Request, db: Database, pathname: str
     if (ifMatch === null) return fail(STATUS.noEtag, "If-Match header is required");
     const build = writeBuild(req.method, path, checked.body);
     if (req.method !== "DELETE") await assertNotBlocked();
-    const { plan } = await applyPolicy(build, { expectedEtag: ifMatch });
-    const policy = await policyResponse(db);
-    // applyPolicy's own etag hashes the reverted file after a disable; the GET etag is what the next write checks.
-    const result: PolicyWriteResult = { policy, changes: plan.changes, etag: policy.etag };
+    const { plan, etag } = await applyPolicy(build, { expectedEtag: ifMatch });
+    const result: PolicyWriteResult = { policy: await policyResponse(db), changes: plan.changes, etag };
     return Response.json(result);
   } catch (err) {
     if (err instanceof URIError) return fail(STATUS.badRequest, `${what}: invalid row encoding`);

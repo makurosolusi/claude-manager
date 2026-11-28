@@ -42,6 +42,19 @@ const NOTHING: PolicyDesired = { entries: [], hook: null, keys: {} };
 export const policyEtag = (configText: string | undefined, settingsText: string | undefined): string =>
   sha256(`${configText ?? "none"}\0${settingsText ?? "none"}`);
 
+/**
+ * The settings file a state's etag covers: the stored policy's target (enabled or disabled, so an enable after a
+ * disable still sees edits to it), else the file the policy was last written to, else none.
+ */
+const etagSettingsPath = (config: Config, manifest: Manifest): string | undefined =>
+  config.policy ? policySettingsPath(config.policy.scope, config.policy.projectDir) : manifest.policy?.settingsPath;
+
+/** Etag of the current state; GET returns it, and every write accepts it (§5). */
+export async function currentEtag(config: Config, manifest: Manifest, configText?: string): Promise<string> {
+  const path = etagSettingsPath(config, manifest);
+  return policyEtag(configText ?? (await readText(configPath())), path ? await readText(path) : undefined);
+}
+
 /** Settings text + parsed object; an unparsable file is 409 (`fix <path> first`), not a bad request. */
 async function readSettings(path: string): Promise<{ raw: string | undefined; settings: Settings }> {
   const raw = await readText(path);
@@ -158,9 +171,12 @@ export function applyPolicy(build: ConfigBuild, opts: { expectedEtag?: string } 
     const configText = await readText(cfgPath);
     const config = await loadConfig();
     const manifest = await loadManifest();
+    const stateEtag = await currentEtag(config, manifest, configText);
     const next = await build(config, structuredClone(manifest));
     const { plan, write, revert } = await planChange(next, manifest, configText);
-    if (opts.expectedEtag !== undefined && opts.expectedEtag !== plan.etag) throw new StaleConfigError();
+    // The state etag (GET, or a previous write) or this plan's etag (a preview of this exact change, which also covers a new target file).
+    const expected = opts.expectedEtag;
+    if (expected !== undefined && expected !== stateEtag && expected !== plan.etag) throw new StaleConfigError();
 
     const paths = [plan.compiledPath, revert?.compiledPath, revert?.settingsPath, write?.path, cfgPath].filter((p): p is string => !!p);
     const before = new Map<string, string | undefined>();
@@ -183,7 +199,7 @@ export function applyPolicy(build: ConfigBuild, opts: { expectedEtag?: string } 
     } catch (err) {
       throw await rollback(err, before);
     }
-    const etag = policyEtag(await readText(cfgPath), plan.settingsPath ? await readText(plan.settingsPath) : undefined);
+    const etag = await currentEtag(next, manifest);
     return { config: next, plan: { ...plan, changes, etag }, etag };
   });
 }
