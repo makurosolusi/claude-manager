@@ -1,8 +1,12 @@
+/** Why a CliError happened; the dashboard API maps it to 400 / 404 / 409. */
+export type ErrorReason = "invalid" | "not_found" | "conflict";
+
 /** Error expected by the user (bad input, conflict); printed without stack. */
 export class CliError extends Error {
   constructor(
     message: string,
     readonly exitCode = 1,
+    readonly reason: ErrorReason = "invalid",
   ) {
     super(message);
   }

@@ -1,6 +1,7 @@
 import { CliError } from "../cli.error.ts";
-import { isTier, loadConfig, saveConfig, TIER_ALIAS, TIER_ENV, TIERS } from "../config/config.store.ts";
-import { reapplyAll } from "../install/install.service.ts";
+import { applyConfig } from "../config/config.apply.ts";
+import { loadConfig, TIER_ALIAS, TIER_ENV, TIERS, type Tier } from "../config/config.store.ts";
+import { setTierModel } from "../roles/roles.service.ts";
 import type { Command } from "./command.types.ts";
 
 export const tierCommand: Command = {
@@ -25,12 +26,9 @@ Examples:
       return 0;
     }
     if (sub !== "set" || !tier || !model) throw new CliError(`usage: claude-manager tier set <think|work|basic> <model-id>`);
-    if (!isTier(tier)) throw new CliError(`unknown tier "${tier}": use ${TIERS.join(", ")}`);
-    if (!/^[\w.\-:\[\]]+$/.test(model)) throw new CliError(`invalid model id "${model}"`);
-    config.tiers[tier] = model;
-    await saveConfig(config);
-    const applied = await reapplyAll(config);
-    console.log(`${tier} (${TIER_ALIAS[tier]}) -> ${model}; re-applied ${applied.length} install(s)`);
+    const next = setTierModel(config, tier, model);
+    const { applied } = await applyConfig(next);
+    console.log(`${tier} (${TIER_ALIAS[tier as Tier]}) -> ${model}; re-applied ${applied} install(s)`);
     return 0;
   },
 };

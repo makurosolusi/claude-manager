@@ -1,3 +1,4 @@
+import { rename, rm } from "node:fs/promises";
 import { CliError } from "../cli.error.ts";
 
 /** Reads a JSON file; undefined when missing, CliError when malformed. */
@@ -12,8 +13,16 @@ export async function readJson<T>(path: string): Promise<T | undefined> {
   }
 }
 
+/** Atomic write: tmp file in the same dir, then rename, so readers never see a half-written file. */
 export async function writeJson(path: string, data: unknown): Promise<void> {
-  await Bun.write(path, `${JSON.stringify(data, null, 2)}\n`);
+  const tmp = `${path}.${process.pid}.tmp`;
+  try {
+    await Bun.write(tmp, `${JSON.stringify(data, null, 2)}\n`);
+    await rename(tmp, path);
+  } catch (err) {
+    await rm(tmp, { force: true });
+    throw new Error(`write ${path}: ${(err as Error).message}`, { cause: err });
+  }
 }
 
 export function sha256(text: string): string {

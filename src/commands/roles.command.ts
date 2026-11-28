@@ -1,14 +1,13 @@
 import { parseArgs } from "node:util";
 import { CliError } from "../cli.error.ts";
-import { type Config, isTier, loadConfig, saveConfig, TIERS } from "../config/config.store.ts";
-import { reapplyAll } from "../install/install.service.ts";
+import { applyConfig } from "../config/config.apply.ts";
+import { type Config, isTier, loadConfig, TIERS } from "../config/config.store.ts";
 import { loadManifest } from "../install/install.manifest.ts";
-import { PRESET_ROLES } from "../roles/roles.presets.ts";
-import { assertRoleName, assertTools, findRole, resolveRoles } from "../roles/roles.registry.ts";
+import { resolveRoles } from "../roles/roles.registry.ts";
 import { roleModel } from "../roles/roles.render.ts";
+import { addRole, disableRole, enableRole, setRoleModel } from "../roles/roles.service.ts";
+import type { ModelChoice } from "../server/agents.types.ts";
 import type { Command } from "./command.types.ts";
-
-const isPreset = (name: string) => PRESET_ROLES.some((r) => r.name === name);
 
 function list(config: Config): void {
   const roles = resolveRoles(config);
@@ -21,11 +20,15 @@ function list(config: Config): void {
   if (config.disabledRoles.length) console.log(`\ndisabled: ${config.disabledRoles.join(", ")}`);
 }
 
-async function save(config: Config, message: string): Promise<number> {
-  await saveConfig(config);
-  const applied = await reapplyAll(config);
-  console.log(`${message}; re-applied ${applied.length} install(s)`);
+async function save(next: Config, message: string): Promise<number> {
+  const { applied } = await applyConfig(next);
+  console.log(`${message}; re-applied ${applied} install(s)`);
   return 0;
+}
+
+function toChoice(value: string): ModelChoice {
+  if (value === "default") return { default: true };
+  return isTier(value) ? { tier: value } : { pin: value };
 }
 
 export const rolesCommand: Command = {
@@ -59,15 +62,9 @@ Example:
       case "set": {
         const value = rest[0];
         if (!value) throw new CliError("usage: claude-manager roles set <role> <tier|model>");
-        findRole(config, name);
-        if (value === "default") delete config.roleModels[name];
-        else if (isTier(value) || /^[\w.\-:\[\]]+$/.test(value)) config.roleModels[name] = value;
-        else throw new CliError(`invalid tier or model "${value}"`);
-        return save(config, `${name} -> ${value}`);
+        return save(setRoleModel(config, name, toChoice(value)), `${name} -> ${value}`);
       }
       case "add": {
-        assertRoleName(name);
-        if (isPreset(name) || config.customRoles[name]) throw new CliError(`role "${name}" already exists`);
         const { values } = parseArgs({
           args: rest,
           options: {
@@ -80,24 +77,13 @@ Example:
         if (!values.tier || !isTier(values.tier)) throw new CliError(`--tier is required: ${TIERS.join(", ")}`);
         if (!values.description) throw new CliError("--description is required (Claude uses it to pick the role)");
         const tools = values.tools?.split(",").map((t) => t.trim()).filter(Boolean);
-        if (tools) assertTools(tools);
-        config.customRoles[name] = { tier: values.tier, description: values.description, tools, prompt: values.prompt };
-        return save(config, `added ${name}`);
+        const input = { name, description: values.description, model: { tier: values.tier }, tools: tools ?? null, prompt: values.prompt };
+        return save(addRole(config, input), `added ${name}`);
       }
-      case "rm": {
-        const main = Object.values((await loadManifest()).installs).find((i) => i.mainAgent === name);
-        if (main) throw new CliError(`"${name}" is the main agent at ${main.settingsPath}; re-install without --main-agent first`);
-        if (config.customRoles[name]) delete config.customRoles[name];
-        else if (isPreset(name) && !config.disabledRoles.includes(name)) config.disabledRoles.push(name);
-        else throw new CliError(`role "${name}" not found`);
-        delete config.roleModels[name];
-        return save(config, `removed ${name}`);
-      }
-      case "enable": {
-        if (!config.disabledRoles.includes(name)) throw new CliError(`role "${name}" is not disabled`);
-        config.disabledRoles = config.disabledRoles.filter((r) => r !== name);
-        return save(config, `enabled ${name}`);
-      }
+      case "rm":
+        return save(disableRole(config, name, await loadManifest()), `removed ${name}`);
+      case "enable":
+        return save(enableRole(config, name), `enabled ${name}`);
       default:
         throw new CliError(`unknown subcommand "roles ${sub}". Run "claude-manager help roles".`);
     }
