@@ -8,15 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Escalate to manager. With escalate on, any Ask from a worker (a subagent, including built-in and unknown
-  agents) becomes a deny that tells the worker to stop and report to the manager. This includes owner-only
-  actions such as push.
-  - Only the manager's own session prompts you. Workers never prompt you, so there are fewer prompts and no
-    mis-clicks on worker prompts.
+- Escalate to manager. With escalate on, a worker's action (any subagent, including built-in agents such as
+  general-purpose, Explore and Plan) is sent back to the manager instead of prompting you whenever its cell is
+  Ask or Default. The worker gets a deny that tells it to stop and report to the manager. This includes
+  owner-only actions such as push.
+  - Only the manager's own session prompts you.
+  - Exceptions: Read stays Default (in-project reads follow Claude Code), and tools the policy does not model
+    are unaffected. Allow and Deny cells and the secret floors are unchanged.
   - The manager preset prompt has a new "Blocked workers" section: collect the requests, decide, and ask you once.
-  - Allow, deny and default cells and the secret floors are unchanged.
-  - Escalate is on by default for new setups. A 0.4.0 policy stays as it is until you re-apply it or turn escalate
-    on. Re-applying keeps your stored choice.
+  - Escalate is on by default for new setups. It is not set for an existing 0.4.0 policy, and nothing changes
+    until you act. Re-applying a preset, from the CLI or the dashboard, turns escalate on. The CLI prints this,
+    and the dashboard pre-ticks the box. Untick it or pass `--no-escalate` to keep it off. After that,
+    re-applying keeps your stored choice.
   - CLI: `claude-manager policy escalate on|off` and `policy apply <preset> --no-escalate`. `policy show` prints
     the state.
   - Dashboard: a checkbox on setup, an Escalation switch, "→ manager" markers on escalated Ask cells, "asks
@@ -27,18 +30,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - CLI and dashboard writes no longer overwrite each other. Config, policy, `install` and `uninstall` writes now
   take a lock file, `config.lock`, in `~/.claude-manager` (or `$CLAUDE_MANAGER_HOME`). A lock left by a dead
-  process, or older than 2 minutes, is cleared automatically. If another process holds the lock for more than
+  process is cleared automatically (on a different machine, a lock older than 2 minutes is treated as abandoned). If another process holds the lock for more than
   10 seconds, the command fails with "another claude-manager process is changing config (pid N); try again".
 - A broken `manifest.json` is now reported as a server error (500) that names the file, not as a bad request.
+- The config lock no longer lets two processes hold it when a stale lock file is empty or malformed, and it no
+  longer breaks a live holder on the same machine by age.
+- Audit: escalated actions are recorded as deny with a rule starting `escalated:`. `policy audit --decision ask`
+  doesn't list them.
 
 ### Notes
 
 - No database migration: the schema stays at v4.
-- Rollback to 0.4.0: 0.4.0 does not know the `policy.escalate` key and rejects it ("policy: unknown field
-  "escalate""), so its policy commands fail while the key is in `config.json`. Before downgrading, run
-  `claude-manager policy escalate off`, then remove the `escalate` line from `policy` in
-  `~/.claude-manager/config.json`. Or, after downgrading, delete that line and run `policy apply <preset>`.
-  With the key gone, 0.4.0 prompts you for worker asks again.
+- Rollback to 0.4.0: 0.4.0 ignores `escalate` in the policy snapshot, so worker asks prompt you again as soon as the 0.4.0 binary runs. Its hook, `policy show`, `policy audit` and agent and tier edits keep working. 0.4.0 does reject the `policy.escalate` key in `config.json` for policy edits that keep the stored policy (`policy set`, `enable`, `disable`, and the dashboard's cell edits and Turn off), failing with `policy: unknown field "escalate"`. To clear it, delete the `"escalate"` line from `policy` in `~/.claude-manager/config.json` (or `$CLAUDE_MANAGER_HOME`), which keeps your overrides; or run `policy apply <preset>` with 0.4.0, which drops the key but resets your cell overrides.
 
 ## [0.4.0] - 2026-11-28
 
